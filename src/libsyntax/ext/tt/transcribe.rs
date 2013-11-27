@@ -22,7 +22,7 @@ use std::option;
 
 ///an unzipping of `token_tree`s
 struct TtFrame {
-    forest: @~[ast::token_tree],
+    forest: @~[@ast::token_tree],
     idx: uint,
     dotdotdoted: bool,
     sep: Option<Token>,
@@ -47,7 +47,7 @@ pub struct TtReader {
  *  should) be none. */
 pub fn new_tt_reader(sp_diag: @mut span_handler,
                      interp: Option<HashMap<Ident,@named_match>>,
-                     src: ~[ast::token_tree])
+                     src: ~[@ast::token_tree])
                   -> @mut TtReader {
     let r = @mut TtReader {
         sp_diag: sp_diag,
@@ -152,7 +152,7 @@ fn lockstep_iter_size(t: &token_tree, r: &mut TtReader) -> lis {
     match *t {
       tt_delim(ref tts) | tt_seq(_, ref tts, _, _) => {
         tts.iter().fold(lis_unconstrained, |lis, tt| {
-            let lis2 = lockstep_iter_size(tt, r);
+            let lis2 = lockstep_iter_size(*tt, r);
             lis_merge(lis, lis2)
         })
       }
@@ -215,7 +215,7 @@ pub fn tt_next_token(r: &mut TtReader) -> TokenAndSpan {
     loop { /* because it's easiest, this handles `tt_delim` not starting
     with a `tt_tok`, even though it won't happen */
         // XXX(pcwalton): Bad copy.
-        match r.stack.forest[r.stack.idx].clone() {
+        match (*r.stack.forest[r.stack.idx]).clone() {
           tt_delim(tts) => {
             r.stack = @mut TtFrame {
                 forest: tts,

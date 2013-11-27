@@ -17,7 +17,7 @@ use ext::build::AstBuilder;
 
 pub fn expand_syntax_ext(cx: @base::ExtCtxt,
                          sp: codemap::Span,
-                         tts: &[ast::token_tree]) -> base::MacResult {
+                         tts: &[@ast::token_tree]) -> base::MacResult {
     let es = base::get_exprs_from_tts(cx, sp, tts);
     let mut accumulator = ~"";
     for e in es.move_iter() {

@@ -351,10 +351,10 @@ pub enum Pat_ {
     // which it is. The resolver determines this, and
     // records this pattern's NodeId in an auxiliary
     // set (of "pat_idents that refer to nullary enums")
-    PatIdent(BindingMode, Path, Option<@Pat>),
-    PatEnum(Path, Option<~[@Pat]>), /* "none" means a * pattern where
-                                       * we don't bind the fields to names */
-    PatStruct(Path, ~[FieldPat], bool),
+    PatIdent(BindingMode, @Path, Option<@Pat>),
+    PatEnum(@Path, Option<~[@Pat]>), /* "none" means a * pattern where
+                                      * we don't bind the fields to names */
+    PatStruct(@Path, ~[FieldPat], bool),
     PatTup(~[@Pat]),
     PatBox(@Pat),
     PatUniq(@Pat),
@@ -564,7 +564,7 @@ pub enum Expr_ {
     /// Expression that looks like a "name". For example,
     /// `std::vec::from_elem::<uint>` is an ExprPath that's the "name" part
     /// of a function call.
-    ExprPath(Path),
+    ExprPath(@Path),
 
     /// The special identifier `self`.
     ExprSelf,
@@ -581,7 +581,7 @@ pub enum Expr_ {
     ExprMac(mac),
 
     // A struct literal expression.
-    ExprStruct(Path, ~[Field], Option<@Expr> /* base */),
+    ExprStruct(@Path, ~[Field], Option<@Expr> /* base */),
 
     // A vector literal constructed from one repeated element.
     ExprRepeat(@Expr /* element */, @Expr /* count */, Mutability),
@@ -612,14 +612,14 @@ pub enum token_tree {
     tt_tok(Span, ::parse::token::Token),
     // a delimited sequence (the delimiters appear as the first
     // and last elements of the vector)
-    tt_delim(@~[token_tree]),
+    tt_delim(@~[@token_tree]),
 
     // These only make sense for right-hand-sides of MBE macros:
 
     // a kleene-style repetition sequence with a span, a tt_forest,
     // an optional separator, and a boolean where true indicates
     // zero or more (*), and false indicates one or more (+).
-    tt_seq(Span, @~[token_tree], Option<::parse::token::Token>, bool),
+    tt_seq(Span, @~[@token_tree], Option<::parse::token::Token>, bool),
 
     // a syntactic variable that will be filled in by macro expansion.
     tt_nonterminal(Span, Ident)
@@ -698,7 +698,7 @@ pub type mac = Spanned<mac_>;
 // There's only one flavor, now, so this could presumably be simplified.
 #[deriving(Clone, Eq, Encodable, Decodable, IterBytes)]
 pub enum mac_ {
-    mac_invoc_tt(Path,~[token_tree],SyntaxContext),   // new macro-invocation
+    mac_invoc_tt(@Path, ~[@token_tree], SyntaxContext),   // new macro-invocation
 }
 
 #[deriving(Clone, Eq, Encodable, Decodable, IterBytes)]
@@ -871,7 +871,7 @@ pub enum ty_ {
     ty_closure(@TyClosure),
     ty_bare_fn(@TyBareFn),
     ty_tup(~[Ty]),
-    ty_path(Path, Option<OptVec<TyParamBound>>, NodeId), // for #7264; see above
+    ty_path(@Path, Option<OptVec<TyParamBound>>, NodeId), // for #7264; see above
     ty_typeof(@Expr),
     // ty_infer means the type should be inferred instead of it having been
     // specified. This should only appear at the "top level" of a type and not
@@ -1022,13 +1022,13 @@ pub enum view_path_ {
     // or just
     //
     // foo::bar::baz  (with 'baz =' implicitly on the left)
-    view_path_simple(Ident, Path, NodeId),
+    view_path_simple(Ident, @Path, NodeId),
 
     // foo::bar::*
-    view_path_glob(Path, NodeId),
+    view_path_glob(@Path, NodeId),
 
     // foo::bar::{a,b,c}
-    view_path_list(Path, ~[path_list_ident], NodeId)
+    view_path_list(@Path, ~[path_list_ident], NodeId)
 }
 
 #[deriving(Clone, Eq, Encodable, Decodable, IterBytes)]
@@ -1078,7 +1078,7 @@ pub struct Attribute_ {
  */
 #[deriving(Clone, Eq, Encodable, Decodable,IterBytes)]
 pub struct trait_ref {
-    path: Path,
+    path: @Path,
     ref_id: NodeId,
 }
 
@@ -1180,14 +1180,14 @@ pub enum inlined_item {
     ii_foreign(@foreign_item),
 }
 
-#[cfg(test)]
+//#[cfg(test)]
 mod test {
     use super::*;
 
     fn is_freeze<T: Freeze>() {}
 
     // Assert that the AST remains Freeze (#10693).
-    #[test] fn ast_is_freeze() {
+    /*#[test] */fn ast_is_freeze() {
         is_freeze::<item>();
     }
 }

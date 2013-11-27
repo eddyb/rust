@@ -18,7 +18,7 @@ use parse::token::keywords;
 
 pub fn expand_trace_macros(cx: @ExtCtxt,
                            sp: Span,
-                           tt: &[ast::token_tree])
+                           tt: &[@ast::token_tree])
                         -> base::MacResult {
     let sess = cx.parse_sess();
     let cfg = cx.cfg();

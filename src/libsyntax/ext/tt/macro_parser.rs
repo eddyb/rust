@@ -444,12 +444,12 @@ pub fn parse_nt(p: &Parser, name: &str) -> nonterminal {
                      + token::to_str(get_ident_interner(), p.token))
       },
       "path" => {
-        token::nt_path(~p.parse_path(LifetimeAndTypesWithoutColons).path)
+        token::nt_path(p.parse_path(LifetimeAndTypesWithoutColons).path)
       }
       "attr" => token::nt_attr(@p.parse_attribute(false)),
       "tt" => {
         *p.quote_depth += 1u; //but in theory, non-quoted tts might be useful
-        let res = token::nt_tt(@p.parse_token_tree());
+        let res = token::nt_tt(p.parse_token_tree());
         *p.quote_depth -= 1u;
         res
       }

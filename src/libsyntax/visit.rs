@@ -143,12 +143,12 @@ pub fn walk_view_item<E:Clone, V:Visitor<E>>(visitor: &mut V, vi: &view_item, en
         view_item_use(ref paths) => {
             for vp in paths.iter() {
                 let path = match vp.node {
-                    view_path_simple(ident, ref path, _) => {
+                    view_path_simple(ident, path, _) => {
                         visitor.visit_ident(vp.span, ident, env.clone());
                         path
                     }
-                    view_path_glob(ref path, _) => path,
-                    view_path_list(ref path, ref list, _) => {
+                    view_path_glob(path, _) => path,
+                    view_path_list(path, ref list, _) => {
                         for id in list.iter() {
                             visitor.visit_ident(id.span, id.node.name, env.clone())
                         }
@@ -186,7 +186,7 @@ fn walk_explicit_self<E:Clone, V:Visitor<E>>(visitor: &mut V,
 fn walk_trait_ref<E:Clone, V:Visitor<E>>(visitor: &mut V,
                             trait_ref: &ast::trait_ref,
                             env: E) {
-    walk_path(visitor, &trait_ref.path, env)
+    walk_path(visitor, trait_ref.path, env)
 }
 
 pub fn walk_item<E:Clone, V:Visitor<E>>(visitor: &mut V, item: &item, env: E) {
@@ -247,7 +247,7 @@ pub fn walk_item<E:Clone, V:Visitor<E>>(visitor: &mut V, item: &item, env: E) {
         item_trait(ref generics, ref trait_paths, ref methods) => {
             visitor.visit_generics(generics, env.clone());
             for trait_path in trait_paths.iter() {
-                walk_path(visitor, &trait_path.path, env.clone())
+                walk_path(visitor, trait_path.path, env.clone())
             }
             for method in methods.iter() {
                 visitor.visit_trait_method(method, env.clone())
@@ -330,7 +330,7 @@ pub fn walk_ty<E:Clone, V:Visitor<E>>(visitor: &mut V, typ: &Ty, env: E) {
             walk_lifetime_decls(visitor, &function_declaration.lifetimes,
                                 env.clone());
         }
-        ty_path(ref path, ref bounds, _) => {
+        ty_path(path, ref bounds, _) => {
             walk_path(visitor, path, env.clone());
             for bounds in bounds.iter() {
                 walk_ty_param_bounds(visitor, bounds, env.clone())
@@ -370,7 +370,7 @@ pub fn walk_path<E:Clone, V:Visitor<E>>(visitor: &mut V, path: &Path, env: E) {
 
 pub fn walk_pat<E:Clone, V:Visitor<E>>(visitor: &mut V, pattern: &Pat, env: E) {
     match pattern.node {
-        PatEnum(ref path, ref children) => {
+        PatEnum(path, ref children) => {
             walk_path(visitor, path, env.clone());
             for children in children.iter() {
                 for child in children.iter() {
@@ -378,7 +378,7 @@ pub fn walk_pat<E:Clone, V:Visitor<E>>(visitor: &mut V, pattern: &Pat, env: E) {
                 }
             }
         }
-        PatStruct(ref path, ref fields, _) => {
+        PatStruct(path, ref fields, _) => {
             walk_path(visitor, path, env.clone());
             for field in fields.iter() {
                 visitor.visit_pat(field.pat, env.clone())
@@ -394,7 +394,7 @@ pub fn walk_pat<E:Clone, V:Visitor<E>>(visitor: &mut V, pattern: &Pat, env: E) {
         PatRegion(subpattern) => {
             visitor.visit_pat(subpattern, env)
         }
-        PatIdent(_, ref path, ref optional_subpattern) => {
+        PatIdent(_, path, ref optional_subpattern) => {
             walk_path(visitor, path, env.clone());
             match *optional_subpattern {
                 None => {}
@@ -615,7 +615,7 @@ pub fn walk_expr<E:Clone, V:Visitor<E>>(visitor: &mut V, expression: @Expr, env:
             visitor.visit_expr(element, env.clone());
             visitor.visit_expr(count, env.clone())
         }
-        ExprStruct(ref path, ref fields, optional_base) => {
+        ExprStruct(path, ref fields, optional_base) => {
             walk_path(visitor, path, env.clone());
             for field in fields.iter() {
                 visitor.visit_expr(field.expr, env.clone())
@@ -710,7 +710,7 @@ pub fn walk_expr<E:Clone, V:Visitor<E>>(visitor: &mut V, expression: @Expr, env:
             visitor.visit_expr(main_expression, env.clone());
             visitor.visit_expr(index_expression, env.clone())
         }
-        ExprPath(ref path) => walk_path(visitor, path, env.clone()),
+        ExprPath(path) => walk_path(visitor, path, env.clone()),
         ExprSelf | ExprBreak(_) | ExprAgain(_) => {}
         ExprRet(optional_expression) => {
             walk_expr_opt(visitor, optional_expression, env.clone())

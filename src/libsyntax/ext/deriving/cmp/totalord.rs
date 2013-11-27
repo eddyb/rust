@@ -42,7 +42,7 @@ pub fn expand_deriving_totalord(cx: @ExtCtxt,
 }
 
 
-pub fn ordering_const(cx: @ExtCtxt, span: Span, cnst: Ordering) -> ast::Path {
+pub fn ordering_const(cx: @ExtCtxt, span: Span, cnst: Ordering) -> @ast::Path {
     let cnst = match cnst {
         Less => "Less",
         Equal => "Equal",
@@ -92,13 +92,13 @@ pub fn cs_cmp(cx: @ExtCtxt, span: Span,
 
             let cond = cx.expr_binary(span, ast::BiEq,
                                       cx.expr_ident(span, test_id),
-                                      cx.expr_path(equals_path.clone()));
+                                      cx.expr_path(equals_path));
             let if_ = cx.expr_if(span,
                                  cond,
                                  old, Some(cx.expr_ident(span, test_id)));
             cx.expr_block(cx.block(span, ~[assign], Some(if_)))
         },
-        cx.expr_path(equals_path.clone()),
+        cx.expr_path(equals_path),
         |cx, span, list, _| {
             match list {
                 // an earlier nonmatching variant is Less than a

@@ -244,7 +244,7 @@ impl Ctx {
 
     fn map_pat(&mut self, pat: &Pat) {
         match pat.node {
-            PatIdent(_, ref path, _) => {
+            PatIdent(_, path, _) => {
                 // Note: this is at least *potentially* a pattern...
                 self.map.insert(pat.id,
                                 node_local(ast_util::path_to_ident(path)));

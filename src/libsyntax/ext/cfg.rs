@@ -25,8 +25,8 @@ use parse;
 use parse::token;
 use parse::attr::parser_attr;
 
-pub fn expand_cfg(cx: @ExtCtxt, sp: Span, tts: &[ast::token_tree]) -> base::MacResult {
-    let p = parse::new_parser_from_tts(cx.parse_sess(), cx.cfg(), tts.to_owned());
+pub fn expand_cfg(cx: @ExtCtxt, sp: Span, tts: &[@ast::token_tree]) -> base::MacResult {
+    let p = parse::new_parser_from_tts(cx.parse_sess(), cx.cfg(), tts.map(|&tt| (*tt).clone()).to_owned()); // HACK(eddyb) stage0 quote runtime dependency.
 
     let mut cfgs = ~[];
     // parse `cfg!(meta_item, meta_item(x,y), meta_item="foo", ...)`

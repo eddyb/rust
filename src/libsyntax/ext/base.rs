@@ -50,7 +50,7 @@ pub trait SyntaxExpanderTTTrait {
     fn expand(&self,
               ecx: @ExtCtxt,
               span: Span,
-              token_tree: &[ast::token_tree],
+              token_tree: &[@ast::token_tree],
               context: ast::SyntaxContext)
               -> MacResult;
 }
@@ -58,7 +58,7 @@ pub trait SyntaxExpanderTTTrait {
 pub type SyntaxExpanderTTFunNoCtxt =
     extern "Rust" fn(ecx: @ExtCtxt,
                      span: codemap::Span,
-                     token_tree: &[ast::token_tree])
+                     token_tree: &[@ast::token_tree])
                      -> MacResult;
 
 enum SyntaxExpanderTTExpander {
@@ -69,7 +69,7 @@ impl SyntaxExpanderTTTrait for SyntaxExpanderTT {
     fn expand(&self,
               ecx: @ExtCtxt,
               span: Span,
-              token_tree: &[ast::token_tree],
+              token_tree: &[@ast::token_tree],
               _: ast::SyntaxContext)
               -> MacResult {
         match self.expander {
@@ -95,7 +95,7 @@ pub trait SyntaxExpanderTTItemTrait {
               cx: @ExtCtxt,
               sp: Span,
               ident: ast::Ident,
-              token_tree: ~[ast::token_tree],
+              token_tree: ~[@ast::token_tree],
               context: ast::SyntaxContext)
               -> MacResult;
 }
@@ -105,7 +105,7 @@ impl SyntaxExpanderTTItemTrait for SyntaxExpanderTTItem {
               cx: @ExtCtxt,
               sp: Span,
               ident: ast::Ident,
-              token_tree: ~[ast::token_tree],
+              token_tree: ~[@ast::token_tree],
               context: ast::SyntaxContext)
               -> MacResult {
         match self.expander {
@@ -122,12 +122,12 @@ impl SyntaxExpanderTTItemTrait for SyntaxExpanderTTItem {
 pub type SyntaxExpanderTTItemFun = extern "Rust" fn(@ExtCtxt,
                                                     Span,
                                                     ast::Ident,
-                                                    ~[ast::token_tree],
+                                                    ~[@ast::token_tree],
                                                     ast::SyntaxContext)
                                                     -> MacResult;
 
 pub type SyntaxExpanderTTItemFunNoCtxt =
-    extern "Rust" fn(@ExtCtxt, Span, ast::Ident, ~[ast::token_tree])
+    extern "Rust" fn(@ExtCtxt, Span, ast::Ident, ~[@ast::token_tree])
                      -> MacResult;
 
 pub trait AnyMacro {
@@ -435,7 +435,7 @@ pub fn expr_to_str(cx: @ExtCtxt, expr: @ast::Expr, err_msg: &str) -> (@str, ast:
     }
 }
 
-pub fn check_zero_tts(cx: @ExtCtxt, sp: Span, tts: &[ast::token_tree],
+pub fn check_zero_tts(cx: @ExtCtxt, sp: Span, tts: &[@ast::token_tree],
                       name: &str) {
     if tts.len() != 0 {
         cx.span_fatal(sp, format!("{} takes no arguments", name));
@@ -444,7 +444,7 @@ pub fn check_zero_tts(cx: @ExtCtxt, sp: Span, tts: &[ast::token_tree],
 
 pub fn get_single_str_from_tts(cx: @ExtCtxt,
                                sp: Span,
-                               tts: &[ast::token_tree],
+                               tts: &[@ast::token_tree],
                                name: &str)
                                -> @str {
     if tts.len() != 1 {
@@ -452,18 +452,18 @@ pub fn get_single_str_from_tts(cx: @ExtCtxt,
     }
 
     match tts[0] {
-        ast::tt_tok(_, token::LIT_STR(ident))
-        | ast::tt_tok(_, token::LIT_STR_RAW(ident, _)) => cx.str_of(ident),
+        @ast::tt_tok(_, token::LIT_STR(ident))
+        | @ast::tt_tok(_, token::LIT_STR_RAW(ident, _)) => cx.str_of(ident),
         _ => cx.span_fatal(sp, format!("{} requires a string.", name)),
     }
 }
 
 pub fn get_exprs_from_tts(cx: @ExtCtxt,
                           sp: Span,
-                          tts: &[ast::token_tree]) -> ~[@ast::Expr] {
+                          tts: &[@ast::token_tree]) -> ~[@ast::Expr] {
     let p = parse::new_parser_from_tts(cx.parse_sess(),
                                        cx.cfg(),
-                                       tts.to_owned());
+                                       tts.map(|&tt| (*tt).clone()).to_owned()); // HACK(eddyb) stage0 quote runtime dependency.
     let mut es = ~[];
     while *p.token != token::EOF {
         if es.len() != 0 && !p.eat(&token::COMMA) {

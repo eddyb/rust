@@ -53,10 +53,10 @@ impl Context {
     /// Parses the arguments from the given list of tokens, returning None if
     /// there's a parse error so we can continue parsing other format! expressions.
     fn parse_args(&mut self, sp: Span,
-                  tts: &[ast::token_tree]) -> (@ast::Expr, Option<@ast::Expr>) {
+                  tts: &[@ast::token_tree]) -> (@ast::Expr, Option<@ast::Expr>) {
         let p = rsparse::new_parser_from_tts(self.ecx.parse_sess(),
                                              self.ecx.cfg(),
-                                             tts.to_owned());
+                                             tts.map(|&tt| (*tt).clone()).to_owned()); // HACK(eddyb) stage0 quote runtime dependency.
         // Parse the leading function expression (maybe a block, maybe a path)
         let extra = p.parse_expr();
         if !p.eat(&token::COMMA) {
@@ -717,7 +717,7 @@ impl Context {
 }
 
 pub fn expand_args(ecx: @ExtCtxt, sp: Span,
-                   tts: &[ast::token_tree]) -> base::MacResult {
+                   tts: &[@ast::token_tree]) -> base::MacResult {
     let mut cx = Context {
         ecx: ecx,
         args: ~[],

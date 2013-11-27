@@ -85,7 +85,7 @@ impl SyntaxExpanderTTTrait for MacroRulesSyntaxExpanderTTFun {
     fn expand(&self,
               cx: @ExtCtxt,
               sp: Span,
-              arg: &[ast::token_tree],
+              arg: &[@ast::token_tree],
               _: ast::SyntaxContext)
               -> MacResult {
         generic_extension(cx, sp, self.name, arg, *self.lhses, *self.rhses)
@@ -96,7 +96,7 @@ impl SyntaxExpanderTTTrait for MacroRulesSyntaxExpanderTTFun {
 fn generic_extension(cx: @ExtCtxt,
                      sp: Span,
                      name: Ident,
-                     arg: &[ast::token_tree],
+                     arg: &[@ast::token_tree],
                      lhses: &[@named_match],
                      rhses: &[@named_match])
                      -> MacResult {
@@ -171,7 +171,7 @@ fn generic_extension(cx: @ExtCtxt,
 pub fn add_new_extension(cx: @ExtCtxt,
                          sp: Span,
                          name: Ident,
-                         arg: ~[ast::token_tree],
+                         arg: ~[@ast::token_tree],
                          _: ast::SyntaxContext)
                          -> base::MacResult {
     // these spans won't matter, anyways

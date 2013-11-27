@@ -108,7 +108,7 @@ pub enum nonterminal {
     nt_ty(  ~ast::Ty),
     nt_ident(~ast::Ident, bool),
     nt_attr(@ast::Attribute),   // #[foo]
-    nt_path(~ast::Path),
+    nt_path(@ast::Path),
     nt_tt(  @ast::token_tree), //needs @ed to break a circularity
     nt_matchers(~[ast::matcher])
 }

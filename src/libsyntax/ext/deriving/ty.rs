@@ -70,7 +70,7 @@ impl<'self> Path<'self> {
                    span: Span,
                    self_ty: Ident,
                    self_generics: &Generics)
-                   -> ast::Path {
+                   -> @ast::Path {
         let idents = self.path.map(|s| cx.ident_of(*s) );
         let lt = mk_lifetimes(cx, span, &self.lifetime);
         let tys = self.params.map(|t| t.to_ty(cx, span, self_ty, self_generics));
@@ -168,7 +168,7 @@ impl<'self> Ty<'self> {
                    span: Span,
                    self_ty: Ident,
                    self_generics: &Generics)
-                   -> ast::Path {
+                   -> @ast::Path {
         match *self {
             Self => {
                 let self_params = self_generics.ty_params.map(|ty_param| {

@@ -122,7 +122,7 @@ struct PathSegmentAndBoundSet {
 
 /// A path paired with optional type bounds.
 struct PathAndBounds {
-    path: ast::Path,
+    path: @ast::Path,
     bounds: Option<OptVec<TyParamBound>>,
 }
 
@@ -154,11 +154,11 @@ macro_rules! maybe_whole_expr (
                 INTERPOLATED(token::nt_expr(e)) => {
                     Some(e)
                 }
-                INTERPOLATED(token::nt_path(ref pt)) => {
+                INTERPOLATED(token::nt_path(pt)) => {
                     Some($p.mk_expr(
                         ($p).span.lo,
                         ($p).span.hi,
-                        ExprPath(/* bad */ (**pt).clone())))
+                        ExprPath(pt)))
                 }
                 _ => None
             };
@@ -184,7 +184,7 @@ macro_rules! maybe_whole (
             };
             match __found__ {
                 Some(INTERPOLATED(token::$constructor(x))) => {
-                    return x.clone()
+                    return x
                 }
                 _ => {}
             }
@@ -200,7 +200,7 @@ macro_rules! maybe_whole (
             };
             match __found__ {
                 Some(INTERPOLATED(token::$constructor(x))) => {
-                    return (*x).clone()
+                    return *x
                 }
                 _ => {}
             }
@@ -216,7 +216,7 @@ macro_rules! maybe_whole (
             };
             match __found__ {
                 Some(INTERPOLATED(token::$constructor(x))) => {
-                    return Some(x.clone()),
+                    return Some(x),
                 }
                 _ => {}
             }
@@ -232,7 +232,7 @@ macro_rules! maybe_whole (
             };
             match __found__ {
                 Some(INTERPOLATED(token::$constructor(x))) => {
-                    return iovi_item(x.clone())
+                    return iovi_item(x)
                 }
                 _ => {}
             }
@@ -247,8 +247,8 @@ macro_rules! maybe_whole (
                 _ => None
             };
             match __found__ {
-                Some(INTERPOLATED(token::$constructor(ref x))) => {
-                    return (~[], (**x).clone())
+                Some(INTERPOLATED(token::$constructor(x))) => {
+                    return (~[], *x)
                 }
                 _ => {}
             }
@@ -1460,7 +1460,7 @@ impl Parser {
             _ => None,
         };
         match found {
-            Some(INTERPOLATED(token::nt_path(~path))) => {
+            Some(INTERPOLATED(token::nt_path(path))) => {
                 return PathAndBounds {
                     path: path,
                     bounds: None,
@@ -1560,7 +1560,7 @@ impl Parser {
 
         // Assemble the result.
         let path_and_bounds = PathAndBounds {
-            path: ast::Path {
+            path: @ast::Path {
                 span: span,
                 global: is_global,
                 segments: path_segments,
@@ -2071,21 +2071,21 @@ impl Parser {
     }
 
     // parse a single token tree from the input.
-    pub fn parse_token_tree(&self) -> token_tree {
+    pub fn parse_token_tree(&self) -> @token_tree {
         // FIXME #6994: currently, this is too eager. It
         // parses token trees but also identifies tt_seq's
         // and tt_nonterminals; it's too early to know yet
         // whether something will be a nonterminal or a seq
         // yet.
-        maybe_whole!(deref self, nt_tt);
+        maybe_whole!(self, nt_tt);
 
         // this is the fall-through for the 'match' below.
         // invariants: the current token is not a left-delimiter,
         // not an EOF, and not the desired right-delimiter (if
         // it were, parse_seq_to_before_end would have prevented
         // reaching this point.
-        fn parse_non_delim_tt_tok(p: &Parser) -> token_tree {
-            maybe_whole!(deref p, nt_tt);
+        fn parse_non_delim_tt_tok(p: &Parser) -> @token_tree {
+            maybe_whole!(p, nt_tt);
             match *p.token {
               token::RPAREN | token::RBRACE | token::RBRACKET => {
                   // This is a conservative error: only report the last unclosed delimiter. The
@@ -2110,14 +2110,14 @@ impl Parser {
                     let seq = match seq {
                         Spanned { node, _ } => node,
                     };
-                    tt_seq(
+                    @tt_seq(
                         mk_sp(sp.lo, p.span.hi),
                         @seq,
                         s,
                         z
                     )
                 } else {
-                    tt_nonterminal(sp, p.parse_ident())
+                    @tt_nonterminal(sp, p.parse_ident())
                 }
               }
               _ => {
@@ -2127,8 +2127,8 @@ impl Parser {
         }
 
         // turn the next token into a tt_tok:
-        fn parse_any_tt_tok(p: &Parser) -> token_tree{
-            tt_tok(*p.span, p.bump_and_get())
+        fn parse_any_tt_tok(p: &Parser) -> @token_tree {
+            @tt_tok(*p.span, p.bump_and_get())
         }
 
         match *self.token {
@@ -2157,7 +2157,7 @@ impl Parser {
                 result.push(parse_any_tt_tok(self));
                 self.open_braces.pop();
 
-                tt_delim(@result)
+                @tt_delim(@result)
             }
             _ => parse_non_delim_tt_tok(self)
         }
@@ -2165,7 +2165,7 @@ impl Parser {
 
     // parse a stream of tokens into a list of token_trees,
     // up to EOF.
-    pub fn parse_all_token_trees(&self) -> ~[token_tree] {
+    pub fn parse_all_token_trees(&self) -> ~[@token_tree] {
         let mut tts = ~[];
         while *self.token != token::EOF {
             tts.push(self.parse_token_tree());
@@ -2811,7 +2811,7 @@ impl Parser {
             } else {
                 subpat = @ast::Pat {
                     id: ast::DUMMY_NODE_ID,
-                    node: PatIdent(BindByValue(MutImmutable), fieldpath, None),
+                    node: PatIdent(BindByValue(MutImmutable), @fieldpath, None),
                     span: *self.last_span
                 };
             }
@@ -3946,9 +3946,9 @@ impl Parser {
         let opt_trait = if could_be_trait && self.eat_keyword(keywords::For) {
             // New-style trait. Reinterpret the type as a trait.
             let opt_trait_ref = match ty.node {
-                ty_path(ref path, None, node_id) => {
+                ty_path(path, None, node_id) => {
                     Some(trait_ref {
-                        path: /* bad */ (*path).clone(),
+                        path: path,
                         ref_id: node_id
                     })
                 }
@@ -4868,7 +4868,7 @@ impl Parser {
                 let id = self.parse_ident();
                 path.push(id);
             }
-            let path = ast::Path {
+            let path = @ast::Path {
                 span: mk_sp(lo, self.span.hi),
                 global: false,
                 segments: path.move_iter().map(|identifier| {
@@ -4904,7 +4904,7 @@ impl Parser {
                         seq_sep_trailing_allowed(token::COMMA),
                         |p| p.parse_path_list_ident()
                     );
-                    let path = ast::Path {
+                    let path = @ast::Path {
                         span: mk_sp(lo, self.span.hi),
                         global: false,
                         segments: path.move_iter().map(|identifier| {
@@ -4922,7 +4922,7 @@ impl Parser {
                   // foo::bar::*
                   token::BINOP(token::STAR) => {
                     self.bump();
-                    let path = ast::Path {
+                    let path = @ast::Path {
                         span: mk_sp(lo, self.span.hi),
                         global: false,
                         segments: path.move_iter().map(|identifier| {
@@ -4944,7 +4944,7 @@ impl Parser {
           _ => ()
         }
         let last = path[path.len() - 1u];
-        let path = ast::Path {
+        let path = @ast::Path {
             span: mk_sp(lo, self.span.hi),
             global: false,
             segments: path.move_iter().map(|identifier| {

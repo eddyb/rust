@@ -37,11 +37,11 @@ fn next_state(s: State) -> Option<State> {
     }
 }
 
-pub fn expand_asm(cx: @ExtCtxt, sp: Span, tts: &[ast::token_tree])
+pub fn expand_asm(cx: @ExtCtxt, sp: Span, tts: &[@ast::token_tree])
                -> base::MacResult {
     let p = parse::new_parser_from_tts(cx.parse_sess(),
                                        cx.cfg(),
-                                       tts.to_owned());
+                                       tts.map(|&tt| (*tt).clone()).to_owned()); // HACK(eddyb) stage0 quote runtime dependency.
 
     let mut asm = @"";
     let mut asm_str_style = None;

@@ -159,7 +159,7 @@ pub fn parse_tts_from_source_str(
     source: @str,
     cfg: ast::CrateConfig,
     sess: @mut ParseSess
-) -> ~[ast::token_tree] {
+) -> ~[@ast::token_tree] {
     let p = new_parser_from_source_str(
         sess,
         cfg,
@@ -246,6 +246,7 @@ pub fn filemap_to_parser(sess: @mut ParseSess,
 pub fn new_parser_from_tts(sess: @mut ParseSess,
                      cfg: ast::CrateConfig,
                      tts: ~[ast::token_tree]) -> Parser {
+    let tts = tts.map(|tt| @tt.clone()); // HACK(eddyb) stage0 quote runtime dependency.
     tts_to_parser(sess,tts,cfg)
 }
 
@@ -297,7 +298,7 @@ pub fn substring_to_filemap(sess: @mut ParseSess, source: @str, path: @str,
 
 // given a filemap, produce a sequence of token-trees
 pub fn filemap_to_tts(sess: @mut ParseSess, filemap: @FileMap)
-    -> ~[ast::token_tree] {
+    -> ~[@ast::token_tree] {
     // it appears to me that the cfg doesn't matter here... indeed,
     // parsing tt's probably shouldn't require a parser at all.
     let cfg = ~[];
@@ -308,7 +309,7 @@ pub fn filemap_to_tts(sess: @mut ParseSess, filemap: @FileMap)
 
 // given tts and cfg, produce a parser
 pub fn tts_to_parser(sess: @mut ParseSess,
-                     tts: ~[ast::token_tree],
+                     tts: ~[@ast::token_tree],
                      cfg: ast::CrateConfig) -> Parser {
     let trdr = lexer::new_tt_reader(sess.span_diagnostic, None, tts);
     Parser(sess, cfg, trdr as @mut reader)

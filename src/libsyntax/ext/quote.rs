@@ -43,9 +43,9 @@ pub mod rt {
         fn to_tokens(&self, _cx: @ExtCtxt) -> ~[token_tree];
     }
 
-    impl ToTokens for ~[token_tree] {
+    impl ToTokens for ~[@token_tree] {
         fn to_tokens(&self, _cx: @ExtCtxt) -> ~[token_tree] {
-            (*self).clone()
+            self.map(|&tt| (*tt).clone())
         }
     }
 
@@ -56,7 +56,7 @@ pub mod rt {
         pub fn to_source() -> ~str;
 
         // If you can make source, you can definitely make tokens.
-        pub fn to_tokens(cx: @ExtCtxt) -> ~[token_tree] {
+        pub fn to_tokens(cx: @ExtCtxt) -> ~[@token_tree] {
             cx.parse_tts(self.to_source())
         }
     }
@@ -200,7 +200,7 @@ pub mod rt {
         ($t:ty) => (
             impl ToTokens for $t {
                 fn to_tokens(&self, cx: @ExtCtxt) -> ~[token_tree] {
-                    cx.parse_tts(self.to_source())
+                    cx.parse_tts(self.to_source()).to_tokens(cx)
                 }
             }
         )
@@ -210,7 +210,7 @@ pub mod rt {
         ($t:ty) => (
             impl<'self> ToTokens for $t {
                 fn to_tokens(&self, cx: @ExtCtxt) -> ~[token_tree] {
-                    cx.parse_tts(self.to_source())
+                    cx.parse_tts(self.to_source()).to_tokens(cx)
                 }
             }
         )
@@ -240,7 +240,7 @@ pub mod rt {
         fn parse_item(&self, s: @str) -> @ast::item;
         fn parse_expr(&self, s: @str) -> @ast::Expr;
         fn parse_stmt(&self, s: @str) -> @ast::Stmt;
-        fn parse_tts(&self, s: @str) -> ~[ast::token_tree];
+        fn parse_tts(&self, s: @str) -> ~[@ast::token_tree];
     }
 
     impl ExtParseUtils for ExtCtxt {
@@ -278,7 +278,7 @@ pub mod rt {
                 self.parse_sess())
         }
 
-        fn parse_tts(&self, s: @str) -> ~[ast::token_tree] {
+        fn parse_tts(&self, s: @str) -> ~[@ast::token_tree] {
             parse::parse_tts_from_source_str(
                 @"<quote expansion>",
                 s,
@@ -291,7 +291,7 @@ pub mod rt {
 
 pub fn expand_quote_tokens(cx: @ExtCtxt,
                            sp: Span,
-                           tts: &[ast::token_tree]) -> base::MacResult {
+                           tts: &[@ast::token_tree]) -> base::MacResult {
     let (cx_expr, expr) = expand_tts(cx, sp, tts);
     let expanded = expand_wrapper(cx, sp, cx_expr, expr);
     base::MRExpr(expanded)
@@ -299,14 +299,14 @@ pub fn expand_quote_tokens(cx: @ExtCtxt,
 
 pub fn expand_quote_expr(cx: @ExtCtxt,
                          sp: Span,
-                         tts: &[ast::token_tree]) -> base::MacResult {
+                         tts: &[@ast::token_tree]) -> base::MacResult {
     let expanded = expand_parse_call(cx, sp, "parse_expr", ~[], tts);
     base::MRExpr(expanded)
 }
 
 pub fn expand_quote_item(cx: @ExtCtxt,
                          sp: Span,
-                         tts: &[ast::token_tree]) -> base::MacResult {
+                         tts: &[@ast::token_tree]) -> base::MacResult {
     let e_attrs = cx.expr_vec_uniq(sp, ~[]);
     let expanded = expand_parse_call(cx, sp, "parse_item",
                                     ~[e_attrs], tts);
@@ -315,7 +315,7 @@ pub fn expand_quote_item(cx: @ExtCtxt,
 
 pub fn expand_quote_pat(cx: @ExtCtxt,
                         sp: Span,
-                        tts: &[ast::token_tree]) -> base::MacResult {
+                        tts: &[@ast::token_tree]) -> base::MacResult {
     let e_refutable = cx.expr_lit(sp, ast::lit_bool(true));
     let expanded = expand_parse_call(cx, sp, "parse_pat",
                                     ~[e_refutable], tts);
@@ -324,7 +324,7 @@ pub fn expand_quote_pat(cx: @ExtCtxt,
 
 pub fn expand_quote_ty(cx: @ExtCtxt,
                        sp: Span,
-                       tts: &[ast::token_tree]) -> base::MacResult {
+                       tts: &[@ast::token_tree]) -> base::MacResult {
     let e_param_colons = cx.expr_lit(sp, ast::lit_bool(false));
     let expanded = expand_parse_call(cx, sp, "parse_ty",
                                      ~[e_param_colons], tts);
@@ -333,7 +333,7 @@ pub fn expand_quote_ty(cx: @ExtCtxt,
 
 pub fn expand_quote_stmt(cx: @ExtCtxt,
                          sp: Span,
-                         tts: &[ast::token_tree]) -> base::MacResult {
+                         tts: &[@ast::token_tree]) -> base::MacResult {
     let e_attrs = cx.expr_vec_uniq(sp, ~[]);
     let expanded = expand_parse_call(cx, sp, "parse_stmt",
                                     ~[e_attrs], tts);
@@ -552,7 +552,7 @@ fn mk_tt(cx: @ExtCtxt, sp: Span, tt: &ast::token_tree)
             ~[cx.stmt_expr(e_push)]
         }
 
-        ast::tt_delim(ref tts) => mk_tts(cx, sp, **tts),
+        ast::tt_delim(tts) => mk_tts(cx, sp, *tts),
         ast::tt_seq(*) => fail!("tt_seq in quote!"),
 
         ast::tt_nonterminal(sp, ident) => {
@@ -576,18 +576,18 @@ fn mk_tt(cx: @ExtCtxt, sp: Span, tt: &ast::token_tree)
     }
 }
 
-fn mk_tts(cx: @ExtCtxt, sp: Span, tts: &[ast::token_tree])
+fn mk_tts(cx: @ExtCtxt, sp: Span, tts: &[@ast::token_tree])
     -> ~[@ast::Stmt] {
     let mut ss = ~[];
     for tt in tts.iter() {
-        ss.push_all_move(mk_tt(cx, sp, tt));
+        ss.push_all_move(mk_tt(cx, sp, *tt));
     }
     ss
 }
 
 fn expand_tts(cx: @ExtCtxt,
               sp: Span,
-              tts: &[ast::token_tree]) -> (@ast::Expr, @ast::Expr) {
+              tts: &[@ast::token_tree]) -> (@ast::Expr, @ast::Expr) {
 
     // NB: It appears that the main parser loses its mind if we consider
     // $foo as a tt_nonterminal during the main parse, so we have to re-parse
@@ -598,7 +598,7 @@ fn expand_tts(cx: @ExtCtxt,
     let p = parse::new_parser_from_tts(
         cx.parse_sess(),
         cx.cfg(),
-        tts.to_owned()
+        tts.map(|&tt| (*tt).clone()).to_owned() // HACK(eddyb) stage0 quote runtime dependency.
     );
     *p.quote_depth += 1u;
 
@@ -677,7 +677,7 @@ fn expand_parse_call(cx: @ExtCtxt,
                      sp: Span,
                      parse_method: &str,
                      arg_exprs: ~[@ast::Expr],
-                     tts: &[ast::token_tree]) -> @ast::Expr {
+                     tts: &[@ast::token_tree]) -> @ast::Expr {
     let (cx_expr, tts_expr) = expand_tts(cx, sp, tts);
 
     let cfg_call = || cx.expr_method_call(

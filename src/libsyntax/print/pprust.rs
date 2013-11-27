@@ -179,7 +179,7 @@ pub fn tt_to_str(tt: &ast::token_tree, intr: @ident_interner) -> ~str {
     to_str(tt, print_tt, intr)
 }
 
-pub fn tts_to_str(tts: &[ast::token_tree], intr: @ident_interner) -> ~str {
+pub fn tts_to_str(tts: &[@ast::token_tree], intr: @ident_interner) -> ~str {
     to_str(&tts, print_tts, intr)
 }
 
@@ -442,7 +442,7 @@ pub fn print_type(s: @ps, ty: &ast::Ty) {
                       f.purity, f.onceness, &f.decl, None, &f.bounds,
                       Some(&generics), None);
       }
-      ast::ty_path(ref path, ref bounds, _) => print_bounded_path(s, path, bounds),
+      ast::ty_path(path, ref bounds, _) => print_bounded_path(s, path, bounds),
       ast::ty_fixed_length_vec(ref mt, v) => {
         word(s.s, "[");
         match mt.mutbl {
@@ -613,7 +613,7 @@ pub fn print_item(s: @ps, item: &ast::item) {
                 if i != 0 {
                     word_space(s, "+");
                 }
-                print_path(s, &trait_.path, false);
+                print_path(s, trait_.path, false);
             }
         }
         word(s.s, " ");
@@ -624,7 +624,7 @@ pub fn print_item(s: @ps, item: &ast::item) {
         bclose(s, item.span);
       }
       // I think it's reasonable to hide the context here:
-      ast::item_mac(codemap::Spanned { node: ast::mac_invoc_tt(ref pth, ref tts, _),
+      ast::item_mac(codemap::Spanned { node: ast::mac_invoc_tt(pth, ref tts, _),
                                    _}) => {
         print_visibility(s, item.vis);
         print_path(s, pth, false);
@@ -641,7 +641,7 @@ pub fn print_item(s: @ps, item: &ast::item) {
 }
 
 fn print_trait_ref(s: @ps, t: &ast::trait_ref) {
-    print_path(s, &t.path, false);
+    print_path(s, t.path, false);
 }
 
 pub fn print_enum_def(s: @ps, enum_definition: &ast::enum_def,
@@ -758,7 +758,7 @@ pub fn print_tt(s: @ps, tt: &ast::token_tree) {
       }
       ast::tt_seq(_, ref tts, ref sep, zerok) => {
         word(s.s, "$(");
-        for tt_elt in (*tts).iter() { print_tt(s, tt_elt); }
+        for tt_elt in (*tts).iter() { print_tt(s, *tt_elt); }
         word(s.s, ")");
         match (*sep) {
           Some(ref tk) => word(s.s, parse::token::to_str(s.intr, tk)),
@@ -773,13 +773,13 @@ pub fn print_tt(s: @ps, tt: &ast::token_tree) {
     }
 }
 
-pub fn print_tts(s: @ps, tts: & &[ast::token_tree]) {
+pub fn print_tts(s: @ps, tts: & &[@ast::token_tree]) {
     ibox(s, 0);
     for (i, tt) in tts.iter().enumerate() {
         if i != 0 {
             space(s.s);
         }
-        print_tt(s, tt);
+        print_tt(s, *tt);
     }
     end(s);
 }
@@ -1027,7 +1027,7 @@ pub fn print_if(s: @ps, test: &ast::Expr, blk: &ast::Block,
 pub fn print_mac(s: @ps, m: &ast::mac) {
     match m.node {
       // I think it's reasonable to hide the ctxt here:
-      ast::mac_invoc_tt(ref pth, ref tts, _) => {
+      ast::mac_invoc_tt(pth, ref tts, _) => {
         print_path(s, pth, false);
         word(s.s, "!");
         popen(s);
@@ -1156,7 +1156,7 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
         end(s);
       }
 
-      ast::ExprStruct(ref path, ref fields, wth) => {
+      ast::ExprStruct(path, ref fields, wth) => {
         print_path(s, path, true);
         word(s.s, "{");
         commasep_cmnt(s, consistent, (*fields), print_field, get_span);
@@ -1418,7 +1418,7 @@ pub fn print_expr(s: @ps, expr: &ast::Expr) {
         print_expr(s, index);
         word(s.s, "]");
       }
-      ast::ExprPath(ref path) => print_path(s, path, true),
+      ast::ExprPath(path) => print_path(s, path, true),
       ast::ExprSelf => word(s.s, "self"),
       ast::ExprBreak(opt_ident) => {
         word(s.s, "break");
@@ -1616,7 +1616,7 @@ pub fn print_pat(s: @ps, pat: &ast::Pat) {
     match pat.node {
       ast::PatWild => word(s.s, "_"),
       ast::PatWildMulti => word(s.s, ".."),
-      ast::PatIdent(binding_mode, ref path, sub) => {
+      ast::PatIdent(binding_mode, path, sub) => {
           match binding_mode {
               ast::BindByRef(mutbl) => {
                   word_nbsp(s, "ref");
@@ -1636,7 +1636,7 @@ pub fn print_pat(s: @ps, pat: &ast::Pat) {
               None => ()
           }
       }
-      ast::PatEnum(ref path, ref args_) => {
+      ast::PatEnum(path, ref args_) => {
         print_path(s, path, true);
         match *args_ {
           None => word(s.s, "(*)"),
@@ -1650,7 +1650,7 @@ pub fn print_pat(s: @ps, pat: &ast::Pat) {
           }
         }
       }
-      ast::PatStruct(ref path, ref fields, etc) => {
+      ast::PatStruct(path, ref fields, etc) => {
         print_path(s, path, true);
         word(s.s, "{");
         fn print_field(s: @ps, f: &ast::FieldPat) {
@@ -1915,7 +1915,7 @@ pub fn print_meta_item(s: @ps, item: &ast::MetaItem) {
 
 pub fn print_view_path(s: @ps, vp: &ast::view_path) {
     match vp.node {
-      ast::view_path_simple(ident, ref path, _) => {
+      ast::view_path_simple(ident, path, _) => {
         // FIXME(#6993) can't compare identifiers directly here
         if path.segments.last().identifier.name != ident.name {
             print_ident(s, ident);
@@ -1925,12 +1925,12 @@ pub fn print_view_path(s: @ps, vp: &ast::view_path) {
         print_path(s, path, false);
       }
 
-      ast::view_path_glob(ref path, _) => {
+      ast::view_path_glob(path, _) => {
         print_path(s, path, false);
         word(s.s, "::*");
       }
 
-      ast::view_path_list(ref path, ref idents, _) => {
+      ast::view_path_list(path, ref idents, _) => {
         print_path(s, path, false);
         word(s.s, "::{");
         commasep(s, inconsistent, (*idents), |s, w| {

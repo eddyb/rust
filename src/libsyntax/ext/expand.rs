@@ -615,12 +615,12 @@ impl Visitor<()> for NewNameFinderContext {
             // we found a pat_ident!
             ast::Pat {
                 id: _,
-                node: ast::PatIdent(_, ref path, ref inner),
+                node: ast::PatIdent(_, path, ref inner),
                 span: _
             } => {
                 match path {
                     // a path of length one:
-                    &ast::Path {
+                    @ast::Path {
                         global: false,
                         span: _,
                         segments: [
@@ -1134,7 +1134,7 @@ impl ast_fold for ContextWrapper {
     }
     fn fold_mac(&self, m: &ast::mac) -> ast::mac {
         let macro = match m.node {
-            mac_invoc_tt(ref path, ref tts, ctxt) => {
+            mac_invoc_tt(path, ref tts, ctxt) => {
                 mac_invoc_tt(self.fold_path(path),
                              fold_tts(*tts, self),
                              self.context_function.f(ctxt))
@@ -1165,7 +1165,7 @@ pub fn new_rename_folder(from: ast::Ident, to: ast::Name) -> @ContextWrapper {
 }
 
 // apply a given mark to the given token trees. Used prior to expansion of a macro.
-fn mark_tts(tts : &[token_tree], m : Mrk) -> ~[token_tree] {
+fn mark_tts(tts : &[@token_tree], m : Mrk) -> ~[@token_tree] {
     fold_tts(tts,new_mark_folder(m))
 }
 
@@ -1194,8 +1194,8 @@ pub fn replace_ctxts(expr : @ast::Expr, ctxt : SyntaxContext) -> @ast::Expr {
 // take the mark from the given ctxt (that has a mark at the outside),
 // and apply it to everything in the token trees, thereby cancelling
 // that mark.
-pub fn mtwt_cancel_outer_mark(tts: &[ast::token_tree], ctxt: ast::SyntaxContext)
-    -> ~[ast::token_tree] {
+pub fn mtwt_cancel_outer_mark(tts: &[@ast::token_tree], ctxt: ast::SyntaxContext)
+    -> ~[@ast::token_tree] {
     let outer_mark = mtwt_outer_mark(ctxt);
     mark_tts(tts,outer_mark)
 }

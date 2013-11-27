@@ -366,7 +366,7 @@ impl<'self> TraitDef<'self> {
                     cx.typarambound(p.to_path(cx, trait_span, type_ident, generics))
                 }));
             // require the current trait
-            bounds.push(cx.typarambound(trait_path.clone()));
+            bounds.push(cx.typarambound(trait_path));
 
             trait_generics.ty_params.push(cx.typaram(ty_param.ident, bounds));
         }
@@ -941,12 +941,11 @@ fn summarise_struct(cx: @ExtCtxt, trait_span: Span,
 }
 
 pub fn create_subpatterns(cx: @ExtCtxt,
-                          field_paths: ~[ast::Path],
+                          field_paths: ~[@ast::Path],
                           mutbl: ast::Mutability)
                    -> ~[@ast::Pat] {
-    field_paths.map(|path| {
-        cx.pat(path.span,
-               ast::PatIdent(ast::BindByRef(mutbl), (*path).clone(), None))
+    field_paths.map(|&path| {
+        cx.pat(path.span, ast::PatIdent(ast::BindByRef(mutbl), path, None))
     })
 }
 

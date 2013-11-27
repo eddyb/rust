@@ -28,15 +28,15 @@ pub trait ast_fold {
     fn fold_view_paths(&self, view_paths: &[@view_path]) -> ~[@view_path] {
         view_paths.map(|view_path| {
             let inner_view_path = match view_path.node {
-                view_path_simple(ref ident, ref path, node_id) => {
+                view_path_simple(ref ident, path, node_id) => {
                     view_path_simple(ident.clone(),
                                      self.fold_path(path),
                                      self.new_id(node_id))
                 }
-                view_path_glob(ref path, node_id) => {
+                view_path_glob(path, node_id) => {
                     view_path_glob(self.fold_path(path), self.new_id(node_id))
                 }
-                view_path_list(ref path, ref path_list_idents, node_id) => {
+                view_path_list(path, ref path_list_idents, node_id) => {
                     view_path_list(self.fold_path(path),
                                    path_list_idents.map(|path_list_ident| {
                                     let id = self.new_id(path_list_ident.node
@@ -176,17 +176,17 @@ pub trait ast_fold {
         let node = match p.node {
             PatWild => PatWild,
             PatWildMulti => PatWildMulti,
-            PatIdent(binding_mode, ref pth, ref sub) => {
+            PatIdent(binding_mode, pth, ref sub) => {
                 PatIdent(binding_mode,
                          self.fold_path(pth),
                          sub.map(|x| self.fold_pat(x)))
             }
             PatLit(e) => PatLit(self.fold_expr(e)),
-            PatEnum(ref pth, ref pats) => {
+            PatEnum(pth, ref pats) => {
                 PatEnum(self.fold_path(pth),
                         pats.as_ref().map(|pats| pats.map(|x| self.fold_pat(*x))))
             }
-            PatStruct(ref pth, ref fields, etc) => {
+            PatStruct(pth, ref fields, etc) => {
                 let pth_ = self.fold_path(pth);
                 let fs = fields.map(|f| {
                     ast::FieldPat {
@@ -267,7 +267,7 @@ pub trait ast_fold {
                 })
             }
             ty_tup(ref tys) => ty_tup(tys.map(|ty| self.fold_ty(ty))),
-            ty_path(ref path, ref bounds, id) => {
+            ty_path(path, ref bounds, id) => {
                 ty_path(self.fold_path(path),
                         fold_opt_bounds(bounds, self),
                         self.new_id(id))
@@ -343,8 +343,8 @@ pub trait ast_fold {
         i
     }
 
-    fn fold_path(&self, p: &Path) -> Path {
-        ast::Path {
+    fn fold_path(&self, p: &Path) -> @Path {
+        @ast::Path {
             span: self.new_span(p.span),
             global: p.global,
             segments: p.segments.map(|segment| ast::PathSegment {
@@ -368,7 +368,7 @@ pub trait ast_fold {
     fn fold_mac(&self, macro: &mac) -> mac {
         Spanned {
             node: match macro.node {
-                mac_invoc_tt(ref p, ref tts, ctxt) => {
+                mac_invoc_tt(p, ref tts, ctxt) => {
                     mac_invoc_tt(self.fold_path(p),
                                  fold_tts(*tts, self),
                                  ctxt)
@@ -452,19 +452,19 @@ fn fold_arg_<T:ast_fold>(a: &arg, fld: &T) -> arg {
 
 // build a new vector of tts by appling the ast_fold's fold_ident to
 // all of the identifiers in the token trees.
-pub fn fold_tts<T:ast_fold>(tts: &[token_tree], fld: &T) -> ~[token_tree] {
-    tts.map(|tt| {
-        match *tt {
-            tt_tok(span, ref tok) =>
-            tt_tok(span,maybe_fold_ident(tok,fld)),
-            tt_delim(tts) => tt_delim(@fold_tts(*tts, fld)),
-            tt_seq(span, pattern, ref sep, is_optional) =>
-            tt_seq(span,
+pub fn fold_tts<T:ast_fold>(tts: &[@token_tree], fld: &T) -> ~[@token_tree] {
+    tts.map(|&tt| {
+        match tt {
+            @tt_tok(span, ref tok) =>
+            @tt_tok(span,maybe_fold_ident(tok,fld)),
+            @tt_delim(tts) => @tt_delim(@fold_tts(*tts, fld)),
+            @tt_seq(span, pattern, ref sep, is_optional) =>
+            @tt_seq(span,
                    @fold_tts(*pattern, fld),
                    sep.as_ref().map(|tok|maybe_fold_ident(tok,fld)),
                    is_optional),
-            tt_nonterminal(sp,ref ident) =>
-            tt_nonterminal(sp,fld.fold_ident(*ident))
+            @tt_nonterminal(sp, ident) =>
+            @tt_nonterminal(sp,fld.fold_ident(ident))
         }
     })
 }
@@ -557,7 +557,7 @@ fn noop_fold_view_item(vi: &view_item_, fld: @ast_fold) -> view_item_ {
 
 fn fold_trait_ref<T:ast_fold>(p: &trait_ref, fld: &T) -> trait_ref {
     ast::trait_ref {
-        path: fld.fold_path(&p.path),
+        path: fld.fold_path(p.path),
         ref_id: fld.new_id(p.ref_id),
     }
 }
@@ -828,7 +828,7 @@ pub fn noop_fold_expr<T:ast_fold>(e: @ast::Expr, folder: &T) -> @ast::Expr {
                       folder.fold_expr(el),
                       folder.fold_expr(er))
         }
-        ExprPath(ref pth) => ExprPath(folder.fold_path(pth)),
+        ExprPath(pth) => ExprPath(folder.fold_path(pth)),
         ExprSelf => ExprSelf,
         ExprLogLevel => ExprLogLevel,
         ExprBreak(opt_ident) => ExprBreak(opt_ident),
@@ -844,7 +844,7 @@ pub fn noop_fold_expr<T:ast_fold>(e: @ast::Expr, folder: &T) -> @ast::Expr {
             })
         }
         ExprMac(ref mac) => ExprMac(folder.fold_mac(mac)),
-        ExprStruct(ref path, ref fields, maybe_expr) => {
+        ExprStruct(path, ref fields, maybe_expr) => {
             ExprStruct(folder.fold_path(path),
                        fields.map(|x| fold_field(*x)),
                        maybe_expr.map(|x| folder.fold_expr(x)))

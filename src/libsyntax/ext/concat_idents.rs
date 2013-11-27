@@ -16,18 +16,18 @@ use opt_vec;
 use parse::token;
 use parse::token::{str_to_ident};
 
-pub fn expand_syntax_ext(cx: @ExtCtxt, sp: Span, tts: &[ast::token_tree])
+pub fn expand_syntax_ext(cx: @ExtCtxt, sp: Span, tts: &[@ast::token_tree])
     -> base::MacResult {
     let mut res_str = ~"";
-    for (i, e) in tts.iter().enumerate() {
+    for (i, &e) in tts.iter().enumerate() {
         if i & 1 == 1 {
-            match *e {
-                ast::tt_tok(_, token::COMMA) => (),
+            match e {
+                @ast::tt_tok(_, token::COMMA) => (),
                 _ => cx.span_fatal(sp, "concat_idents! expecting comma.")
             }
         } else {
-            match *e {
-                ast::tt_tok(_, token::IDENT(ident,_)) => res_str.push_str(cx.str_of(ident)),
+            match e {
+                @ast::tt_tok(_, token::IDENT(ident,_)) => res_str.push_str(cx.str_of(ident)),
                 _ => cx.span_fatal(sp, "concat_idents! requires ident args.")
             }
         }
@@ -37,7 +37,7 @@ pub fn expand_syntax_ext(cx: @ExtCtxt, sp: Span, tts: &[ast::token_tree])
     let e = @ast::Expr {
         id: ast::DUMMY_NODE_ID,
         node: ast::ExprPath(
-            ast::Path {
+            @ast::Path {
                  span: sp,
                  global: false,
                  segments: ~[
