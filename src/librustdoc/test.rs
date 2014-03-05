@@ -61,15 +61,14 @@ pub fn run(input: &str, matches: &getopts::Matches) -> int {
                                       parsesess.cm,
                                       span_diagnostic_handler);
 
-    let cfg = driver::build_configuration(sess);
-    let krate = driver::phase_1_parse_input(sess, cfg, &input);
-    let loader = &mut Loader::new(sess);
-    let (krate, _) = driver::phase_2_configure_and_expand(sess, loader, krate);
+    let cfg = driver::build_configuration(&sess);
+    let krate = driver::phase_1_parse_input(&sess, cfg, &input);
+    let loader = &mut Loader::new(&sess);
+    let (krate, _) = driver::phase_2_configure_and_expand(&sess, loader, krate);
 
     let ctx = @core::DocContext {
         krate: krate,
-        tycx: None,
-        sess: sess,
+        maybe_typed: core::NotTyped(sess),
     };
     local_data::set(super::ctxtkey, ctx);
 

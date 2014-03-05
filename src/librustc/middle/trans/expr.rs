@@ -587,7 +587,7 @@ fn trans_def<'a>(bcx: &'a Block<'a>,
                     unsafe {
                         let llty = type_of::type_of(bcx.ccx(), const_ty);
                         let symbol = csearch::get_symbol(
-                            bcx.ccx().sess.cstore,
+                            bcx.ccx().sess().cstore,
                             did);
                         let llval = symbol.with_c_str(|buf| {
                                 llvm::LLVMAddGlobal(bcx.ccx().llmod,
@@ -1619,16 +1619,16 @@ fn trans_imm_cast<'a>(bcx: &'a Block<'a>,
                                           val_ty(lldiscrim_a),
                                           lldiscrim_a, true),
                 cast_float => SIToFP(bcx, lldiscrim_a, ll_t_out),
-                _ => ccx.sess.bug(format!("translating unsupported cast: \
-                                          {} ({:?}) -> {} ({:?})",
-                                          t_in.repr(ccx.tcx), k_in,
-                                          t_out.repr(ccx.tcx), k_out))
+                _ => ccx.sess().bug(format!("translating unsupported cast: \
+                                            {} ({:?}) -> {} ({:?})",
+                                            t_in.repr(ccx.tcx), k_in,
+                                            t_out.repr(ccx.tcx), k_out))
             }
         }
-        _ => ccx.sess.bug(format!("translating unsupported cast: \
-                                  {} ({:?}) -> {} ({:?})",
-                                  t_in.repr(ccx.tcx), k_in,
-                                  t_out.repr(ccx.tcx), k_out))
+        _ => ccx.sess().bug(format!("translating unsupported cast: \
+                                    {} ({:?}) -> {} ({:?})",
+                                    t_in.repr(ccx.tcx), k_in,
+                                    t_out.repr(ccx.tcx), k_out))
     };
     return immediate_rvalue_bcx(bcx, newval, t_out).to_expr_datumblock();
 }
@@ -1675,7 +1675,7 @@ fn trans_log_level<'a>(bcx: &'a Block<'a>) -> DatumBlock<'a, Expr> {
             let external_srcs = ccx.external_srcs.borrow();
             match external_srcs.get().find(&bcx.fcx.id) {
                 Some(&src) => {
-                    ccx.sess.cstore.get_crate_data(src.krate).name.clone()
+                    ccx.sess().cstore.get_crate_data(src.krate).name.clone()
                 }
                 None => ccx.link_meta.crateid.name.to_str(),
             }

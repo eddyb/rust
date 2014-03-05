@@ -12,7 +12,7 @@
 use back::link;
 use back::{arm, x86, x86_64, mips};
 use driver::session::{Aggressive, CrateTypeExecutable};
-use driver::session::{Session, Session_, No, Less, Default};
+use driver::session::{Session, No, Less, Default};
 use driver::session;
 use front;
 use lib::llvm::llvm;
@@ -78,7 +78,7 @@ pub fn source_name(input: &Input) -> ~str {
     }
 }
 
-pub fn default_configuration(sess: Session) ->
+pub fn default_configuration(sess: &Session) ->
    ast::CrateConfig {
     let tos = match sess.targ_cfg.os {
         abi::OsWin32 =>   InternedString::new("win32"),
@@ -121,7 +121,7 @@ pub fn append_configuration(cfg: &mut ast::CrateConfig,
     }
 }
 
-pub fn build_configuration(sess: Session) -> ast::CrateConfig {
+pub fn build_configuration(sess: &Session) -> ast::CrateConfig {
     // Combine the configuration requested by the session (command line) with
     // some default and generated configuration items
     let default_cfg = default_configuration(sess);
@@ -159,7 +159,7 @@ pub enum Input {
     StrInput(~str)
 }
 
-pub fn phase_1_parse_input(sess: Session, cfg: ast::CrateConfig, input: &Input)
+pub fn phase_1_parse_input(sess: &Session, cfg: ast::CrateConfig, input: &Input)
     -> ast::Crate {
     let krate = time(sess.time_passes(), "parsing", (), |_| {
         match *input {
@@ -191,14 +191,14 @@ pub fn phase_1_parse_input(sess: Session, cfg: ast::CrateConfig, input: &Input)
 /// syntax expansion, secondary `cfg` expansion, synthesis of a test
 /// harness if one is to be provided and injection of a dependency on the
 /// standard library and prelude.
-pub fn phase_2_configure_and_expand(sess: Session,
+pub fn phase_2_configure_and_expand(sess: &Session,
                                     loader: &mut CrateLoader,
                                     mut krate: ast::Crate)
                                     -> (ast::Crate, syntax::ast_map::Map) {
     let time_passes = sess.time_passes();
 
     sess.building_library.set(session::building_library(sess.opts, &krate));
-    sess.crate_types.set(session::collect_crate_types(&sess,
+    sess.crate_types.set(session::collect_crate_types(sess,
                                                       krate.attrs
                                                            .as_slice()));
 
@@ -268,12 +268,12 @@ pub fn phase_3_run_analysis_passes(sess: Session,
     let time_passes = sess.time_passes();
 
     time(time_passes, "external crate/lib resolution", (), |_|
-         creader::read_crates(sess, krate,
+         creader::read_crates(&sess, krate,
                               session::sess_os_to_meta_os(sess.targ_cfg.os),
                               token::get_ident_interner()));
 
     let lang_items = time(time_passes, "language item collection", (), |_|
-                          middle::lang_items::collect_language_items(krate, sess));
+                          middle::lang_items::collect_language_items(krate, &sess));
 
     let middle::resolve::CrateMap {
         def_map: def_map,
@@ -283,13 +283,13 @@ pub fn phase_3_run_analysis_passes(sess: Session,
         last_private_map: last_private_map
     } =
         time(time_passes, "resolution", (), |_|
-             middle::resolve::resolve_crate(sess, lang_items, krate));
+             middle::resolve::resolve_crate(&sess, lang_items, krate));
 
     let named_region_map = time(time_passes, "lifetime resolution", (),
-                                |_| middle::resolve_lifetime::krate(sess, krate));
+                                |_| middle::resolve_lifetime::krate(&sess, krate));
 
     time(time_passes, "looking for entry point", (),
-         |_| middle::entry::find_entry_point(sess, krate, &ast_map));
+         |_| middle::entry::find_entry_point(&sess, krate, &ast_map));
 
     sess.macro_registrar_fn.with_mut(|r| *r =
         time(time_passes, "looking for macro registrar", (), |_|
@@ -300,7 +300,7 @@ pub fn phase_3_run_analysis_passes(sess: Session,
                         freevars::annotate_freevars(def_map, krate));
 
     let region_map = time(time_passes, "region resolution", (), |_|
-                          middle::region::resolve_crate(sess, krate));
+                          middle::region::resolve_crate(&sess, krate));
 
     let ty_cx = ty::mk_ctxt(sess, def_map, named_region_map, ast_map,
                             freevars, region_map, lang_items);
@@ -316,8 +316,7 @@ pub fn phase_3_run_analysis_passes(sess: Session,
          middle::const_eval::process_crate(krate, ty_cx));
 
     time(time_passes, "const checking", (), |_|
-         middle::check_const::check_crate(sess, krate, def_map,
-                                          method_map, ty_cx));
+         middle::check_const::check_crate(krate, def_map, method_map, ty_cx));
 
     let maps = (external_exports, last_private_map);
     let (exported_items, public_items) =
@@ -397,17 +396,16 @@ pub struct CrateTranslation {
 
 /// Run the translation phase to LLVM, after which the AST and analysis can
 /// be discarded.
-pub fn phase_4_translate_to_llvm(sess: Session,
-                                 krate: ast::Crate,
+pub fn phase_4_translate_to_llvm(krate: ast::Crate,
                                  analysis: &CrateAnalysis,
                                  outputs: &OutputFilenames) -> CrateTranslation {
-    time(sess.time_passes(), "translation", krate, |krate|
-         trans::base::trans_crate(sess, krate, analysis, outputs))
+    time(analysis.ty_cx.sess.time_passes(), "translation", krate, |krate|
+         trans::base::trans_crate(krate, analysis, outputs))
 }
 
 /// Run LLVM itself, producing a bitcode file, assembly file or object file
 /// as a side effect.
-pub fn phase_5_run_llvm_passes(sess: Session,
+pub fn phase_5_run_llvm_passes(sess: &Session,
                                trans: &CrateTranslation,
                                outputs: &OutputFilenames) {
     if sess.opts.cg.no_integrated_as {
@@ -433,7 +431,7 @@ pub fn phase_5_run_llvm_passes(sess: Session,
 
 /// Run the linker on any artifacts that resulted from the LLVM run.
 /// This should produce either a finished executable or library.
-pub fn phase_6_link_output(sess: Session,
+pub fn phase_6_link_output(sess: &Session,
                            trans: &CrateTranslation,
                            outputs: &OutputFilenames) {
     time(sess.time_passes(), "linking", (), |_|
@@ -443,7 +441,7 @@ pub fn phase_6_link_output(sess: Session,
                            &trans.link.crateid));
 }
 
-pub fn stop_after_phase_3(sess: Session) -> bool {
+pub fn stop_after_phase_3(sess: &Session) -> bool {
    if sess.opts.no_trans {
         debug!("invoked with --no-trans, returning early from compile_input");
         return true;
@@ -451,7 +449,7 @@ pub fn stop_after_phase_3(sess: Session) -> bool {
     return false;
 }
 
-pub fn stop_after_phase_1(sess: Session) -> bool {
+pub fn stop_after_phase_1(sess: &Session) -> bool {
     if sess.opts.parse_only {
         debug!("invoked with --parse-only, returning early from compile_input");
         return true;
@@ -459,7 +457,7 @@ pub fn stop_after_phase_1(sess: Session) -> bool {
     return sess.opts.debugging_opts & session::AST_JSON_NOEXPAND != 0;
 }
 
-pub fn stop_after_phase_2(sess: Session) -> bool {
+pub fn stop_after_phase_2(sess: &Session) -> bool {
     if sess.opts.no_analysis {
         debug!("invoked with --no-analysis, returning early from compile_input");
         return true;
@@ -467,7 +465,7 @@ pub fn stop_after_phase_2(sess: Session) -> bool {
     return sess.opts.debugging_opts & session::AST_JSON != 0;
 }
 
-pub fn stop_after_phase_5(sess: Session) -> bool {
+pub fn stop_after_phase_5(sess: &Session) -> bool {
     if !sess.opts.output_types.iter().any(|&i| i == link::OutputTypeExe) {
         debug!("not building executable, returning early from compile_input");
         return true;
@@ -475,7 +473,7 @@ pub fn stop_after_phase_5(sess: Session) -> bool {
     return false;
 }
 
-fn write_out_deps(sess: Session,
+fn write_out_deps(sess: &Session,
                   input: &Input,
                   outputs: &OutputFilenames,
                   krate: &ast::Crate) -> io::IoResult<()> {
@@ -488,7 +486,7 @@ fn write_out_deps(sess: Session,
             link::OutputTypeExe => {
                 let crate_types = sess.crate_types.borrow();
                 for output in crate_types.get().iter() {
-                    let p = link::filename_for_input(&sess, *output, &id, &file);
+                    let p = link::filename_for_input(sess, *output, &id, &file);
                     out_filenames.push(p);
                 }
             }
@@ -542,36 +540,36 @@ pub fn compile_input(sess: Session, cfg: ast::CrateConfig, input: &Input,
     // We need nested scopes here, because the intermediate results can keep
     // large chunks of memory alive and we want to free them as soon as
     // possible to keep the peak memory usage low
-    let (outputs, trans) = {
+    let (outputs, trans, sess) = {
         let (expanded_crate, ast_map) = {
-            let krate = phase_1_parse_input(sess, cfg, input);
+            let krate = phase_1_parse_input(&sess, cfg, input);
             if sess.show_span() {
-                front::show_span::run(sess, &krate);
+                front::show_span::run(&sess, &krate);
                 return;
             }
-            if stop_after_phase_1(sess) { return; }
-            let loader = &mut Loader::new(sess);
-            phase_2_configure_and_expand(sess, loader, krate)
+            if stop_after_phase_1(&sess) { return; }
+            let loader = &mut Loader::new(&sess);
+            phase_2_configure_and_expand(&sess, loader, krate)
         };
         let outputs = build_output_filenames(input,
                                              outdir,
                                              output,
                                              expanded_crate.attrs.as_slice(),
-                                             sess);
+                                             &sess);
 
-        write_out_deps(sess, input, &outputs, &expanded_crate).unwrap();
+        write_out_deps(&sess, input, &outputs, &expanded_crate).unwrap();
 
-        if stop_after_phase_2(sess) { return; }
+        if stop_after_phase_2(&sess) { return; }
 
         let analysis = phase_3_run_analysis_passes(sess, &expanded_crate, ast_map);
-        if stop_after_phase_3(sess) { return; }
-        let trans = phase_4_translate_to_llvm(sess, expanded_crate,
+        if stop_after_phase_3(&analysis.ty_cx.sess) { return; }
+        let trans = phase_4_translate_to_llvm(expanded_crate,
                                               &analysis, &outputs);
-        (outputs, trans)
+        (outputs, trans, analysis.ty_cx.sess)
     };
-    phase_5_run_llvm_passes(sess, &trans, &outputs);
-    if stop_after_phase_5(sess) { return; }
-    phase_6_link_output(sess, &trans, &outputs);
+    phase_5_run_llvm_passes(&sess, &trans, &outputs);
+    if stop_after_phase_5(&sess) { return; }
+    phase_6_link_output(&sess, &trans, &outputs);
 }
 
 struct IdentifiedAnnotation;
@@ -639,16 +637,19 @@ pub fn pretty_print_input(sess: Session,
                           cfg: ast::CrateConfig,
                           input: &Input,
                           ppm: PpMode) {
-    let krate = phase_1_parse_input(sess, cfg, input);
+    let krate = phase_1_parse_input(&sess, cfg, input);
 
     let (krate, ast_map, is_expanded) = match ppm {
         PpmExpanded | PpmExpandedIdentified | PpmTyped => {
-            let loader = &mut Loader::new(sess);
-            let (krate, ast_map) = phase_2_configure_and_expand(sess, loader, krate);
+            let loader = &mut Loader::new(&sess);
+            let (krate, ast_map) = phase_2_configure_and_expand(&sess, loader, krate);
             (krate, Some(ast_map), true)
         }
         _ => (krate, None, false)
     };
+
+    let codemap = sess.codemap;
+    let span_diagnostic = sess.span_diagnostic;
 
     let annotation = match ppm {
         PpmIdentified | PpmExpandedIdentified => {
@@ -664,11 +665,11 @@ pub fn pretty_print_input(sess: Session,
         _ => ~pprust::NoAnn as ~pprust::PpAnn:,
     };
 
-    let src = &sess.codemap.get_filemap(source_name(input)).src;
+    let src = &codemap.get_filemap(source_name(input)).src;
     let mut rdr = MemReader::new(src.as_bytes().to_owned());
     let stdout = io::stdout();
-    pprust::print_crate(sess.codemap,
-                        sess.span_diagnostic,
+    pprust::print_crate(codemap,
+                        span_diagnostic,
                         &krate,
                         source_name(input),
                         &mut rdr,
@@ -969,7 +970,7 @@ pub fn build_session_(sopts: @session::Options,
         }
     );
 
-    @Session_ {
+    Session {
         targ_cfg: target_cfg,
         opts: sopts,
         cstore: cstore,
@@ -991,7 +992,7 @@ pub fn build_session_(sopts: @session::Options,
     }
 }
 
-pub fn parse_pretty(sess: Session, name: &str) -> PpMode {
+pub fn parse_pretty(sess: &Session, name: &str) -> PpMode {
     match name {
       &"normal" => PpmNormal,
       &"expanded" => PpmExpanded,
@@ -1106,7 +1107,7 @@ pub fn build_output_filenames(input: &Input,
                               odir: &Option<Path>,
                               ofile: &Option<Path>,
                               attrs: &[ast::Attribute],
-                              sess: Session)
+                              sess: &Session)
                            -> OutputFilenames {
     match *ofile {
         None => {
@@ -1163,7 +1164,7 @@ pub fn early_error(msg: &str) -> ! {
     fail!(diagnostic::FatalError);
 }
 
-pub fn list_metadata(sess: Session, path: &Path,
+pub fn list_metadata(sess: &Session, path: &Path,
                      out: &mut io::Writer) -> io::IoResult<()> {
     metadata::loader::list_file_metadata(
         session::sess_os_to_meta_os(sess.targ_cfg.os), path, out)

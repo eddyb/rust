@@ -20,7 +20,7 @@ use syntax::visit;
 use syntax::visit::Visitor;
 
 struct EntryContext<'a> {
-    session: Session,
+    session: &'a Session,
 
     ast_map: &'a ast_map::Map,
 
@@ -47,7 +47,7 @@ impl<'a> Visitor<()> for EntryContext<'a> {
     }
 }
 
-pub fn find_entry_point(session: Session, krate: &Crate, ast_map: &ast_map::Map) {
+pub fn find_entry_point(session: &Session, krate: &Crate, ast_map: &ast_map::Map) {
     if session.building_library.get() {
         // No need to find a main function
         return;

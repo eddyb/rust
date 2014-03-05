@@ -17,7 +17,7 @@
  * way. Therefore we break lifetime name resolution into a separate pass.
  */
 
-use driver::session;
+use driver::session::Session;
 use std::cell::RefCell;
 use collections::HashMap;
 use syntax::ast;
@@ -33,8 +33,8 @@ use syntax::visit::Visitor;
 // that it corresponds to
 pub type NamedRegionMap = HashMap<ast::NodeId, ast::DefRegion>;
 
-struct LifetimeContext {
-    sess: session::Session,
+struct LifetimeContext<'a> {
+    sess: &'a Session,
     named_region_map: @RefCell<NamedRegionMap>,
 }
 
@@ -45,7 +45,7 @@ enum ScopeChain<'a> {
     RootScope
 }
 
-pub fn krate(sess: session::Session, krate: &ast::Crate)
+pub fn krate(sess: &Session, krate: &ast::Crate)
              -> @RefCell<NamedRegionMap> {
     let mut ctxt = LifetimeContext {
         sess: sess,
@@ -56,7 +56,7 @@ pub fn krate(sess: session::Session, krate: &ast::Crate)
     ctxt.named_region_map
 }
 
-impl<'a> Visitor<&'a ScopeChain<'a>> for LifetimeContext {
+impl<'a, 'b> Visitor<&'a ScopeChain<'a>> for LifetimeContext<'b> {
     fn visit_item(&mut self,
                   item: &ast::Item,
                   _: &'a ScopeChain<'a>) {
@@ -153,7 +153,7 @@ impl<'a> Visitor<&'a ScopeChain<'a>> for LifetimeContext {
     }
 }
 
-impl LifetimeContext {
+impl<'a> LifetimeContext<'a> {
     fn resolve_lifetime_ref(&self,
                             lifetime_ref: &ast::Lifetime,
                             scope: &ScopeChain) {

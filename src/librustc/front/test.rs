@@ -13,7 +13,7 @@
 #[allow(dead_code)];
 #[allow(unused_imports)];
 
-use driver::session;
+use driver::session::Session;
 use front::config;
 use front::std_inject::with_version;
 use metadata::creader::Loader;
@@ -46,7 +46,7 @@ struct Test {
 }
 
 struct TestCtxt<'a> {
-    sess: session::Session,
+    sess: &'a Session,
     path: RefCell<~[ast::Ident]>,
     ext_cx: ExtCtxt<'a>,
     testfns: RefCell<~[Test]>,
@@ -56,7 +56,7 @@ struct TestCtxt<'a> {
 
 // Traverse the crate, collecting all the test functions, eliding any
 // existing main functions, and synthesizing a main test harness
-pub fn modify_for_testing(sess: session::Session,
+pub fn modify_for_testing(sess: &Session,
                           krate: ast::Crate) -> ast::Crate {
     // We generate the test harness when building in the 'test'
     // configuration, either with the '--test' or '--cfg test'
@@ -160,7 +160,7 @@ impl<'a> fold::Folder for TestHarnessGenerator<'a> {
     }
 }
 
-fn generate_test_harness(sess: session::Session, krate: ast::Crate)
+fn generate_test_harness(sess: &Session, krate: ast::Crate)
                          -> ast::Crate {
     let loader = &mut Loader::new(sess);
     let mut cx: TestCtxt = TestCtxt {
