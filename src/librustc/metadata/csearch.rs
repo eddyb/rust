@@ -86,7 +86,7 @@ pub fn each_top_level_item_of_crate(cstore: @cstore::CStore,
                                           callback)
 }
 
-pub fn get_item_path(tcx: ty::ctxt, def: ast::DefId) -> ~[ast_map::PathElem] {
+pub fn get_item_path(tcx: &ty::ctxt, def: ast::DefId) -> ~[ast_map::PathElem] {
     let cstore = tcx.cstore;
     let cdata = cstore.get_crate_data(def.krate);
     let path = decoder::get_item_path(cdata, def.node);
@@ -105,7 +105,7 @@ pub enum found_ast {
 // Finds the AST for this item in the crate metadata, if any.  If the item was
 // not marked for inlining, then the AST will not be present and hence none
 // will be returned.
-pub fn maybe_get_item_ast(tcx: ty::ctxt, def: ast::DefId,
+pub fn maybe_get_item_ast(tcx: &ty::ctxt, def: ast::DefId,
                           decode_inlined_item: decoder::DecodeInlinedItem)
                        -> found_ast {
     let cstore = tcx.cstore;
@@ -113,7 +113,7 @@ pub fn maybe_get_item_ast(tcx: ty::ctxt, def: ast::DefId,
     decoder::maybe_get_item_ast(cdata, tcx, def.node, decode_inlined_item)
 }
 
-pub fn get_enum_variants(tcx: ty::ctxt, def: ast::DefId)
+pub fn get_enum_variants(tcx: &ty::ctxt, def: ast::DefId)
                       -> ~[@ty::VariantInfo] {
     let cstore = tcx.cstore;
     let cdata = cstore.get_crate_data(def.krate);
@@ -121,13 +121,13 @@ pub fn get_enum_variants(tcx: ty::ctxt, def: ast::DefId)
 }
 
 /// Returns information about the given implementation.
-pub fn get_impl(tcx: ty::ctxt, impl_def_id: ast::DefId)
+pub fn get_impl(tcx: &ty::ctxt, impl_def_id: ast::DefId)
                 -> ty::Impl {
     let cdata = tcx.cstore.get_crate_data(impl_def_id.krate);
     decoder::get_impl(tcx.cstore.intr, cdata, impl_def_id.node, tcx)
 }
 
-pub fn get_method(tcx: ty::ctxt, def: ast::DefId) -> ty::Method {
+pub fn get_method(tcx: &ty::ctxt, def: ast::DefId) -> ty::Method {
     let cdata = tcx.cstore.get_crate_data(def.krate);
     decoder::get_method(tcx.cstore.intr, cdata, def.node, tcx)
 }
@@ -152,7 +152,7 @@ pub fn get_item_variances(cstore: @cstore::CStore,
     decoder::get_item_variances(cdata, def.node)
 }
 
-pub fn get_provided_trait_methods(tcx: ty::ctxt,
+pub fn get_provided_trait_methods(tcx: &ty::ctxt,
                                   def: ast::DefId)
                                -> ~[@ty::Method] {
     let cstore = tcx.cstore;
@@ -160,7 +160,7 @@ pub fn get_provided_trait_methods(tcx: ty::ctxt,
     decoder::get_provided_trait_methods(cstore.intr, cdata, def.node, tcx)
 }
 
-pub fn get_supertraits(tcx: ty::ctxt, def: ast::DefId) -> ~[@ty::TraitRef] {
+pub fn get_supertraits(tcx: &ty::ctxt, def: ast::DefId) -> ~[@ty::TraitRef] {
     let cstore = tcx.cstore;
     let cdata = cstore.get_crate_data(def.krate);
     decoder::get_supertraits(cdata, def.node, tcx)
@@ -193,7 +193,7 @@ pub fn get_struct_fields(cstore: @cstore::CStore,
     decoder::get_struct_fields(cstore.intr, cdata, def.node)
 }
 
-pub fn get_type(tcx: ty::ctxt,
+pub fn get_type(tcx: &ty::ctxt,
                 def: ast::DefId)
              -> ty::ty_param_bounds_and_ty {
     let cstore = tcx.cstore;
@@ -201,13 +201,13 @@ pub fn get_type(tcx: ty::ctxt,
     decoder::get_type(cdata, def.node, tcx)
 }
 
-pub fn get_trait_def(tcx: ty::ctxt, def: ast::DefId) -> ty::TraitDef {
+pub fn get_trait_def(tcx: &ty::ctxt, def: ast::DefId) -> ty::TraitDef {
     let cstore = tcx.cstore;
     let cdata = cstore.get_crate_data(def.krate);
     decoder::get_trait_def(cdata, def.node, tcx)
 }
 
-pub fn get_field_type(tcx: ty::ctxt, class_id: ast::DefId,
+pub fn get_field_type(tcx: &ty::ctxt, class_id: ast::DefId,
                       def: ast::DefId) -> ty::ty_param_bounds_and_ty {
     let cstore = tcx.cstore;
     let cdata = cstore.get_crate_data(class_id.krate);
@@ -230,7 +230,7 @@ pub fn get_field_type(tcx: ty::ctxt, class_id: ast::DefId,
 
 // Given a def_id for an impl, return the trait it implements,
 // if there is one.
-pub fn get_impl_trait(tcx: ty::ctxt,
+pub fn get_impl_trait(tcx: &ty::ctxt,
                       def: ast::DefId) -> Option<@ty::TraitRef> {
     let cstore = tcx.cstore;
     let cdata = cstore.get_crate_data(def.krate);
@@ -238,7 +238,7 @@ pub fn get_impl_trait(tcx: ty::ctxt,
 }
 
 // Given a def_id for an impl, return information about its vtables
-pub fn get_impl_vtables(tcx: ty::ctxt,
+pub fn get_impl_vtables(tcx: &ty::ctxt,
                         def: ast::DefId) -> typeck::impl_res {
     let cstore = tcx.cstore;
     let cdata = cstore.get_crate_data(def.krate);
@@ -293,7 +293,7 @@ pub fn each_implementation_for_trait(cstore: @cstore::CStore,
 /// the trait that the method belongs to. Otherwise, returns `None`.
 pub fn get_trait_of_method(cstore: @cstore::CStore,
                            def_id: ast::DefId,
-                           tcx: ty::ctxt)
+                           tcx: &ty::ctxt)
                            -> Option<ast::DefId> {
     let cdata = cstore.get_crate_data(def_id.krate);
     decoder::get_trait_of_method(cdata, def_id.node, tcx)

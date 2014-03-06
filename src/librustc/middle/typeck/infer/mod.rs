@@ -74,8 +74,8 @@ pub type ures = cres<()>; // "unify result"
 pub type fres<T> = Result<T, fixup_err>; // "fixup result"
 pub type CoerceResult = cres<Option<@ty::AutoAdjustment>>;
 
-pub struct InferCtxt {
-    tcx: ty::ctxt,
+pub struct InferCtxt<'a> {
+    tcx: &'a ty::ctxt,
 
     // We instantiate ValsAndBindings with bounds<ty::t> because the
     // types that might instantiate a general type variable have an
@@ -94,7 +94,7 @@ pub struct InferCtxt {
     float_var_counter: Cell<uint>,
 
     // For region variables.
-    region_vars: RegionVarBindings,
+    region_vars: RegionVarBindings<'a>,
 }
 
 /// Why did we require that the two types be related?
@@ -264,7 +264,7 @@ fn new_ValsAndBindings<V:Clone,T:Clone>() -> ValsAndBindings<V, T> {
     }
 }
 
-pub fn new_infer_ctxt(tcx: ty::ctxt) -> InferCtxt {
+pub fn new_infer_ctxt<'a>(tcx: &'a ty::ctxt) -> InferCtxt<'a> {
     InferCtxt {
         tcx: tcx,
 
@@ -507,7 +507,7 @@ pub struct Snapshot {
     region_vars_snapshot: uint,
 }
 
-impl InferCtxt {
+impl<'a> InferCtxt<'a> {
     pub fn combine_fields<'a>(&'a self, a_is_expected: bool, trace: TypeTrace)
                               -> CombineFields<'a> {
         CombineFields {infcx: self,
@@ -606,7 +606,7 @@ fn next_simple_var<V:Clone,T:Clone>(counter: &mut uint,
     return id;
 }
 
-impl InferCtxt {
+impl<'a> InferCtxt<'a> {
     pub fn next_ty_var_id(&self) -> TyVid {
         let id = self.ty_var_counter.get();
         self.ty_var_counter.set(id + 1);
@@ -828,7 +828,7 @@ impl InferCtxt {
     }
 }
 
-pub fn fold_regions_in_sig(tcx: ty::ctxt,
+pub fn fold_regions_in_sig(tcx: &ty::ctxt,
                            fn_sig: &ty::FnSig,
                            fldr: |r: ty::Region| -> ty::Region)
                            -> ty::FnSig {
@@ -842,7 +842,7 @@ impl TypeTrace {
 }
 
 impl Repr for TypeTrace {
-    fn repr(&self, tcx: ty::ctxt) -> ~str {
+    fn repr(&self, tcx: &ty::ctxt) -> ~str {
         format!("TypeTrace({})", self.origin.repr(tcx))
     }
 }
@@ -862,7 +862,7 @@ impl TypeOrigin {
 }
 
 impl Repr for TypeOrigin {
-    fn repr(&self, tcx: ty::ctxt) -> ~str {
+    fn repr(&self, tcx: &ty::ctxt) -> ~str {
         match *self {
             MethodCompatCheck(a) => format!("MethodCompatCheck({})", a.repr(tcx)),
             ExprAssignable(a) => format!("ExprAssignable({})", a.repr(tcx)),
@@ -899,7 +899,7 @@ impl SubregionOrigin {
 }
 
 impl Repr for SubregionOrigin {
-    fn repr(&self, tcx: ty::ctxt) -> ~str {
+    fn repr(&self, tcx: &ty::ctxt) -> ~str {
         match *self {
             Subtype(a) => format!("Subtype({})", a.repr(tcx)),
             InfStackClosure(a) => format!("InfStackClosure({})", a.repr(tcx)),
@@ -942,7 +942,7 @@ impl RegionVariableOrigin {
 }
 
 impl Repr for RegionVariableOrigin {
-    fn repr(&self, tcx: ty::ctxt) -> ~str {
+    fn repr(&self, tcx: &ty::ctxt) -> ~str {
         match *self {
             MiscVariable(a) => format!("MiscVariable({})", a.repr(tcx)),
             PatternRegion(a) => format!("PatternRegion({})", a.repr(tcx)),

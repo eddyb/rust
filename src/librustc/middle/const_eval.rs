@@ -82,7 +82,7 @@ pub fn join_all<It: Iterator<constness>>(mut cs: It) -> constness {
     cs.fold(integral_const, |a, b| join(a, b))
 }
 
-pub fn lookup_const(tcx: ty::ctxt, e: &Expr) -> Option<@Expr> {
+pub fn lookup_const(tcx: &ty::ctxt, e: &Expr) -> Option<@Expr> {
     let opt_def = {
         let def_map = tcx.def_map.borrow();
         def_map.get().find_copy(&e.id)
@@ -98,7 +98,7 @@ pub fn lookup_const(tcx: ty::ctxt, e: &Expr) -> Option<@Expr> {
     }
 }
 
-pub fn lookup_variant_by_id(tcx: ty::ctxt,
+pub fn lookup_variant_by_id(tcx: &ty::ctxt,
                             enum_def: ast::DefId,
                             variant_def: ast::DefId)
                        -> Option<@Expr> {
@@ -159,7 +159,7 @@ pub fn lookup_variant_by_id(tcx: ty::ctxt,
     }
 }
 
-pub fn lookup_const_by_id(tcx: ty::ctxt, def_id: ast::DefId)
+pub fn lookup_const_by_id(tcx: &ty::ctxt, def_id: ast::DefId)
                           -> Option<@Expr> {
     if ast_util::is_local(def_id) {
         {
@@ -205,12 +205,12 @@ pub fn lookup_const_by_id(tcx: ty::ctxt, def_id: ast::DefId)
     }
 }
 
-struct ConstEvalVisitor {
-    tcx: ty::ctxt,
+struct ConstEvalVisitor<'a> {
+    tcx: &'a ty::ctxt,
     ccache: constness_cache,
 }
 
-impl ConstEvalVisitor {
+impl<'a> ConstEvalVisitor<'a> {
     fn classify(&mut self, e: &Expr) -> constness {
         let did = ast_util::local_def(e.id);
         match self.ccache.find(&did) {
@@ -295,14 +295,14 @@ impl ConstEvalVisitor {
 
 }
 
-impl Visitor<()> for ConstEvalVisitor {
+impl<'a> Visitor<()> for ConstEvalVisitor<'a> {
     fn visit_expr_post(&mut self, e: &Expr, _: ()) {
         self.classify(e);
     }
 }
 
 pub fn process_crate(krate: &ast::Crate,
-                     tcx: ty::ctxt) {
+                     tcx: &ty::ctxt) {
     let mut v = ConstEvalVisitor {
         tcx: tcx,
         ccache: HashMap::new(),
@@ -324,8 +324,8 @@ pub enum const_val {
     const_bool(bool)
 }
 
-pub fn eval_const_expr(tcx: middle::ty::ctxt, e: &Expr) -> const_val {
-    match eval_const_expr_partial(&tcx, e) {
+pub fn eval_const_expr(tcx: &ty::ctxt, e: &Expr) -> const_val {
+    match eval_const_expr_partial(tcx, e) {
         Ok(r) => r,
         Err(s) => tcx.sess.span_fatal(e.span, s)
     }
@@ -494,7 +494,7 @@ pub fn eval_const_expr_partial<T: ty::ExprTyProvider>(tcx: &T, e: &Expr)
       }
       ExprPath(_) => {
           match lookup_const(tcx.ty_ctxt(), e) {
-              Some(actual_e) => eval_const_expr_partial(&tcx.ty_ctxt(), actual_e),
+              Some(actual_e) => eval_const_expr_partial(tcx.ty_ctxt(), actual_e),
               None => Err(~"non-constant path in constant expr")
           }
       }
@@ -538,11 +538,11 @@ pub fn compare_const_vals(a: &const_val, b: &const_val) -> Option<int> {
     }
 }
 
-pub fn compare_lit_exprs(tcx: middle::ty::ctxt, a: &Expr, b: &Expr) -> Option<int> {
+pub fn compare_lit_exprs(tcx: &ty::ctxt, a: &Expr, b: &Expr) -> Option<int> {
     compare_const_vals(&eval_const_expr(tcx, a), &eval_const_expr(tcx, b))
 }
 
-pub fn lit_expr_eq(tcx: middle::ty::ctxt, a: &Expr, b: &Expr) -> Option<bool> {
+pub fn lit_expr_eq(tcx: &ty::ctxt, a: &Expr, b: &Expr) -> Option<bool> {
     compare_lit_exprs(tcx, a, b).map(|val| val == 0)
 }
 

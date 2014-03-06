@@ -119,7 +119,7 @@ trait ErrorReportingHelpers {
                           origin: SubregionOrigin);
 }
 
-impl ErrorReporting for InferCtxt {
+impl<'a> ErrorReporting for InferCtxt<'a> {
     fn report_region_errors(&self,
                             errors: &OptVec<RegionResolutionError>) {
         for error in errors.iter() {
@@ -469,7 +469,7 @@ impl ErrorReporting for InferCtxt {
     }
 }
 
-impl ErrorReportingHelpers for InferCtxt {
+impl<'a> ErrorReportingHelpers for InferCtxt<'a> {
     fn report_inference_failure(&self,
                                 var_origin: RegionVariableOrigin) {
         let var_description = match var_origin {

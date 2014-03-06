@@ -68,7 +68,7 @@ mod gather_moves;
 /// body of the while loop and we will refuse to root the pointer `&*x`
 /// because it would have to be rooted for a region greater than `root_ub`.
 struct GatherLoanCtxt<'a> {
-    bccx: &'a BorrowckCtxt,
+    bccx: &'a BorrowckCtxt<'a>,
     id_range: IdRange,
     move_data: move_data::MoveData,
     all_loans: @RefCell<~[Loan]>,
@@ -311,7 +311,7 @@ fn gather_loans_in_expr(this: &mut GatherLoanCtxt,
 }
 
 impl<'a> GatherLoanCtxt<'a> {
-    pub fn tcx(&self) -> ty::ctxt { self.bccx.tcx }
+    pub fn tcx(&self) -> &'a ty::ctxt { self.bccx.tcx }
 
     pub fn push_repeating_id(&mut self, id: ast::NodeId) {
         self.repeating_ids.push(id);

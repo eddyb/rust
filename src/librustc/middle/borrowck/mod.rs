@@ -60,16 +60,16 @@ impl Clone for LoanDataFlowOperator {
     }
 }
 
-pub type LoanDataFlow = DataFlowContext<LoanDataFlowOperator>;
+pub type LoanDataFlow<'a> = DataFlowContext<'a, LoanDataFlowOperator>;
 
-impl Visitor<()> for BorrowckCtxt {
+impl<'a> Visitor<()> for BorrowckCtxt<'a> {
     fn visit_fn(&mut self, fk: &FnKind, fd: &FnDecl,
                 b: &Block, s: Span, n: NodeId, _: ()) {
         borrowck_fn(self, fk, fd, b, s, n);
     }
 }
 
-pub fn check_crate(tcx: ty::ctxt,
+pub fn check_crate(tcx: &ty::ctxt,
                    method_map: typeck::MethodMap,
                    moves_map: moves::MovesMap,
                    moved_variables_set: moves::MovedVariablesSet,
@@ -154,8 +154,8 @@ fn borrowck_fn(this: &mut BorrowckCtxt,
 // ----------------------------------------------------------------------
 // Type definitions
 
-pub struct BorrowckCtxt {
-    tcx: ty::ctxt,
+pub struct BorrowckCtxt<'a> {
+    tcx: &'a ty::ctxt,
     method_map: typeck::MethodMap,
     moves_map: moves::MovesMap,
     moved_variables_set: moves::MovedVariablesSet,
@@ -334,7 +334,7 @@ impl BitAnd<RestrictionSet,RestrictionSet> for RestrictionSet {
 }
 
 impl Repr for RestrictionSet {
-    fn repr(&self, _tcx: ty::ctxt) -> ~str {
+    fn repr(&self, _tcx: &ty::ctxt) -> ~str {
         format!("RestrictionSet(0x{:x})", self.bits as uint)
     }
 }
@@ -404,7 +404,7 @@ pub enum MovedValueUseKind {
 ///////////////////////////////////////////////////////////////////////////
 // Misc
 
-impl BorrowckCtxt {
+impl<'a> BorrowckCtxt<'a> {
     pub fn is_subregion_of(&self, r_sub: ty::Region, r_sup: ty::Region)
                            -> bool {
         self.tcx.region_maps.is_subregion_of(r_sub, r_sup)
@@ -420,7 +420,7 @@ impl BorrowckCtxt {
         moves_map.get().contains(&id)
     }
 
-    pub fn mc(&self) -> mc::MemCategorizationContext<TcxTyper> {
+    pub fn mc(&self) -> mc::MemCategorizationContext<TcxTyper<'a>> {
         mc::MemCategorizationContext {
             typer: TcxTyper {
                 tcx: self.tcx,
@@ -600,7 +600,7 @@ impl BorrowckCtxt {
             }
         }
 
-        fn move_suggestion(tcx: ty::ctxt, ty: ty::t, default_msg: &'static str)
+        fn move_suggestion(tcx: &ty::ctxt, ty: ty::t, default_msg: &'static str)
                           -> &'static str {
             match ty::get(ty).sty {
                 ty::ty_closure(ref cty) if cty.sigil == ast::BorrowedSigil =>
@@ -870,7 +870,7 @@ impl DataFlowOperator for LoanDataFlowOperator {
 }
 
 impl Repr for Loan {
-    fn repr(&self, tcx: ty::ctxt) -> ~str {
+    fn repr(&self, tcx: &ty::ctxt) -> ~str {
         format!("Loan_{:?}({}, {:?}, {:?}-{:?}, {})",
              self.index,
              self.loan_path.repr(tcx),
@@ -882,7 +882,7 @@ impl Repr for Loan {
 }
 
 impl Repr for Restriction {
-    fn repr(&self, tcx: ty::ctxt) -> ~str {
+    fn repr(&self, tcx: &ty::ctxt) -> ~str {
         format!("Restriction({}, {:x})",
              self.loan_path.repr(tcx),
              self.set.bits as uint)
@@ -890,7 +890,7 @@ impl Repr for Restriction {
 }
 
 impl Repr for LoanPath {
-    fn repr(&self, tcx: ty::ctxt) -> ~str {
+    fn repr(&self, tcx: &ty::ctxt) -> ~str {
         match self {
             &LpVar(id) => {
                 format!("$({})", tcx.map.node_to_str(id))
@@ -909,13 +909,13 @@ impl Repr for LoanPath {
 
 ///////////////////////////////////////////////////////////////////////////
 
-pub struct TcxTyper {
-    tcx: ty::ctxt,
+pub struct TcxTyper<'a> {
+    tcx: &'a ty::ctxt,
     method_map: typeck::MethodMap,
 }
 
-impl mc::Typer for TcxTyper {
-    fn tcx(&self) -> ty::ctxt {
+impl<'a> mc::Typer for TcxTyper<'a> {
+    fn tcx<'a>(&'a self) -> &'a ty::ctxt {
         self.tcx
     }
 
@@ -923,7 +923,7 @@ impl mc::Typer for TcxTyper {
         Ok(ty::node_id_to_type(self.tcx, id))
     }
 
-    fn node_method_ty(&mut self, method_call: typeck::MethodCall) -> Option<ty::t> {
+    fn node_method_ty(&self, method_call: typeck::MethodCall) -> Option<ty::t> {
         self.method_map.borrow().get().find(&method_call).map(|method| method.ty)
     }
 

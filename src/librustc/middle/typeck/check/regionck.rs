@@ -141,15 +141,15 @@ use syntax::codemap::Span;
 use syntax::visit;
 use syntax::visit::Visitor;
 
-pub struct Rcx {
-    fcx: @FnCtxt,
+pub struct Rcx<'a> {
+    fcx: &'a FnCtxt<'a>,
     errors_reported: uint,
 
     // id of innermost fn or loop
     repeating_scope: ast::NodeId,
 }
 
-fn region_of_def(fcx: @FnCtxt, def: ast::Def) -> ty::Region {
+fn region_of_def(fcx: &FnCtxt, def: ast::Def) -> ty::Region {
     /*!
      * Returns the validity region of `def` -- that is, how long
      * is `def` valid?
@@ -174,8 +174,8 @@ fn region_of_def(fcx: @FnCtxt, def: ast::Def) -> ty::Region {
     }
 }
 
-impl Rcx {
-    pub fn tcx(&self) -> ty::ctxt {
+impl<'a> Rcx<'a> {
+    pub fn tcx(&self) -> &'a ty::ctxt {
         self.fcx.ccx.tcx
     }
 
@@ -185,7 +185,7 @@ impl Rcx {
         old_scope
     }
 
-    pub fn resolve_type(&mut self, unresolved_ty: ty::t) -> ty::t {
+    pub fn resolve_type(&self, unresolved_ty: ty::t) -> ty::t {
         /*!
          * Try to resolve the type for the given node, returning
          * t_err if an error results.  Note that we never care
@@ -227,7 +227,7 @@ impl Rcx {
         self.resolve_type(t)
     }
 
-    fn resolve_method_type(&mut self, method_call: MethodCall) -> Option<ty::t> {
+    fn resolve_method_type(&self, method_call: MethodCall) -> Option<ty::t> {
         let method_ty = self.fcx.inh.method_map.borrow().get()
                             .find(&method_call).map(|method| method.ty);
         method_ty.map(|method_ty| self.resolve_type(method_ty))
@@ -247,8 +247,8 @@ impl Rcx {
     }
 }
 
-impl<'a> mc::Typer for &'a mut Rcx {
-    fn tcx(&self) -> ty::ctxt {
+impl<'a, 'b> mc::Typer for &'a mut Rcx<'b> {
+    fn tcx<'a>(&'a self) -> &'a ty::ctxt {
         self.fcx.tcx()
     }
 
@@ -257,7 +257,7 @@ impl<'a> mc::Typer for &'a mut Rcx {
         if ty::type_is_error(t) {Err(())} else {Ok(t)}
     }
 
-    fn node_method_ty(&mut self, method_call: MethodCall) -> Option<ty::t> {
+    fn node_method_ty(&self, method_call: MethodCall) -> Option<ty::t> {
         self.resolve_method_type(method_call)
     }
 
@@ -302,7 +302,7 @@ pub fn regionck_fn(fcx: @FnCtxt, blk: &ast::Block) {
     fcx.infcx().resolve_regions();
 }
 
-impl Visitor<()> for Rcx {
+impl<'a> Visitor<()> for Rcx<'a> {
     // (..) FIXME(#3238) should use visit_pat, not visit_arm/visit_local,
     // However, right now we run into an issue whereby some free
     // regions are not properly related if they appear within the

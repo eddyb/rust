@@ -17,8 +17,8 @@ use syntax::ast;
 use syntax::ast_util;
 use syntax::opt_vec;
 
-struct CFGBuilder {
-    tcx: ty::ctxt,
+struct CFGBuilder<'a> {
+    tcx: &'a ty::ctxt,
     method_map: typeck::MethodMap,
     exit_map: HashMap<ast::NodeId, CFGIndex>,
     graph: CFGGraph,
@@ -31,7 +31,7 @@ struct LoopScope {
     break_index: CFGIndex,    // where to go on a `break
 }
 
-pub fn construct(tcx: ty::ctxt,
+pub fn construct(tcx: &ty::ctxt,
                  method_map: typeck::MethodMap,
                  blk: &ast::Block) -> CFG {
     let mut cfg_builder = CFGBuilder {
@@ -50,7 +50,7 @@ pub fn construct(tcx: ty::ctxt,
          exit: exit}
 }
 
-impl CFGBuilder {
+impl<'a> CFGBuilder<'a> {
     fn block(&mut self, blk: &ast::Block, pred: CFGIndex) -> CFGIndex {
         let mut stmts_exit = pred;
         for &stmt in blk.stmts.iter() {

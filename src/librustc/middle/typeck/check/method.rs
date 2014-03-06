@@ -198,7 +198,7 @@ pub fn lookup_in_trait(
 }
 
 struct LookupContext<'a, 'b> {
-    fcx: @FnCtxt,
+    fcx: @FnCtxt<'b>,
     span: Span,
     self_expr: Option<&'a ast::Expr>,
     m_name: ast::Name,
@@ -1367,11 +1367,11 @@ impl<'a, 'b> LookupContext<'a, 'b> {
                  ty::item_path_str(self.tcx(), did)));
     }
 
-    fn infcx(&'a self) -> &'a infer::InferCtxt {
+    fn infcx(&'a self) -> &'a infer::InferCtxt<'b> {
         &self.fcx.inh.infcx
     }
 
-    fn tcx(&self) -> ty::ctxt {
+    fn tcx(&'a self) -> &'a ty::ctxt {
         self.fcx.tcx()
     }
 
@@ -1397,7 +1397,7 @@ impl<'a, 'b> LookupContext<'a, 'b> {
 }
 
 impl Repr for RcvrMatchCondition {
-    fn repr(&self, tcx: ty::ctxt) -> ~str {
+    fn repr(&self, tcx: &ty::ctxt) -> ~str {
         match *self {
             RcvrMatchesIfObject(d) => {
                 format!("RcvrMatchesIfObject({})", d.repr(tcx))

@@ -35,7 +35,7 @@ use collections::{HashMap, HashSet};
 use syntax::ast;
 use syntax::parse::token::InternedString;
 
-pub struct CrateContext {
+pub struct CrateContext<'a> {
     llmod: ModuleRef,
     llcx: ContextRef,
     metadata_llmod: ModuleRef,
@@ -98,7 +98,7 @@ pub struct CrateContext {
     symbol_hasher: RefCell<Sha256>,
     type_hashcodes: RefCell<HashMap<ty::t, ~str>>,
     all_llvm_symbols: RefCell<HashSet<~str>>,
-    tcx: ty::ctxt,
+    tcx: &'a ty::ctxt,
     maps: astencode::Maps,
     stats: @Stats,
     tydesc_type: Type,
@@ -114,15 +114,15 @@ pub struct CrateContext {
     dbg_cx: Option<debuginfo::CrateDebugContext>,
 }
 
-impl CrateContext {
+impl<'a> CrateContext<'a> {
     pub fn new(name: &str,
-               tcx: ty::ctxt,
+               tcx: &'a ty::ctxt,
                emap2: resolve::ExportMap2,
                maps: astencode::Maps,
                symbol_hasher: Sha256,
                link_meta: LinkMeta,
                reachable: @RefCell<HashSet<ast::NodeId>>)
-               -> CrateContext {
+               -> CrateContext<'a> {
         unsafe {
             let llcx = llvm::LLVMContextCreate();
             set_task_llcx(llcx);
@@ -274,7 +274,7 @@ impl CrateContext {
 }
 
 #[unsafe_destructor]
-impl Drop for CrateContext {
+impl<'a> Drop for CrateContext<'a> {
     fn drop(&mut self) {
         unset_task_llcx();
     }

@@ -131,7 +131,7 @@ impl EnvValue {
 }
 
 // Given a closure ty, emits a corresponding tuple ty
-pub fn mk_closure_tys(tcx: ty::ctxt,
+pub fn mk_closure_tys(tcx: &ty::ctxt,
                       bound_values: &[EnvValue])
                    -> ty::t {
     // determine the types of the values in the env.  Note that this
@@ -149,7 +149,7 @@ pub fn mk_closure_tys(tcx: ty::ctxt,
     return cdata_ty;
 }
 
-fn tuplify_box_ty(tcx: ty::ctxt, t: ty::t) -> ty::t {
+fn tuplify_box_ty(tcx: &ty::ctxt, t: ty::t) -> ty::t {
     let ptr = ty::mk_imm_ptr(tcx, ty::mk_i8());
     ty::mk_tup(tcx, ~[ty::mk_uint(), ty::mk_nil_ptr(tcx), ptr, ptr, t])
 }
