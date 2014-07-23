@@ -87,8 +87,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::{i8, i16, i32, i64};
-use syntax::abi::{X86, X86_64, Arm, Mips, Mipsel, Rust, RustCall};
-use syntax::abi::{RustIntrinsic, Abi, OsWindows};
+use syntax::abi::{Rust, RustCall, RustIntrinsic, Abi};
 use syntax::ast_util::{local_def, is_local};
 use syntax::attr::AttrMetaMethods;
 use syntax::attr;
@@ -196,7 +195,8 @@ pub fn decl_fn(ccx: &CrateContext, name: &str, cc: llvm::CallConv,
         _ => {}
     }
 
-    if ccx.tcx().sess.opts.cg.no_redzone {
+    if ccx.tcx().sess.opts.cg.no_redzone
+        .unwrap_or(ccx.tcx().sess.target.target.options.disable_redzone) {
         llvm::SetFunctionAttribute(llfn, llvm::NoRedZoneAttribute)
     }
 
@@ -947,17 +947,16 @@ pub fn trans_external_path(ccx: &CrateContext, did: ast::DefId, t: ty::t) -> Val
     let name = csearch::get_symbol(&ccx.sess().cstore, did);
     match ty::get(t).sty {
         ty::ty_bare_fn(ref fn_ty) => {
-            match fn_ty.abi.for_target(ccx.sess().targ_cfg.os,
-                                       ccx.sess().targ_cfg.arch) {
-                Some(Rust) | Some(RustCall) => {
+            match ccx.sess().target.target.adjust_abi(fn_ty.abi) {
+                Rust | RustCall => {
                     get_extern_rust_fn(ccx, t, name.as_slice(), did)
                 }
-                Some(RustIntrinsic) => {
+                RustIntrinsic => {
                     ccx.sess().bug("unexpected intrinsic in trans_external_path")
                 }
-                Some(..) | None => {
+                _ => {
                     foreign::register_foreign_item_fn(ccx, fn_ty.abi, t,
-                                                      name.as_slice(), None)
+                                                      name.as_slice())
                 }
             }
         }
@@ -1160,9 +1159,10 @@ pub fn call_lifetime_end(cx: Block, ptr: ValueRef) {
 pub fn call_memcpy(cx: Block, dst: ValueRef, src: ValueRef, n_bytes: ValueRef, align: u32) {
     let _icx = push_ctxt("call_memcpy");
     let ccx = cx.ccx();
-    let key = match ccx.sess().targ_cfg.arch {
-        X86 | Arm | Mips | Mipsel => "llvm.memcpy.p0i8.p0i8.i32",
-        X86_64 => "llvm.memcpy.p0i8.p0i8.i64"
+    let key = match ccx.sess().target.target.target_word_size.as_slice() {
+        "32" => "llvm.memcpy.p0i8.p0i8.i32",
+        "64" => "llvm.memcpy.p0i8.p0i8.i64",
+        tws => fail!("Unsupported target word size for memcpy: {}", tws),
     };
     let memcpy = ccx.get_intrinsic(&key);
     let src_ptr = PointerCast(cx, src, Type::i8p(ccx));
@@ -1204,9 +1204,10 @@ fn memzero(b: &Builder, llptr: ValueRef, ty: ty::t) {
 
     let llty = type_of::type_of(ccx, ty);
 
-    let intrinsic_key = match ccx.sess().targ_cfg.arch {
-        X86 | Arm | Mips | Mipsel => "llvm.memset.p0i8.i32",
-        X86_64 => "llvm.memset.p0i8.i64"
+    let intrinsic_key = match ccx.sess().target.target.target_word_size.as_slice() {
+        "32" => "llvm.memset.p0i8.i32",
+        "64" => "llvm.memset.p0i8.i64",
+        tws => fail!("Unsupported target word size for memset: {}", tws),
     };
 
     let llintrinsicfn = ccx.get_intrinsic(&intrinsic_key);
@@ -2579,7 +2580,7 @@ pub fn create_entry_wrapper(ccx: &CrateContext,
 
         // FIXME: #16581: Marking a symbol in the executable with `dllexport`
         // linkage forces MinGW's linker to output a `.reloc` section for ASLR
-        if ccx.sess().targ_cfg.os == OsWindows {
+        if ccx.sess().target.target.options.is_like_windows {
             unsafe { llvm::LLVMRustSetDLLExportStorageClass(llfn) }
         }
 
@@ -2805,9 +2806,7 @@ pub fn get_item_val(ccx: &CrateContext, id: ast::NodeId) -> ValueRef {
                     let abi = ccx.tcx().map.get_foreign_abi(id);
                     let ty = ty::node_id_to_type(ccx.tcx(), ni.id);
                     let name = foreign::link_name(&*ni);
-                    foreign::register_foreign_item_fn(ccx, abi, ty,
-                                                      name.get().as_slice(),
-                                                      Some(ni.span))
+                    foreign::register_foreign_item_fn(ccx, abi, ty, name.get().as_slice())
                 }
                 ast::ForeignItemStatic(..) => {
                     foreign::register_static(ccx, &*ni)
@@ -2951,8 +2950,8 @@ pub fn write_metadata(cx: &SharedCrateContext, krate: &ast::Crate) -> Vec<u8> {
     });
     unsafe {
         llvm::LLVMSetInitializer(llglobal, llconst);
-        let name = loader::meta_section_name(cx.sess().targ_cfg.os);
-        name.unwrap_or("rust_metadata").with_c_str(|buf| {
+        let name = loader::meta_section_name(cx.sess().target.target.options.is_like_osx);
+        name.with_c_str(|buf| {
             llvm::LLVMSetSection(llglobal, buf)
         });
     }

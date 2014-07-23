@@ -155,76 +155,76 @@ CFG_LDPATH_i686-unknown-linux-gnu :=
 CFG_RUN_i686-unknown-linux-gnu=$(2)
 CFG_RUN_TARG_i686-unknown-linux-gnu=$(call CFG_RUN_i686-unknown-linux-gnu,,$(2))
 
-# arm-apple-ios configuration
-CFG_SDK_NAME_arm-apple-ios = iphoneos
-CFG_SDK_ARCHS_arm-apple-ios = armv7
+# arm-apple-darwin configuration
+CFG_SDK_NAME_arm-apple-darwin = iphoneos
+CFG_SDK_ARCHS_arm-apple-darwin = armv7
 ifneq ($(findstring darwin,$(CFG_OSTYPE)),)
 CFG_IOS_SDK = $(shell xcrun --show-sdk-path -sdk iphoneos 2>/dev/null)
 CFG_IOS_FLAGS = -target armv7-apple-darwin -isysroot $(CFG_IOS_SDK) -mios-version-min=7.0
-CC_arm-apple-ios = $(shell xcrun -find -sdk iphoneos clang)
-CXX_arm-apple-ios = $(shell xcrun -find -sdk iphoneos clang++)
-CPP_arm-apple-ios = $(shell xcrun -find -sdk iphoneos clang++)
-AR_arm-apple-ios = $(shell xcrun -find -sdk iphoneos ar)
+CC_arm-apple-darwin = $(shell xcrun -find -sdk iphoneos clang)
+CXX_arm-apple-darwin = $(shell xcrun -find -sdk iphoneos clang++)
+CPP_arm-apple-darwin = $(shell xcrun -find -sdk iphoneos clang++)
+AR_arm-apple-darwin = $(shell xcrun -find -sdk iphoneos ar)
 endif
-CFG_LIB_NAME_arm-apple-ios = lib$(1).a
-CFG_LIB_GLOB_arm-apple-ios = lib$(1)-*.a
-CFG_STATIC_LIB_NAME_arm-apple-ios=lib$(1).a
-CFG_LIB_DSYM_GLOB_arm-apple-ios = lib$(1)-*.a.dSYM
-CFG_CFLAGS_arm-apple-ios := -arch armv7 -mfpu=vfp3 $(CFG_IOS_FLAGS)
-CFG_GCCISH_CFLAGS_arm-apple-ios := -Wall -Werror -g -fPIC $(CFG_IOS_FLAGS) -mfpu=vfp3 -arch armv7
-CFG_GCCISH_CXXFLAGS_arm-apple-ios := -fno-rtti $(CFG_IOS_FLAGS) -I$(CFG_IOS_SDK)/usr/include/c++/4.2.1
-CFG_GCCISH_LINK_FLAGS_arm-apple-ios := -lpthread -syslibroot $(CFG_IOS_SDK) -Wl,-no_compact_unwind
-CFG_GCCISH_DEF_FLAG_arm-apple-ios := -Wl,-exported_symbols_list,
-CFG_GCCISH_PRE_LIB_FLAGS_arm-apple-ios :=
-CFG_GCCISH_POST_LIB_FLAGS_arm-apple-ios :=
-CFG_DEF_SUFFIX_arm-apple-ios := .darwin.def
-CFG_LLC_FLAGS_arm-apple-ios := -mattr=+vfp3,+v7,+thumb2,+neon -march=arm
-CFG_INSTALL_NAME_arm-apple-ios = -Wl,-install_name,@rpath/$(1)
-CFG_LIBUV_LINK_FLAGS_arm-apple-ios =
-CFG_EXE_SUFFIX_arm-apple-ios :=
-CFG_WINDOWSY_arm-apple-ios :=
-CFG_UNIXY_arm-apple-ios := 1
-CFG_PATH_MUNGE_arm-apple-ios := true
-CFG_LDPATH_arm-apple-ios :=
-CFG_RUN_arm-apple-ios = $(2)
-CFG_RUN_TARG_arm-apple-ios = $(call CFG_RUN_arm-apple-ios,,$(2))
-RUSTC_FLAGS_arm-apple-ios := -C relocation_model=pic
-RUSTC_CROSS_FLAGS_arm-apple-ios :=-C relocation_model=pic
+CFG_LIB_NAME_arm-apple-darwin = lib$(1).a
+CFG_LIB_GLOB_arm-apple-darwin = lib$(1)-*.a
+CFG_STATIC_LIB_NAME_arm-apple-darwin=lib$(1).a
+CFG_LIB_DSYM_GLOB_arm-apple-darwin = lib$(1)-*.a.dSYM
+CFG_CFLAGS_arm-apple-darwin := -arch armv7 -mfpu=vfp3 $(CFG_IOS_FLAGS)
+CFG_GCCISH_CFLAGS_arm-apple-darwin := -Wall -Werror -g -fPIC $(CFG_IOS_FLAGS) -mfpu=vfp3 -arch armv7
+CFG_GCCISH_CXXFLAGS_arm-apple-darwin := -fno-rtti $(CFG_IOS_FLAGS) -I$(CFG_IOS_SDK)/usr/include/c++/4.2.1
+CFG_GCCISH_LINK_FLAGS_arm-apple-darwin := -lpthread -syslibroot $(CFG_IOS_SDK) -Wl,-no_compact_unwind
+CFG_GCCISH_DEF_FLAG_arm-apple-darwin := -Wl,-exported_symbols_list,
+CFG_GCCISH_PRE_LIB_FLAGS_arm-apple-darwin :=
+CFG_GCCISH_POST_LIB_FLAGS_arm-apple-darwin :=
+CFG_DEF_SUFFIX_arm-apple-darwin := .darwin.def
+CFG_LLC_FLAGS_arm-apple-darwin := -mattr=+vfp3,+v7,+thumb2,+neon -march=arm
+CFG_INSTALL_NAME_arm-apple-darwin = -Wl,-install_name,@rpath/$(1)
+CFG_LIBUV_LINK_FLAGS_arm-apple-darwin =
+CFG_EXE_SUFFIX_arm-apple-darwin :=
+CFG_WINDOWSY_arm-apple-darwin :=
+CFG_UNIXY_arm-apple-darwin := 1
+CFG_PATH_MUNGE_arm-apple-darwin := true
+CFG_LDPATH_arm-apple-darwin :=
+CFG_RUN_arm-apple-darwin = $(2)
+CFG_RUN_TARG_arm-apple-darwin = $(call CFG_RUN_arm-apple-darwin,,$(2))
+RUSTC_FLAGS_arm-apple-darwin := -C relocation_model=pic
+RUSTC_CROSS_FLAGS_arm-apple-darwin :=-C relocation_model=pic
 
-# i386-apple-ios configuration
-CFG_SDK_NAME_i386-apple-ios = iphonesimulator
-CFG_SDK_ARCHS_i386-apple-ios = i386
+# i386-apple-darwin configuration
+CFG_SDK_NAME_i386-apple-darwin = iphonesimulator
+CFG_SDK_ARCHS_i386-apple-darwin = i386
 ifneq ($(findstring darwin,$(CFG_OSTYPE)),)
 CFG_IOSSIM_SDK = $(shell xcrun --show-sdk-path -sdk iphonesimulator 2>/dev/null)
-CFG_IOSSIM_FLAGS = -target i386-apple-ios -isysroot $(CFG_IOSSIM_SDK) -mios-simulator-version-min=7.0
-CC_i386-apple-ios = $(shell xcrun -find -sdk iphonesimulator clang)
-CXX_i386-apple-ios = $(shell xcrun -find -sdk iphonesimulator clang++)
-CPP_i386-apple-ios = $(shell xcrun -find -sdk iphonesimulator clang++)
-AR_i386-apple-ios = $(shell xcrun -find -sdk iphonesimulator ar)
+CFG_IOSSIM_FLAGS = -target i386-apple-darwin -isysroot $(CFG_IOSSIM_SDK) -mios-simulator-version-min=7.0
+CC_i386-apple-darwin = $(shell xcrun -find -sdk iphonesimulator clang)
+CXX_i386-apple-darwin = $(shell xcrun -find -sdk iphonesimulator clang++)
+CPP_i386-apple-darwin = $(shell xcrun -find -sdk iphonesimulator clang++)
+AR_i386-apple-darwin = $(shell xcrun -find -sdk iphonesimulator ar)
 endif
-CFG_LIB_NAME_i386-apple-ios = lib$(1).a
-CFG_LIB_GLOB_i386-apple-ios = lib$(1)-*.dylib
-CFG_STATIC_LIB_NAME_i386-apple-ios=lib$(1).a
-CFG_LIB_DSYM_GLOB_i386-apple-ios = lib$(1)-*.dylib.dSYM
-CFG_CFLAGS_i386-apple-ios = $(CFG_IOSSIM_FLAGS)
-CFG_GCCISH_CFLAGS_i386-apple-ios = -Wall -Werror -g -fPIC -m32 $(CFG_IOSSIM_FLAGS)
-CFG_GCCISH_CXXFLAGS_i386-apple-ios = -fno-rtti $(CFG_IOSSIM_FLAGS) -I$(CFG_IOSSIM_SDK)/usr/include/c++/4.2.1
-CFG_GCCISH_LINK_FLAGS_i386-apple-ios = -lpthread -Wl,-no_compact_unwind -m32 -Wl,-syslibroot $(CFG_IOSSIM_SDK)
-CFG_GCCISH_DEF_FLAG_i386-apple-ios = -Wl,-exported_symbols_list,
-CFG_GCCISH_PRE_LIB_FLAGS_i386-apple-ios =
-CFG_GCCISH_POST_LIB_FLAGS_i386-apple-ios =
-CFG_DEF_SUFFIX_i386-apple-ios = .darwin.def
-CFG_LLC_FLAGS_i386-apple-ios =
-CFG_INSTALL_NAME_i386-apple-ios = -Wl,-install_name,@rpath/$(1)
-CFG_LIBUV_LINK_FLAGS_i386-apple-ios =
-CFG_EXE_SUFFIX_i386-apple-ios =
-CFG_WINDOWSY_i386-apple-ios =
-CFG_UNIXY_i386-apple-ios = 1
-CFG_PATH_MUNGE_i386-apple-ios = true
-CFG_LDPATH_i386-apple-ios =
-CFG_RUN_i386-apple-ios = $(2)
-CFG_RUN_TARG_i386-apple-ios = $(call CFG_RUN_i386-apple-ios,,$(2))
-CFG_JEMALLOC_CFLAGS_i386-apple-ios = -target i386-apple-ios -Wl,-syslibroot $(CFG_IOSSIM_SDK) -Wl,-no_compact_unwind
+CFG_LIB_NAME_i386-apple-darwin = lib$(1).a
+CFG_LIB_GLOB_i386-apple-darwin = lib$(1)-*.dylib
+CFG_STATIC_LIB_NAME_i386-apple-darwin=lib$(1).a
+CFG_LIB_DSYM_GLOB_i386-apple-darwin = lib$(1)-*.dylib.dSYM
+CFG_CFLAGS_i386-apple-darwin = $(CFG_IOSSIM_FLAGS)
+CFG_GCCISH_CFLAGS_i386-apple-darwin = -Wall -Werror -g -fPIC -m32 $(CFG_IOSSIM_FLAGS)
+CFG_GCCISH_CXXFLAGS_i386-apple-darwin = -fno-rtti $(CFG_IOSSIM_FLAGS) -I$(CFG_IOSSIM_SDK)/usr/include/c++/4.2.1
+CFG_GCCISH_LINK_FLAGS_i386-apple-darwin = -lpthread -Wl,-no_compact_unwind -m32 -Wl,-syslibroot $(CFG_IOSSIM_SDK)
+CFG_GCCISH_DEF_FLAG_i386-apple-darwin = -Wl,-exported_symbols_list,
+CFG_GCCISH_PRE_LIB_FLAGS_i386-apple-darwin =
+CFG_GCCISH_POST_LIB_FLAGS_i386-apple-darwin =
+CFG_DEF_SUFFIX_i386-apple-darwin = .darwin.def
+CFG_LLC_FLAGS_i386-apple-darwin =
+CFG_INSTALL_NAME_i386-apple-darwin = -Wl,-install_name,@rpath/$(1)
+CFG_LIBUV_LINK_FLAGS_i386-apple-darwin =
+CFG_EXE_SUFFIX_i386-apple-darwin =
+CFG_WINDOWSY_i386-apple-darwin =
+CFG_UNIXY_i386-apple-darwin = 1
+CFG_PATH_MUNGE_i386-apple-darwin = true
+CFG_LDPATH_i386-apple-darwin =
+CFG_RUN_i386-apple-darwin = $(2)
+CFG_RUN_TARG_i386-apple-darwin = $(call CFG_RUN_i386-apple-darwin,,$(2))
+CFG_JEMALLOC_CFLAGS_i386-apple-darwin = -target i386-apple-darwin -Wl,-syslibroot $(CFG_IOSSIM_SDK) -Wl,-no_compact_unwind
 
 # x86_64-apple-darwin configuration
 CC_x86_64-apple-darwin=$(CC)
@@ -374,34 +374,34 @@ CFG_RUN_TARG_arm-unknown-linux-gnueabi=$(call CFG_RUN_arm-unknown-linux-gnueabi,
 RUSTC_FLAGS_arm-unknown-linux-gnueabi :=
 RUSTC_CROSS_FLAGS_arm-unknown-linux-gnueabi :=
 
-# mipsel-linux configuration
-CC_mipsel-linux=mipsel-linux-gcc
-CXX_mipsel-linux=mipsel-linux-g++
-CPP_mipsel-linux=mipsel-linux-gcc
-AR_mipsel-linux=mipsel-linux-ar
-CFG_LIB_NAME_mipsel-linux=lib$(1).so
-CFG_STATIC_LIB_NAME_mipsel-linux=lib$(1).a
-CFG_LIB_GLOB_mipsel-linux=lib$(1)-*.so
-CFG_LIB_DSYM_GLOB_mipsel-linux=lib$(1)-*.dylib.dSYM
-CFG_CFLAGS_mipsel-linux := -mips32 -mabi=32 $(CFLAGS)
-CFG_GCCISH_CFLAGS_mipsel-linux := -Wall -g -fPIC -mips32 -mabi=32 $(CFLAGS)
-CFG_GCCISH_CXXFLAGS_mipsel-linux := -fno-rtti $(CXXFLAGS)
-CFG_GCCISH_LINK_FLAGS_mipsel-linux := -shared -fPIC -g -mips32
-CFG_GCCISH_DEF_FLAG_mipsel-linux := -Wl,--export-dynamic,--dynamic-list=
-CFG_GCCISH_PRE_LIB_FLAGS_mipsel-linux := -Wl,-whole-archive
-CFG_GCCISH_POST_LIB_FLAGS_mipsel-linux := -Wl,-no-whole-archive
-CFG_DEF_SUFFIX_mipsel-linux := .linux.def
-CFG_LLC_FLAGS_mipsel-linux :=
-CFG_INSTALL_NAME_mipsel-linux =
-CFG_LIBUV_LINK_FLAGS_mipsel-linux =
-CFG_EXE_SUFFIX_mipsel-linux :=
-CFG_WINDOWSY_mipsel-linux :=
-CFG_UNIXY_mipsel-linux := 1
-CFG_PATH_MUNGE_mipsel-linux := true
-CFG_LDPATH_mipsel-linux :=
-CFG_RUN_mipsel-linux=
-CFG_RUN_TARG_mipsel-linux=
-RUSTC_FLAGS_mipsel-linux := -C target-cpu=mips32 -C target-feature="+mips32,+o32"
+# mipsel-unknown-linux-gnu configuration
+CC_mipsel-unknown-linux-gnu=mipsel-unknown-linux-gnu-gcc
+CXX_mipsel-unknown-linux-gnu=mipsel-unknown-linux-gnu-g++
+CPP_mipsel-unknown-linux-gnu=mipsel-unknown-linux-gnu-gcc
+AR_mipsel-unknown-linux-gnu=mipsel-unknown-linux-gnu-ar
+CFG_LIB_NAME_mipsel-unknown-linux-gnu=lib$(1).so
+CFG_STATIC_LIB_NAME_mipsel-unknown-linux-gnu=lib$(1).a
+CFG_LIB_GLOB_mipsel-unknown-linux-gnu=lib$(1)-*.so
+CFG_LIB_DSYM_GLOB_mipsel-unknown-linux-gnu=lib$(1)-*.dylib.dSYM
+CFG_CFLAGS_mipsel-unknown-linux-gnu := -mips32 -mabi=32 $(CFLAGS)
+CFG_GCCISH_CFLAGS_mipsel-unknown-linux-gnu := -Wall -g -fPIC -mips32 -mabi=32 $(CFLAGS)
+CFG_GCCISH_CXXFLAGS_mipsel-unknown-linux-gnu := -fno-rtti $(CXXFLAGS)
+CFG_GCCISH_LINK_FLAGS_mipsel-unknown-linux-gnu := -shared -fPIC -g -mips32
+CFG_GCCISH_DEF_FLAG_mipsel-unknown-linux-gnu := -Wl,--export-dynamic,--dynamic-list=
+CFG_GCCISH_PRE_LIB_FLAGS_mipsel-unknown-linux-gnu := -Wl,-whole-archive
+CFG_GCCISH_POST_LIB_FLAGS_mipsel-unknown-linux-gnu := -Wl,-no-whole-archive
+CFG_DEF_SUFFIX_mipsel-unknown-linux-gnu := .linux.def
+CFG_LLC_FLAGS_mipsel-unknown-linux-gnu :=
+CFG_INSTALL_NAME_mipsel-unknown-linux-gnu =
+CFG_LIBUV_LINK_FLAGS_mipsel-unknown-linux-gnu =
+CFG_EXE_SUFFIX_mipsel-unknown-linux-gnu :=
+CFG_WINDOWSY_mipsel-unknown-linux-gnu :=
+CFG_UNIXY_mipsel-unknown-linux-gnu := 1
+CFG_PATH_MUNGE_mipsel-unknown-linux-gnu := true
+CFG_LDPATH_mipsel-unknown-linux-gnu :=
+CFG_RUN_mipsel-unknown-linux-gnu=
+CFG_RUN_TARG_mipsel-unknown-linux-gnu=
+RUSTC_FLAGS_mipsel-unknown-linux-gnu := -C target-cpu=mips32 -C target-feature="+mips32,+o32"
 
 
 # mips-unknown-linux-gnu configuration
@@ -433,97 +433,68 @@ CFG_RUN_mips-unknown-linux-gnu=
 CFG_RUN_TARG_mips-unknown-linux-gnu=
 RUSTC_FLAGS_mips-unknown-linux-gnu := -C target-cpu=mips32r2 -C target-feature="+mips32r2,+o32" -C soft-float
 
-# i586-mingw32msvc configuration
-CC_i586-mingw32msvc=$(CFG_MINGW32_CROSS_PATH)/bin/i586-mingw32msvc-gcc
-CXX_i586-mingw32msvc=$(CFG_MINGW32_CROSS_PATH)/bin/i586-mingw32msvc-g++
-CPP_i586-mingw32msvc=$(CFG_MINGW32_CROSS_PATH)/bin/i586-mingw32msvc-cpp
-AR_i586-mingw32msvc=$(CFG_MINGW32_CROSS_PATH)/bin/i586-mingw32msvc-ar
-CFG_LIB_NAME_i586-mingw32msvc=$(1).dll
-CFG_STATIC_LIB_NAME_i586-mingw32msvc=$(1).lib
-CFG_LIB_GLOB_i586-mingw32msvc=$(1)-*.dll
-CFG_LIB_DSYM_GLOB_i586-mingw32msvc=$(1)-*.dylib.dSYM
-CFG_CFLAGS_i586-mingw32msvc := -march=i586 -m32 $(CFLAGS)
-CFG_GCCISH_CFLAGS_i586-mingw32msvc := -Wall -Werror -g -march=i586 -m32 $(CFLAGS)
-CFG_GCCISH_CXXFLAGS_i586-mingw32msvc := -fno-rtti $(CXXFLAGS)
-CFG_GCCISH_LINK_FLAGS_i586-mingw32msvc := -shared -g -m32
-CFG_GCCISH_DEF_FLAG_i586-mingw32msvc :=
-CFG_GCCISH_PRE_LIB_FLAGS_i586-mingw32msvc :=
-CFG_GCCISH_POST_LIB_FLAGS_i586-mingw32msvc :=
-CFG_DEF_SUFFIX_i586-mingw32msvc := .mingw32.def
-CFG_LLC_FLAGS_i586-mingw32msvc :=
-CFG_INSTALL_NAME_i586-mingw32msvc =
-CFG_LIBUV_LINK_FLAGS_i586-mingw32msvc := -L$(CFG_MINGW32_CROSS_PATH)/i586-mingw32msvc/lib -lws2_32 -lpsapi -liphlpapi
-CFG_EXE_SUFFIX_i586-mingw32msvc := .exe
-CFG_WINDOWSY_i586-mingw32msvc := 1
-CFG_UNIXY_i586-mingw32msvc :=
-CFG_PATH_MUNGE_i586-mingw32msvc := $(strip perl -i.bak -p \
-                             -e 's@\\(\S)@/\1@go;' \
-                             -e 's@^/([a-zA-Z])/@\1:/@o;')
-CFG_LDPATH_i586-mingw32msvc :=
-CFG_RUN_i586-mingw32msvc=
-CFG_RUN_TARG_i586-mingw32msvc=
 
-# i686-w64-mingw32 configuration
-CROSS_PREFIX_i686-w64-mingw32=i686-w64-mingw32-
-CC_i686-w64-mingw32=gcc
-CXX_i686-w64-mingw32=g++
-CPP_i686-w64-mingw32=gcc -E
-AR_i686-w64-mingw32=ar
-CFG_LIB_NAME_i686-w64-mingw32=$(1).dll
-CFG_STATIC_LIB_NAME_i686-w64-mingw32=$(1).lib
-CFG_LIB_GLOB_i686-w64-mingw32=$(1)-*.dll
-CFG_LIB_DSYM_GLOB_i686-w64-mingw32=$(1)-*.dylib.dSYM
+# i686-pc-windows-gnu configuration
+CROSS_PREFIX_i686-pc-windows-gnu=i686-pc-windows-gnu-
+CC_i686-pc-windows-gnu=gcc
+CXX_i686-pc-windows-gnu=g++
+CPP_i686-pc-windows-gnu=gcc -E
+AR_i686-pc-windows-gnu=ar
+CFG_LIB_NAME_i686-pc-windows-gnu=$(1).dll
+CFG_STATIC_LIB_NAME_i686-pc-windows-gnu=$(1).lib
+CFG_LIB_GLOB_i686-pc-windows-gnu=$(1)-*.dll
+CFG_LIB_DSYM_GLOB_i686-pc-windows-gnu=$(1)-*.dylib.dSYM
 CFG_CFLAGS_i686-w64-mingw32 := -march=i686 -m32 -D_WIN32_WINNT=0x0600 $(CFLAGS)
-CFG_GCCISH_CFLAGS_i686-w64-mingw32 := -Wall -Werror -g -m32 -D_WIN32_WINNT=0x0600 $(CFLAGS)
-CFG_GCCISH_CXXFLAGS_i686-w64-mingw32 := -fno-rtti $(CXXFLAGS)
-CFG_GCCISH_LINK_FLAGS_i686-w64-mingw32 := -shared -g -m32
-CFG_GCCISH_DEF_FLAG_i686-w64-mingw32 :=
-CFG_GCCISH_PRE_LIB_FLAGS_i686-w64-mingw32 :=
-CFG_GCCISH_POST_LIB_FLAGS_i686-w64-mingw32 :=
-CFG_DEF_SUFFIX_i686-w64-mingw32 := .mingw32.def
-CFG_LLC_FLAGS_i686-w64-mingw32 :=
-CFG_INSTALL_NAME_i686-w64-mingw32 =
-CFG_LIBUV_LINK_FLAGS_i686-w64-mingw32 := -lws2_32 -lpsapi -liphlpapi
-CFG_EXE_SUFFIX_i686-w64-mingw32 := .exe
-CFG_WINDOWSY_i686-w64-mingw32 := 1
-CFG_UNIXY_i686-w64-mingw32 :=
-CFG_PATH_MUNGE_i686-w64-mingw32 :=
-CFG_LDPATH_i686-w64-mingw32 :=$(CFG_LDPATH_i686-w64-mingw32):$(PATH)
-CFG_RUN_i686-w64-mingw32=PATH="$(CFG_LDPATH_i686-w64-mingw32):$(1)" $(2)
-CFG_RUN_TARG_i686-w64-mingw32=$(call CFG_RUN_i686-w64-mingw32,$(HLIB$(1)_H_$(CFG_BUILD)),$(2))
+CFG_GCCISH_CFLAGS_i686-pc-windows-gnu := -Wall -Werror -g -m32 -D_WIN32_WINNT=0x0600 $(CFLAGS)
+CFG_GCCISH_CXXFLAGS_i686-pc-windows-gnu := -fno-rtti $(CXXFLAGS)
+CFG_GCCISH_LINK_FLAGS_i686-pc-windows-gnu := -shared -g -m32
+CFG_GCCISH_DEF_FLAG_i686-pc-windows-gnu :=
+CFG_GCCISH_PRE_LIB_FLAGS_i686-pc-windows-gnu :=
+CFG_GCCISH_POST_LIB_FLAGS_i686-pc-windows-gnu :=
+CFG_DEF_SUFFIX_i686-pc-windows-gnu := .mingw32.def
+CFG_LLC_FLAGS_i686-pc-windows-gnu :=
+CFG_INSTALL_NAME_i686-pc-windows-gnu =
+CFG_LIBUV_LINK_FLAGS_i686-pc-windows-gnu := -lws2_32 -lpsapi -liphlpapi
+CFG_EXE_SUFFIX_i686-pc-windows-gnu := .exe
+CFG_WINDOWSY_i686-pc-windows-gnu := 1
+CFG_UNIXY_i686-pc-windows-gnu :=
+CFG_PATH_MUNGE_i686-pc-windows-gnu :=
+CFG_LDPATH_i686-pc-windows-gnu :=$(CFG_LDPATH_i686-pc-windows-gnu):$(PATH)
+CFG_RUN_i686-pc-windows-gnu=PATH="$(CFG_LDPATH_i686-pc-windows-gnu):$(1)" $(2)
+CFG_RUN_TARG_i686-pc-windows-gnu=$(call CFG_RUN_i686-pc-windows-gnu,$(HLIB$(1)_H_$(CFG_BUILD)),$(2))
 # Stop rustc from OOMing when building itself (I think)
-RUSTC_FLAGS_i686-w64-mingw32=-C link-args="-Wl,--large-address-aware"
-RUSTC_CROSS_FLAGS_i686-w64-mingw32 :=
+RUSTC_FLAGS_i686-pc-windows-gnu=-C link-args="-Wl,--large-address-aware"
+RUSTC_CROSS_FLAGS_i686-pc-windows-gnu :=
 
-# x86_64-w64-mingw32 configuration
-CROSS_PREFIX_x86_64-w64-mingw32=x86_64-w64-mingw32-
-CC_x86_64-w64-mingw32=gcc
-CXX_x86_64-w64-mingw32=g++
-CPP_x86_64-w64-mingw32=gcc -E
-AR_x86_64-w64-mingw32=ar
-CFG_LIB_NAME_x86_64-w64-mingw32=$(1).dll
-CFG_STATIC_LIB_NAME_x86_64-w64-mingw32=$(1).lib
-CFG_LIB_GLOB_x86_64-w64-mingw32=$(1)-*.dll
-CFG_LIB_DSYM_GLOB_x86_64-w64-mingw32=$(1)-*.dylib.dSYM
-CFG_CFLAGS_x86_64-w64-mingw32 := -m64 -D_WIN32_WINNT=0x0600 $(CFLAGS)
-CFG_GCCISH_CFLAGS_x86_64-w64-mingw32 := -Wall -Werror -g -m64 -D_WIN32_WINNT=0x0600 $(CFLAGS)
-CFG_GCCISH_CXXFLAGS_x86_64-w64-mingw32 := -fno-rtti $(CXXFLAGS)
-CFG_GCCISH_LINK_FLAGS_x86_64-w64-mingw32 := -shared -g -m64
-CFG_GCCISH_DEF_FLAG_x86_64-w64-mingw32 :=
-CFG_GCCISH_PRE_LIB_FLAGS_x86_64-w64-mingw32 :=
-CFG_GCCISH_POST_LIB_FLAGS_x86_64-w64-mingw32 :=
-CFG_DEF_SUFFIX_x86_64-w64-mingw32 := .mingw32.def
-CFG_LLC_FLAGS_x86_64-w64-mingw32 :=
-CFG_INSTALL_NAME_x86_64-w64-mingw32 =
-CFG_LIBUV_LINK_FLAGS_x86_64-w64-mingw32 := -lws2_32 -lpsapi -liphlpapi
-CFG_EXE_SUFFIX_x86_64-w64-mingw32 := .exe
-CFG_WINDOWSY_x86_64-w64-mingw32 := 1
-CFG_UNIXY_x86_64-w64-mingw32 :=
-CFG_PATH_MUNGE_x86_64-w64-mingw32 :=
-CFG_LDPATH_x86_64-w64-mingw32 :=$(CFG_LDPATH_x86_64-w64-mingw32):$(PATH)
-CFG_RUN_x86_64-w64-mingw32=PATH="$(CFG_LDPATH_x86_64-w64-mingw32):$(1)" $(2)
-CFG_RUN_TARG_x86_64-w64-mingw32=$(call CFG_RUN_x86_64-w64-mingw32,$(HLIB$(1)_H_$(CFG_BUILD)),$(2))
-RUSTC_CROSS_FLAGS_x86_64-w64-mingw32 :=
+# x86_64-pc-windows-gnu configuration
+CROSS_PREFIX_x86_64-pc-windows-gnu=x86_64-pc-windows-gnu-
+CC_x86_64-pc-windows-gnu=gcc
+CXX_x86_64-pc-windows-gnu=g++
+CPP_x86_64-pc-windows-gnu=gcc -E
+AR_x86_64-pc-windows-gnu=ar
+CFG_LIB_NAME_x86_64-pc-windows-gnu=$(1).dll
+CFG_STATIC_LIB_NAME_x86_64-pc-windows-gnu=$(1).lib
+CFG_LIB_GLOB_x86_64-pc-windows-gnu=$(1)-*.dll
+CFG_LIB_DSYM_GLOB_x86_64-pc-windows-gnu=$(1)-*.dylib.dSYM
+CFG_CFLAGS_x86_64-pc-windows-gnu := -m64 -D_WIN32_WINNT=0x0600 $(CFLAGS)
+CFG_GCCISH_CFLAGS_x86_64-pc-windows-gnu := -Wall -Werror -g -m64 -D_WIN32_WINNT=0x0600 $(CFLAGS)
+CFG_GCCISH_CXXFLAGS_x86_64-pc-windows-gnu := -fno-rtti $(CXXFLAGS)
+CFG_GCCISH_LINK_FLAGS_x86_64-pc-windows-gnu := -shared -g -m64
+CFG_GCCISH_DEF_FLAG_x86_64-pc-windows-gnu :=
+CFG_GCCISH_PRE_LIB_FLAGS_x86_64-pc-windows-gnu :=
+CFG_GCCISH_POST_LIB_FLAGS_x86_64-pc-windows-gnu :=
+CFG_DEF_SUFFIX_x86_64-pc-windows-gnu := .mingw32.def
+CFG_LLC_FLAGS_x86_64-pc-windows-gnu :=
+CFG_INSTALL_NAME_x86_64-pc-windows-gnu =
+CFG_LIBUV_LINK_FLAGS_x86_64-pc-windows-gnu := -lws2_32 -lpsapi -liphlpapi
+CFG_EXE_SUFFIX_x86_64-pc-windows-gnu := .exe
+CFG_WINDOWSY_x86_64-pc-windows-gnu := 1
+CFG_UNIXY_x86_64-pc-windows-gnu :=
+CFG_PATH_MUNGE_x86_64-pc-windows-gnu :=
+CFG_LDPATH_x86_64-pc-windows-gnu :=$(CFG_LDPATH_x86_64-pc-windows-gnu):$(PATH)
+CFG_RUN_x86_64-pc-windows-gnu=PATH="$(CFG_LDPATH_x86_64-pc-windows-gnu):$(1)" $(2)
+CFG_RUN_TARG_x86_64-pc-windows-gnu=$(call CFG_RUN_x86_64-pc-windows-gnu,$(HLIB$(1)_H_$(CFG_BUILD)),$(2))
+RUSTC_CROSS_FLAGS_x86_64-pc-windows-gnu :=
 
 # x86_64-unknown-freebsd configuration
 CC_x86_64-unknown-freebsd=$(CC)
