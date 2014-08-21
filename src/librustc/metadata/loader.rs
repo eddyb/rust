@@ -394,11 +394,9 @@ impl<'a> Context<'a> {
                     file.ends_with(".rlib") {
                 (file.slice(rlib_prefix.len(), file.len() - ".rlib".len()),
                  true)
-            } else if file.starts_with(dypair.ref0().as_slice()) &&
-                file.ends_with(dypair.ref1().as_slice()) {
-                let (_, ref suffix) = dypair;
-                let dylib_prefix = dylib_prefix.as_slice();
-                (file.slice(dylib_prefix.len(), file.len() - suffix.len()),
+            } else if file.starts_with(dylib_prefix.as_slice()) &&
+                    file.ends_with(dypair.ref1().as_slice()) {
+                (file.slice(dylib_prefix.len(), file.len() - dypair.ref1().len()),
                  false)
             } else {
                 return FileDoesntMatch

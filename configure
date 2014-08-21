@@ -313,6 +313,10 @@ case $CFG_OSTYPE in
         fi
         ;;
 
+    MSYS*)
+        CFG_OSTYPE=pc-windows-gnu
+        ;;
+
 # Thad's Cygwin identifers below
 
 #   Vista 32 bit
@@ -421,7 +425,6 @@ opt debug 1 "build with extra debug fun"
 opt ratchet-bench 0 "ratchet benchmarks"
 opt fast-make 0 "use .gitmodules as timestamp for submodule deps"
 opt manage-submodules 1 "let the build manage the git submodules"
-opt mingw-cross 0 "cross-compile for win32 using mingw"
 opt clang 0 "prefer clang to gcc for building the runtime"
 opt ccache 0 "invoke gcc/clang via ccache to reuse object files between builds"
 opt local-rust 0 "use an installed rustc rather than downloading a snapshot"
@@ -439,7 +442,6 @@ valopt llvm-root "" "set LLVM root"
 valopt jemalloc-root "" "set directory where libjemalloc_pic.a is located"
 valopt libuv-root "" "set directory where libuv.a is located"
 valopt android-cross-path "/opt/ndk_standalone" "Android NDK standalone path"
-valopt mingw32-cross-path "" "MinGW32 cross compiler path"
 
 valopt build "${DEFAULT_BUILD}" "GNUs ./configure syntax LLVM build triple"
 valopt host "${CFG_BUILD}" "GNUs ./configure syntax LLVM host triples"
@@ -459,7 +461,7 @@ valopt release-channel "source" "the name of the release channel to build"
 # --libdir is used to configure the installation directory.
 # FIXME: Thise needs to parameterized over target triples. Do it in platform.mk
 CFG_LIBDIR_RELATIVE=lib
-if [ "$CFG_OSTYPE" = "pc-mingw32" ] || [ "$CFG_OSTYPE" = "w64-mingw32" ]
+if [ "$CFG_OSTYPE" = "pc-windows-gnu" ]
 then
     CFG_LIBDIR_RELATIVE=bin
 fi
@@ -581,7 +583,7 @@ then
 fi
 
 BIN_SUF=
-if [ "$CFG_OSTYPE" = "pc-mingw32" ] || [ "$CFG_OSTYPE" = "w64-mingw32" ]
+if [ "$CFG_OSTYPE" = "pc-windows-gnu" ]
 then
     BIN_SUF=.exe
 fi
@@ -1039,12 +1041,22 @@ do
 
     if [ ${do_reconfigure} -ne 0 ]
     then
-        msg "configuring LLVM for $t"
+        # LLVM's configure doesn't recognize the new Windows triples yet
+        case $t in
+            i686-pc-windows-gnu)
+                gnu_t="i686-w64-mingw32" ;;
+            x86_64-pc-windows-gnu)
+                gnu_t="x86_64-w64-mingw32" ;;
+            *)
+                gnu_t=$t ;;
+        esac
+
+        msg "configuring LLVM for $gnu_t"
 
         LLVM_TARGETS="--enable-targets=x86,x86_64,arm,mips"
-        LLVM_BUILD="--build=$t"
-        LLVM_HOST="--host=$t"
-        LLVM_TARGET="--target=$t"
+        LLVM_BUILD="--build=$gnu_t"
+        LLVM_HOST="--host=$gnu_t"
+        LLVM_TARGET="--target=$gnu_t"
 
         # Disable unused LLVM features
         LLVM_OPTS="$LLVM_DBG_OPTS $LLVM_ASSERTION_OPTS --disable-docs --enable-bindings=none"
@@ -1058,7 +1070,7 @@ do
         # (llvm's configure tries to find pthread first, so we have to disable it explicitly.)
         # Also note that pthreads works badly on mingw-w64 systems: #8996
         case "$CFG_BUILD" in
-            (*-mingw32)
+            (*-windows-*)
             LLVM_OPTS="$LLVM_OPTS --disable-pthreads"
             ;;
         esac
@@ -1211,7 +1223,6 @@ putvar CFG_LIBDIR
 putvar CFG_LIBDIR_RELATIVE
 putvar CFG_DISABLE_MANAGE_SUBMODULES
 putvar CFG_ANDROID_CROSS_PATH
-putvar CFG_MINGW32_CROSS_PATH
 putvar CFG_MANDIR
 putvar CFG_DISABLE_INJECT_STD_VERSION
 putvar CFG_JEMALLOC_ROOT

@@ -126,6 +126,7 @@ CFG_PATH_MUNGE_x86_64-unknown-linux-gnu := true
 CFG_LDPATH_x86_64-unknown-linux-gnu :=
 CFG_RUN_x86_64-unknown-linux-gnu=$(2)
 CFG_RUN_TARG_x86_64-unknown-linux-gnu=$(call CFG_RUN_x86_64-unknown-linux-gnu,,$(2))
+CFG_GNU_TRIPLE_x86_64-unknown-linux-gnu=x86_64-unknown-linux-gnu
 
 # i686-unknown-linux-gnu configuration
 CC_i686-unknown-linux-gnu=$(CC)
@@ -154,6 +155,7 @@ CFG_PATH_MUNGE_i686-unknown-linux-gnu := true
 CFG_LDPATH_i686-unknown-linux-gnu :=
 CFG_RUN_i686-unknown-linux-gnu=$(2)
 CFG_RUN_TARG_i686-unknown-linux-gnu=$(call CFG_RUN_i686-unknown-linux-gnu,,$(2))
+CFG_GNU_TRIPLE_i686-unknown-linux-gnu=i686-unknown-linux-gnu
 
 # arm-apple-darwin configuration
 CFG_SDK_NAME_arm-apple-darwin = iphoneos
@@ -190,6 +192,7 @@ CFG_RUN_arm-apple-darwin = $(2)
 CFG_RUN_TARG_arm-apple-darwin = $(call CFG_RUN_arm-apple-darwin,,$(2))
 RUSTC_FLAGS_arm-apple-darwin := -C relocation_model=pic
 RUSTC_CROSS_FLAGS_arm-apple-darwin :=-C relocation_model=pic
+CFG_GNU_TRIPLE_arm-apple-darwin=arm-apple-darwin
 
 # i386-apple-darwin configuration
 CFG_SDK_NAME_i386-apple-darwin = iphonesimulator
@@ -225,6 +228,7 @@ CFG_LDPATH_i386-apple-darwin =
 CFG_RUN_i386-apple-darwin = $(2)
 CFG_RUN_TARG_i386-apple-darwin = $(call CFG_RUN_i386-apple-darwin,,$(2))
 CFG_JEMALLOC_CFLAGS_i386-apple-darwin = -target i386-apple-darwin -Wl,-syslibroot $(CFG_IOSSIM_SDK) -Wl,-no_compact_unwind
+CFG_GNU_TRIPLE_i386-apple-darwin=i386-apple-darwin
 
 # x86_64-apple-darwin configuration
 CC_x86_64-apple-darwin=$(CC)
@@ -253,6 +257,7 @@ CFG_PATH_MUNGE_x86_64-apple-darwin := true
 CFG_LDPATH_x86_64-apple-darwin :=
 CFG_RUN_x86_64-apple-darwin=$(2)
 CFG_RUN_TARG_x86_64-apple-darwin=$(call CFG_RUN_x86_64-apple-darwin,,$(2))
+CFG_GNU_TRIPLE_x86_64-apple-darwin=x86_64-apple-darwin
 
 # i686-apple-darwin configuration
 CC_i686-apple-darwin=$(CC)
@@ -281,6 +286,7 @@ CFG_PATH_MUNGE_i686-apple-darwin := true
 CFG_LDPATH_i686-apple-darwin :=
 CFG_RUN_i686-apple-darwin=$(2)
 CFG_RUN_TARG_i686-apple-darwin=$(call CFG_RUN_i686-apple-darwin,,$(2))
+CFG_GNU_TRIPLE_i686-apple-darwin=i686-apple-darwin
 
 # arm-linux-androideabi configuration
 CC_arm-linux-androideabi=$(CFG_ANDROID_CROSS_PATH)/bin/arm-linux-androideabi-gcc
@@ -311,6 +317,7 @@ CFG_RUN_arm-linux-androideabi=
 CFG_RUN_TARG_arm-linux-androideabi=
 RUSTC_FLAGS_arm-linux-androideabi :=
 RUSTC_CROSS_FLAGS_arm-linux-androideabi :=
+CFG_GNU_TRIPLE_arm-linux-androideabi=arm-linux-androideabi
 
 # arm-unknown-linux-gnueabihf configuration
 CROSS_PREFIX_arm-unknown-linux-gnueabihf=arm-linux-gnueabihf-
@@ -342,6 +349,7 @@ CFG_RUN_arm-unknown-linux-gnueabihf=$(2)
 CFG_RUN_TARG_arm-unknown-linux-gnueabihf=$(call CFG_RUN_arm-unknown-linux-gnueabihf,,$(2))
 RUSTC_FLAGS_arm-unknown-linux-gnueabihf := -C target-feature=+v6,+vfp2
 RUSTC_CROSS_FLAGS_arm-unknown-linux-gnueabihf :=
+CFG_GNU_TRIPLE_arm-unknown-linux-gnueabihf=arm-unknown-linux-gnueabihf
 
 # arm-unknown-linux-gnueabi configuration
 CROSS_PREFIX_arm-unknown-linux-gnueabi=arm-linux-gnueabi-
@@ -373,6 +381,7 @@ CFG_RUN_arm-unknown-linux-gnueabi=$(2)
 CFG_RUN_TARG_arm-unknown-linux-gnueabi=$(call CFG_RUN_arm-unknown-linux-gnueabi,,$(2))
 RUSTC_FLAGS_arm-unknown-linux-gnueabi :=
 RUSTC_CROSS_FLAGS_arm-unknown-linux-gnueabi :=
+CFG_GNU_TRIPLE_arm-unknown-linux-gnueabi=arm-unknown-linux-gnueabi
 
 # mipsel-unknown-linux-gnu configuration
 CC_mipsel-unknown-linux-gnu=mipsel-unknown-linux-gnu-gcc
@@ -402,6 +411,7 @@ CFG_LDPATH_mipsel-unknown-linux-gnu :=
 CFG_RUN_mipsel-unknown-linux-gnu=
 CFG_RUN_TARG_mipsel-unknown-linux-gnu=
 RUSTC_FLAGS_mipsel-unknown-linux-gnu := -C target-cpu=mips32 -C target-feature="+mips32,+o32"
+CFG_GNU_TRIPLE_mipsel-unknown-linux-gnu=mipsel-unknown-linux-gnu
 
 
 # mips-unknown-linux-gnu configuration
@@ -432,7 +442,7 @@ CFG_LDPATH_mips-unknown-linux-gnu :=
 CFG_RUN_mips-unknown-linux-gnu=
 CFG_RUN_TARG_mips-unknown-linux-gnu=
 RUSTC_FLAGS_mips-unknown-linux-gnu := -C target-cpu=mips32r2 -C target-feature="+mips32r2,+o32" -C soft-float
-
+CFG_GNU_TRIPLE_mips-unknown-linux-gnu=mips-unknown-linux-gnu
 
 # i686-pc-windows-gnu configuration
 CROSS_PREFIX_i686-pc-windows-gnu=i686-pc-windows-gnu-
@@ -444,14 +454,14 @@ CFG_LIB_NAME_i686-pc-windows-gnu=$(1).dll
 CFG_STATIC_LIB_NAME_i686-pc-windows-gnu=$(1).lib
 CFG_LIB_GLOB_i686-pc-windows-gnu=$(1)-*.dll
 CFG_LIB_DSYM_GLOB_i686-pc-windows-gnu=$(1)-*.dylib.dSYM
-CFG_CFLAGS_i686-w64-mingw32 := -march=i686 -m32 -D_WIN32_WINNT=0x0600 $(CFLAGS)
+CFG_CFLAGS_i686-pc-windows-gnu := -march=i686 -m32 -D_WIN32_WINNT=0x0600 $(CFLAGS)
 CFG_GCCISH_CFLAGS_i686-pc-windows-gnu := -Wall -Werror -g -m32 -D_WIN32_WINNT=0x0600 $(CFLAGS)
 CFG_GCCISH_CXXFLAGS_i686-pc-windows-gnu := -fno-rtti $(CXXFLAGS)
 CFG_GCCISH_LINK_FLAGS_i686-pc-windows-gnu := -shared -g -m32
 CFG_GCCISH_DEF_FLAG_i686-pc-windows-gnu :=
 CFG_GCCISH_PRE_LIB_FLAGS_i686-pc-windows-gnu :=
 CFG_GCCISH_POST_LIB_FLAGS_i686-pc-windows-gnu :=
-CFG_DEF_SUFFIX_i686-pc-windows-gnu := .mingw32.def
+CFG_DEF_SUFFIX_i686-pc-windows-gnu := .windows.def
 CFG_LLC_FLAGS_i686-pc-windows-gnu :=
 CFG_INSTALL_NAME_i686-pc-windows-gnu =
 CFG_LIBUV_LINK_FLAGS_i686-pc-windows-gnu := -lws2_32 -lpsapi -liphlpapi
@@ -465,6 +475,7 @@ CFG_RUN_TARG_i686-pc-windows-gnu=$(call CFG_RUN_i686-pc-windows-gnu,$(HLIB$(1)_H
 # Stop rustc from OOMing when building itself (I think)
 RUSTC_FLAGS_i686-pc-windows-gnu=-C link-args="-Wl,--large-address-aware"
 RUSTC_CROSS_FLAGS_i686-pc-windows-gnu :=
+CFG_GNU_TRIPLE_i686-pc-windows-gnu=i686-w64-mingw32
 
 # x86_64-pc-windows-gnu configuration
 CROSS_PREFIX_x86_64-pc-windows-gnu=x86_64-pc-windows-gnu-
@@ -483,7 +494,7 @@ CFG_GCCISH_LINK_FLAGS_x86_64-pc-windows-gnu := -shared -g -m64
 CFG_GCCISH_DEF_FLAG_x86_64-pc-windows-gnu :=
 CFG_GCCISH_PRE_LIB_FLAGS_x86_64-pc-windows-gnu :=
 CFG_GCCISH_POST_LIB_FLAGS_x86_64-pc-windows-gnu :=
-CFG_DEF_SUFFIX_x86_64-pc-windows-gnu := .mingw32.def
+CFG_DEF_SUFFIX_x86_64-pc-windows-gnu := .windows.def
 CFG_LLC_FLAGS_x86_64-pc-windows-gnu :=
 CFG_INSTALL_NAME_x86_64-pc-windows-gnu =
 CFG_LIBUV_LINK_FLAGS_x86_64-pc-windows-gnu := -lws2_32 -lpsapi -liphlpapi
@@ -495,6 +506,7 @@ CFG_LDPATH_x86_64-pc-windows-gnu :=$(CFG_LDPATH_x86_64-pc-windows-gnu):$(PATH)
 CFG_RUN_x86_64-pc-windows-gnu=PATH="$(CFG_LDPATH_x86_64-pc-windows-gnu):$(1)" $(2)
 CFG_RUN_TARG_x86_64-pc-windows-gnu=$(call CFG_RUN_x86_64-pc-windows-gnu,$(HLIB$(1)_H_$(CFG_BUILD)),$(2))
 RUSTC_CROSS_FLAGS_x86_64-pc-windows-gnu :=
+CFG_GNU_TRIPLE_x86_64-pc-windows-gnu=x86_64-w64-mingw32
 
 # x86_64-unknown-freebsd configuration
 CC_x86_64-unknown-freebsd=$(CC)
@@ -522,6 +534,7 @@ CFG_PATH_MUNGE_x86_64-unknown-freebsd :=
 CFG_LDPATH_x86_64-unknown-freebsd :=
 CFG_RUN_x86_64-unknown-freebsd=$(2)
 CFG_RUN_TARG_x86_64-unknown-freebsd=$(call CFG_RUN_x86_64-unknown-freebsd,,$(2))
+CFG_GNU_TRIPLE_x86_64-unknown-freebsd=x86_64-unknown-freebsd
 
 # x86_64-pc-dragonfly-elf configuration
 CC_x86_64-unknown-dragonfly=$(CC)
@@ -549,6 +562,7 @@ CFG_PATH_MUNGE_x86_64-unknown-dragonfly :=
 CFG_LDPATH_x86_64-unknown-dragonfly :=
 CFG_RUN_x86_64-unknown-dragonfly=$(2)
 CFG_RUN_TARG_x86_64-unknown-dragonfly=$(call CFG_RUN_x86_64-unknown-dragonfly,,$(2))
+CFG_GNU_TRIPLE_x86_64-pc-dragonfly-elf=x86_64-pc-dragonfly-elf
 
 
 # The -Qunused-arguments sidesteps spurious warnings from clang

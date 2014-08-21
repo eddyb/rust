@@ -8,15 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use target::Target;
+use target::{Target, TargetOptions};
 
 pub fn target() -> Target {
-    let mut options = super::windows_base::opts();
-
-    // Mark all dynamic libraries and executables as compatible with the larger 4GiB address
-    // space available to x86 Windows binaries on x86_64.
-    options.pre_link_args.push("-Wl,--large-address-aware".to_string());
-
+    let base = super::windows_base::opts();
     Target {
         data_layout: "e-p:32:32-f64:64:64-i64:64:64-f80:32:32-n8:16:32".to_string(),
         llvm_target: "i686-pc-windows-gnu".to_string(),
@@ -24,6 +19,13 @@ pub fn target() -> Target {
         target_word_size: "32".to_string(),
         arch: "x86".to_string(),
         target_os: "windows".to_string(),
-        options: options
+        options: TargetOptions {
+            // Mark all dynamic libraries and executables as compatible with the larger 4GiB
+            // address space available to x86 Windows binaries on x86_64.
+            pre_link_args: base.pre_link_args.clone().append(&[
+            	"-Wl,--large-address-aware".to_string()
+			]),
+            .. base
+        }
     }
 }

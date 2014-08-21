@@ -491,7 +491,8 @@ pub fn filename_for_input(sess: &Session,
             out_filename.with_filename(format!("lib{}.a", libname))
         }
         config::CrateTypeExecutable => {
-            out_filename.with_extension(sess.target.target.options.exe_suffix.as_slice())
+            let suffix = sess.target.target.options.exe_suffix.as_slice();
+            out_filename.with_filename(format!("{}{}", libname, suffix))
         }
     }
 }

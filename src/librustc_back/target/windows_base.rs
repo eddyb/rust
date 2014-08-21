@@ -26,7 +26,6 @@ pub fn opts() -> TargetOptions {
         morestack: true,
         is_like_windows: true,
         pre_link_args: vec!(
-            "-shared-libgcc".to_string(),
             // And here, we see obscure linker flags #45. On windows, it has been
             // found to be necessary to have this flag to compile liblibc.
             //

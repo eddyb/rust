@@ -284,7 +284,7 @@ extern "C" LLVMValueRef LLVMDIBuilderCreateSubroutineType(
     LLVMValueRef ParameterTypes) {
     return wrap(Builder->createSubroutineType(
         unwrapDI<DIFile>(File),
-#if LLVM_VERSION_MINOR >= 6
+#if LLVM_VERSION_MINOR >= 5
         unwrapDI<DITypeArray>(ParameterTypes)));
 #else
         unwrapDI<DIArray>(ParameterTypes)));
@@ -640,7 +640,7 @@ extern "C" void LLVMDICompositeTypeSetTypeArray(
     LLVMValueRef CompositeType,
     LLVMValueRef TypeArray)
 {
-#if LLVM_VERSION_MINOR >= 6
+#if LLVM_VERSION_MINOR >= 5
     unwrapDI<DICompositeType>(CompositeType).setArrays(unwrapDI<DIArray>(TypeArray));
 #else
     unwrapDI<DICompositeType>(CompositeType).setTypeArray(unwrapDI<DIArray>(TypeArray));
