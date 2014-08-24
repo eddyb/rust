@@ -477,6 +477,36 @@ RUSTC_FLAGS_i686-pc-windows-gnu=-C link-args="-Wl,--large-address-aware"
 RUSTC_CROSS_FLAGS_i686-pc-windows-gnu :=
 CFG_GNU_TRIPLE_i686-pc-windows-gnu=i686-w64-mingw32
 
+CROSS_PREFIX_i686-w64-mingw32=i686-pc-windows-gnu-
+CC_i686-w64-mingw32=gcc
+CXX_i686-w64-mingw32=g++
+CPP_i686-w64-mingw32=gcc -E
+AR_i686-w64-mingw32=ar
+CFG_LIB_NAME_i686-w64-mingw32=$(1).dll
+CFG_STATIC_LIB_NAME_i686-w64-mingw32=$(1).lib
+CFG_LIB_GLOB_i686-w64-mingw32=$(1)-*.dll
+CFG_LIB_DSYM_GLOB_i686-w64-mingw32=$(1)-*.dylib.dSYM
+CFG_CFLAGS_i686-w64-mingw32 := -march=i586 -m32 -D_WIN32_WINNT=0x0600 $(CFLAGS)
+CFG_GCCISH_CFLAGS_i686-w64-mingw32 := -Wall -Werror -g -m32 -D_WIN32_WINNT=0x0600 $(CFLAGS)
+CFG_GCCISH_CXXFLAGS_i686-w64-mingw32 := -fno-rtti $(CXXFLAGS)
+CFG_GCCISH_LINK_FLAGS_i686-w64-mingw32 := -shared -g -m32
+CFG_GCCISH_DEF_FLAG_i686-w64-mingw32 :=
+CFG_GCCISH_PRE_LIB_FLAGS_i686-w64-mingw32 :=
+CFG_GCCISH_POST_LIB_FLAGS_i686-w64-mingw32 :=
+CFG_DEF_SUFFIX_i686-w64-mingw32 := .windows.def
+CFG_LLC_FLAGS_i686-w64-mingw32 :=
+CFG_INSTALL_NAME_i686-w64-mingw32 =
+CFG_LIBUV_LINK_FLAGS_i686-w64-mingw32 := -lws2_32 -lpsapi -liphlpapi
+CFG_EXE_SUFFIX_i686-w64-mingw32 := .exe
+CFG_WINDOWSY_i686-w64-mingw32 := 1
+CFG_UNIXY_i686-w64-mingw32 :=
+CFG_PATH_MUNGE_i686-w64-mingw32 :=
+CFG_LDPATH_i686-w64-mingw32 :=$(CFG_LDPATH_i686-w64-mingw32):$(PATH)
+CFG_RUN_i686-w64-mingw32=PATH="$(CFG_LDPATH_i686-w64-mingw32):$(1)" $(2)
+CFG_RUN_TARG_i686-w64-mingw32=$(call CFG_RUN_i686-w64-mingw32,$(HLIB$(1)_H_$(CFG_BUILD)),$(2))
+RUSTC_CROSS_FLAGS_i686-w64-mingw32 :=
+CFG_GNU_TRIPLE_i686-w64-mingw32=i686-w64-mingw32
+
 # x86_64-pc-windows-gnu configuration
 CROSS_PREFIX_x86_64-pc-windows-gnu=x86_64-pc-windows-gnu-
 CC_x86_64-pc-windows-gnu=gcc
@@ -507,6 +537,37 @@ CFG_RUN_x86_64-pc-windows-gnu=PATH="$(CFG_LDPATH_x86_64-pc-windows-gnu):$(1)" $(
 CFG_RUN_TARG_x86_64-pc-windows-gnu=$(call CFG_RUN_x86_64-pc-windows-gnu,$(HLIB$(1)_H_$(CFG_BUILD)),$(2))
 RUSTC_CROSS_FLAGS_x86_64-pc-windows-gnu :=
 CFG_GNU_TRIPLE_x86_64-pc-windows-gnu=x86_64-w64-mingw32
+
+# x86_64-w64-mingw32 configuration
+CROSS_PREFIX_x86_64-w64-mingw32=x86_64-w64-mingw32-
+CC_x86_64-w64-mingw32=gcc
+CXX_x86_64-w64-mingw32=g++
+CPP_x86_64-w64-mingw32=gcc -E
+AR_x86_64-w64-mingw32=ar
+CFG_LIB_NAME_x86_64-w64-mingw32=$(1).dll
+CFG_STATIC_LIB_NAME_x86_64-w64-mingw32=$(1).lib
+CFG_LIB_GLOB_x86_64-w64-mingw32=$(1)-*.dll
+CFG_LIB_DSYM_GLOB_x86_64-w64-mingw32=$(1)-*.dylib.dSYM
+CFG_CFLAGS_x86_64-w64-mingw32 := -m64 -D_WIN32_WINNT=0x0600 $(CFLAGS)
+CFG_GCCISH_CFLAGS_x86_64-w64-mingw32 := -Wall -Werror -g -m64 -D_WIN32_WINNT=0x0600 $(CFLAGS)
+CFG_GCCISH_CXXFLAGS_x86_64-w64-mingw32 := -fno-rtti $(CXXFLAGS)
+CFG_GCCISH_LINK_FLAGS_x86_64-w64-mingw32 := -shared -g -m64
+CFG_GCCISH_DEF_FLAG_x86_64-w64-mingw32 :=
+CFG_GCCISH_PRE_LIB_FLAGS_x86_64-w64-mingw32 :=
+CFG_GCCISH_POST_LIB_FLAGS_x86_64-w64-mingw32 :=
+CFG_DEF_SUFFIX_x86_64-w64-mingw32 := .windows.def
+CFG_LLC_FLAGS_x86_64-w64-mingw32 :=
+CFG_INSTALL_NAME_x86_64-w64-mingw32 =
+CFG_LIBUV_LINK_FLAGS_x86_64-w64-mingw32 := -lws2_32 -lpsapi -liphlpapi
+CFG_EXE_SUFFIX_x86_64-w64-mingw32 := .exe
+CFG_WINDOWSY_x86_64-w64-mingw32 := 1
+CFG_UNIXY_x86_64-w64-mingw32 :=
+CFG_PATH_MUNGE_x86_64-w64-mingw32 :=
+CFG_LDPATH_x86_64-w64-mingw32 :=$(CFG_LDPATH_x86_64-w64-mingw32):$(PATH)
+CFG_RUN_x86_64-w64-mingw32=PATH="$(CFG_LDPATH_x86_64-w64-mingw32):$(1)" $(2)
+CFG_RUN_TARG_x86_64-w64-mingw32=$(call CFG_RUN_x86_64-w64-mingw32,$(HLIB$(1)_H_$(CFG_BUILD)),$(2))
+RUSTC_CROSS_FLAGS_x86_64-w64-mingw32 :=
+CFG_GNU_TRIPLE_x86_64-w64-mingw32=x86_64-w64-mingw32
 
 # x86_64-unknown-freebsd configuration
 CC_x86_64-unknown-freebsd=$(CC)

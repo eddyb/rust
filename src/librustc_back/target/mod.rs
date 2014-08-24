@@ -315,6 +315,13 @@ impl Target {
                             return Ok(t);
                         }
                     )*
+                    else if target == "x86_64-w64-mingw32" {
+                        let t = x86_64_pc_windows_gnu::target();
+                        return Ok(t);
+                    } else if target == "i686-w64-mingw32" {
+                        let t = i686_pc_windows_gnu::target();
+                        return Ok(t);
+                    }
                 }
             )
         )

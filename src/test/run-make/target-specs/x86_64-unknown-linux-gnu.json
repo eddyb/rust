@@ -4,5 +4,6 @@
     "target-endian": "little",
     "target-word-size": "32",
     "arch": "x86",
+    "os": "linux",
     "morestack": false
 }
