@@ -13,7 +13,7 @@
 pub use self::ParamSpace::*;
 pub use self::RegionSubsts::*;
 
-use middle::ty::{mod, Ty};
+use middle::ty::{mod, Ty, Weight};
 use middle::ty_fold::{mod, TypeFoldable, TypeFolder};
 use util::ppaux::Repr;
 
@@ -32,6 +32,16 @@ use syntax::codemap::{Span, DUMMY_SP};
 pub struct Substs<'tcx> {
     pub types: VecPerParamSpace<Ty<'tcx>>,
     pub regions: RegionSubsts,
+}
+
+impl<'tcx> Weight for Substs<'tcx> {
+    fn weight(&self) -> uint {
+        let regions_weight = match self.regions {
+            ErasedRegions => 0,
+            NonerasedRegions(ref vpps) => vpps.content.weight()
+        };
+        regions_weight + self.types.content.weight()
+    }
 }
 
 /// Represents the values to use when substituting lifetime parameters.

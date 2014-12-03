@@ -92,7 +92,9 @@ pub fn compile_input(sess: Session,
         let analysis = phase_3_run_analysis_passes(sess, ast_map, &type_arena, id);
         phase_save_analysis(&analysis.ty_cx.sess, analysis.ty_cx.map.krate(), &analysis, outdir);
         if stop_after_phase_3(&analysis.ty_cx.sess) { return; }
+        analysis.ty_cx.print_stats();
         let (tcx, trans) = phase_4_translate_to_llvm(analysis);
+        tcx.print_stats();
 
         // Discard interned strings as they are no longer required.
         token::get_ident_interner().clear();
@@ -419,6 +421,7 @@ pub fn phase_3_run_analysis_passes<'tcx>(sess: Session,
 
     // passes are timed inside typeck
     typeck::check_crate(&ty_cx, trait_map);
+    ty_cx.print_stats();
 
     time(time_passes, "check static items", (), |_|
          middle::check_static::check_crate(&ty_cx));

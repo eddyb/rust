@@ -6010,3 +6010,117 @@ impl<'tcx> Repr<'tcx> for TyTrait<'tcx> {
                 self.bounds.repr(tcx))
     }
 }
+
+pub trait Weight {
+    fn weight(&self) -> uint { 0 }
+}
+
+impl<T: Weight> Weight for Box<T> {
+    fn weight(&self) -> uint {
+        mem::size_of::<T>() + (**self).weight()
+    }
+}
+
+impl<T: Weight> Weight for Vec<T> {
+    fn weight(&self) -> uint {
+        use std::iter::AdditiveIterator; // :(
+        self.capacity() * mem::size_of::<T>() + self.iter().map(|x| x.weight()).sum()
+    }
+}
+
+impl<'tcx> Weight for BareFnTy<'tcx> {
+    fn weight(&self) -> uint { self.sig.inputs.weight() }
+}
+impl<'tcx> Weight for ClosureTy<'tcx> {
+    fn weight(&self) -> uint { self.sig.inputs.weight() }
+}
+impl<'tcx> Weight for TyTrait<'tcx> {
+    fn weight(&self) -> uint { self.principal.substs.weight() }
+}
+
+impl<'tcx> Weight for Ty<'tcx> {}
+impl Weight for Region {}
+
+pub mod stats {
+    use super::Weight;
+    pub fn print(interner: &::util::nodemap::FnvHashMap<super::InternedTy, super::Ty>) {
+        let ty_s_size = ::std::mem::size_of::<super::TyS>();
+        macro_rules! arg_pat {
+            (_) => (_);
+            ($x:ident) => (ref $x);
+        }
+        macro_rules! arg_size {
+            (_) => {0};
+            ($x:ident) => {$x.weight()};
+        }
+        macro_rules! print_ty_stats {
+            ($($variant:ident $(($($arg:tt),*))*),*) => ({
+                $(let mut $variant = (0u, 0u, 0u, 0u);)*
+                let mut n_has_infer = 0u;
+                let mut n_has_re_infer = 0u;
+
+                for &ty in interner.values() {
+                    let has_re_infer = ty.flags.intersects(super::HAS_RE_INFER);
+                    let has_infer = super::type_needs_infer(ty);
+                    if has_re_infer { n_has_re_infer += 1; }
+                    if has_infer { n_has_infer += 1; }
+                    match ty.sty {
+                        $(super::sty::$variant$(($(arg_pat!($arg)),*))* => {
+                            $variant.0 += 1;
+                            $variant.1 += ty_s_size $($(+ arg_size!($arg))*)*;
+                            if has_re_infer { $variant.2 += 1; }
+                            if has_infer { $variant.3 += 1; }
+                        }),*
+                    }
+                }
+
+                let total = interner.len();
+                println!("### Interner has {} types; at {}B each, the arena uses at least {:.2}MB",
+                         total, ty_s_size, (total * ty_s_size) as f64 / (1024.0 * 1024.0));
+
+                println!("|      name      |  count |   %   | memory |re_infer|  infer |");
+                println!("|---------------:|-------:|------:|-------:|-------:|-------:|");
+                $(println!("|{:>6$} |{:>8}|{:>6.2}%|{:>6.2}MB|{:>8}|{:>8}|",
+                           stringify!($variant).slice_from(3),
+                           $variant.0, $variant.0 as f64 / total as f64 * 100.0,
+                           $variant.1 as f64 / (1024.0 * 1024.0), $variant.2, $variant.3,
+                           15 /* can't pass 15 as count inline*/);)*
+                println!("|      total     |{:>8}|100.00%|{:>6.2}MB|{:>8}|{:>8}|\n",
+                         total, (0 $(+ $variant.1)*) as f64 / (1024.0 * 1024.0),
+                         n_has_re_infer, n_has_infer);
+            })
+        }
+
+        if log_enabled!(::log::DEBUG) {
+            print_ty_stats! {
+                ty_bool,
+                ty_char,
+                ty_int(_),
+                ty_uint(_),
+                ty_float(_),
+                ty_enum(_, substs),
+                ty_uniq(_),
+                ty_str,
+                ty_vec(_, _),
+                ty_ptr(_),
+                ty_rptr(_, _),
+                ty_bare_fn(bare_fn_ty),
+                ty_closure(box_closure_ty),
+                ty_trait(box_ty_trait),
+                ty_struct(_, substs),
+                ty_unboxed_closure(_, _, substs),
+                ty_tup(vec),
+                ty_param(_),
+                ty_open(_),
+                ty_infer(_),
+                ty_err
+            }
+        }
+    }
+}
+
+impl<'tcx> ctxt<'tcx> {
+    pub fn print_stats(&self) {
+        stats::print(&*self.interner.borrow());
+    }
+}
