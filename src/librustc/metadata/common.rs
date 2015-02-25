@@ -188,7 +188,9 @@ pub const tag_impls_impl: uint = 0x81;
 pub const tag_items_data_item_inherent_impl: uint = 0x82;
 pub const tag_items_data_item_extension_impl: uint = 0x83;
 
-// GAP 0x84, 0x85, 0x86
+pub const tag_items_data_item_constness: uint = 0x84;
+
+// GAP 0x85, 0x86
 
 pub const tag_native_libraries: uint = 0x87;
 pub const tag_native_libraries_lib: uint = 0x88;
