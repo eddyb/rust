@@ -29,10 +29,9 @@ use std::cell::Cell;
 use id::Id;
 
 mod s {
-    #![allow(unstable)]
-    use std::sync::atomic::{AtomicUint, ATOMIC_UINT_INIT, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    static S_COUNT: AtomicUint = ATOMIC_UINT_INIT;
+    static S_COUNT: AtomicUsize = AtomicUsize::new(0);
 
     /// generates globally unique count (global across the current
     /// process, that is)

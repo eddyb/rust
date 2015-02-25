@@ -98,10 +98,17 @@ mod imp {
                   target_arch = "aarch64",
                   target_arch = "powerpc")))]
     fn is_getrandom_available() -> bool {
-        use sync::atomic::{AtomicBool, ATOMIC_BOOL_INIT, Ordering};
+        use sync::atomic::{AtomicBool, Ordering};
 
-        static GETRANDOM_CHECKED: AtomicBool = ATOMIC_BOOL_INIT;
-        static GETRANDOM_AVAILABLE: AtomicBool = ATOMIC_BOOL_INIT;
+        #[cfg(stage0)] // SNAP 522d09d
+        static GETRANDOM_CHECKED: AtomicBool = ::sync::atomic::ATOMIC_BOOL_INIT;
+        #[cfg(stage0)] // SNAP 522d09d
+        static GETRANDOM_AVAILABLE: AtomicBool = ::sync::atomic::ATOMIC_BOOL_INIT;
+
+        #[cfg(not(stage0))] // SNAP 522d09d
+        static GETRANDOM_CHECKED: AtomicBool = AtomicBool::new(false);
+        #[cfg(not(stage0))] // SNAP 522d09d
+        static GETRANDOM_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
         if !GETRANDOM_CHECKED.load(Ordering::Relaxed) {
             let mut buf: [u8; 0] = [];

@@ -34,8 +34,8 @@ unsafe impl<T: Send> Sync for UnsafeEnum<T> {}
 
 static STATIC1: UnsafeEnum<int> = UnsafeEnum::VariantSafe;
 
-static STATIC2: MyUnsafePack<int> = MyUnsafePack(UnsafeCell { value: 1 });
-const CONST: MyUnsafePack<int> = MyUnsafePack(UnsafeCell { value: 1 });
+static STATIC2: MyUnsafePack<int> = MyUnsafePack(UnsafeCell::new(1));
+const CONST: MyUnsafePack<int> = MyUnsafePack(UnsafeCell::new(1));
 static STATIC3: MyUnsafe<int> = MyUnsafe{value: CONST};
 
 static STATIC4: &'static MyUnsafePack<int> = &STATIC2;
@@ -46,7 +46,7 @@ struct Wrap<T> {
 
 unsafe impl<T: Send> Sync for Wrap<T> {}
 
-static UNSAFE: MyUnsafePack<int> = MyUnsafePack(UnsafeCell{value: 2});
+static UNSAFE: MyUnsafePack<int> = MyUnsafePack(UnsafeCell::new(2));
 static WRAPPED_UNSAFE: Wrap<&'static MyUnsafePack<int>> = Wrap { value: &UNSAFE };
 
 fn main() {

@@ -21,8 +21,14 @@ pub unsafe fn raw(m: &Mutex) -> *mut ffi::pthread_mutex_t {
     m.inner.get()
 }
 
+#[cfg(stage0)] // SNAP 522d09d
 pub const MUTEX_INIT: Mutex = Mutex {
     inner: UnsafeCell { value: ffi::PTHREAD_MUTEX_INITIALIZER },
+};
+
+#[cfg(not(stage0))] // SNAP 522d09d
+pub const MUTEX_INIT: Mutex = Mutex {
+    inner: UnsafeCell::new(ffi::PTHREAD_MUTEX_INITIALIZER),
 };
 
 unsafe impl Send for Mutex {}

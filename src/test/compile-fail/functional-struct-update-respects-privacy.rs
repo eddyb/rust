@@ -14,9 +14,9 @@
 // has a unique `u64` id.
 use self::foo::S;
 mod foo {
-    use std::cell::{UnsafeCell};
+    use std::cell::UnsafeCell;
 
-    static mut count : UnsafeCell<u64> = UnsafeCell { value: 1 };
+    static mut count: UnsafeCell<u64> = UnsafeCell::new(1);
 
     pub struct S { pub a: u8, pub b: String, secret_uid: u64 }
 

@@ -58,7 +58,6 @@ use slice::{AsSlice, SliceExt};
 use str::{Str, StrExt};
 use str;
 use string::{String, ToString};
-use sync::atomic::{AtomicIsize, ATOMIC_ISIZE_INIT, Ordering};
 use sys::os as os_imp;
 use sys;
 use vec::Vec;

@@ -169,13 +169,22 @@ pub struct MutexGuard<'a, T: 'a> {
 
 impl<'a, T> !marker::Send for MutexGuard<'a, T> {}
 
+#[unstable(feature = "std_misc",
+           reason = "may be merged with Mutex in the future")]
+#[cfg(stage0)] // SNAP 522d09d
+pub const MUTEX_INIT: StaticMutex = StaticMutex {
+    lock: sys::MUTEX_INIT,
+    poison: poison::FLAG_INIT,
+};
+
 /// Static initialization of a mutex. This constant can be used to initialize
 /// other mutex constants.
 #[unstable(feature = "std_misc",
            reason = "may be merged with Mutex in the future")]
+#[cfg(not(stage0))] // SNAP 522d09d
 pub const MUTEX_INIT: StaticMutex = StaticMutex {
     lock: sys::MUTEX_INIT,
-    poison: poison::FLAG_INIT,
+    poison: poison::Flag::new(),
 };
 
 impl<T: Send> Mutex<T> {
@@ -252,7 +261,10 @@ impl<T: Send> Drop for Mutex<T> {
 
 struct Dummy(UnsafeCell<()>);
 unsafe impl Sync for Dummy {}
+#[cfg(stage0)] // SNAP 522d09d
 static DUMMY: Dummy = Dummy(UnsafeCell { value: () });
+#[cfg(not(stage0))] // SNAP 522d09d
+static DUMMY: Dummy = Dummy(UnsafeCell::new(()));
 
 impl StaticMutex {
     /// Acquires this lock, see `Mutex::lock`

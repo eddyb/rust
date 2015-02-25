@@ -84,6 +84,7 @@ pub type Callback = fn(msg: &(Any + Send), file: &'static str, line: uint);
 //
 // For more information, see below.
 const MAX_CALLBACKS: uint = 16;
+#[cfg(stage0)] // SNAP 522d09d
 static CALLBACKS: [atomic::AtomicUsize; MAX_CALLBACKS] =
         [atomic::ATOMIC_USIZE_INIT, atomic::ATOMIC_USIZE_INIT,
          atomic::ATOMIC_USIZE_INIT, atomic::ATOMIC_USIZE_INIT,
@@ -93,7 +94,17 @@ static CALLBACKS: [atomic::AtomicUsize; MAX_CALLBACKS] =
          atomic::ATOMIC_USIZE_INIT, atomic::ATOMIC_USIZE_INIT,
          atomic::ATOMIC_USIZE_INIT, atomic::ATOMIC_USIZE_INIT,
          atomic::ATOMIC_USIZE_INIT, atomic::ATOMIC_USIZE_INIT];
+#[cfg(stage0)] // SNAP 522d09d
 static CALLBACK_CNT: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+
+#[cfg(not(stage0))] // SNAP 522d09d
+static CALLBACKS: [atomic::AtomicUsize; MAX_CALLBACKS] = {
+    const EMPTY: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
+    [EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+     EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY]
+};
+#[cfg(not(stage0))] // SNAP 522d09d
+static CALLBACK_CNT: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
 
 thread_local! { static PANICKING: Cell<bool> = Cell::new(false) }
 

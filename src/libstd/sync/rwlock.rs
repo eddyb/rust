@@ -97,12 +97,21 @@ pub struct StaticRwLock {
     poison: poison::Flag,
 }
 
-/// Constant initialization for a statically-initialized rwlock.
 #[unstable(feature = "std_misc",
            reason = "may be merged with RwLock in the future")]
+#[cfg(stage0)] // SNAP 522d09d
 pub const RW_LOCK_INIT: StaticRwLock = StaticRwLock {
     lock: sys::RWLOCK_INIT,
     poison: poison::FLAG_INIT,
+};
+
+/// Constant initialization for a statically-initialized rwlock.
+#[unstable(feature = "std_misc",
+           reason = "may be merged with RwLock in the future")]
+#[cfg(not(stage0))] // SNAP 522d09d
+pub const RW_LOCK_INIT: StaticRwLock = StaticRwLock {
+    lock: sys::RWLOCK_INIT,
+    poison: poison::Flag::new(),
 };
 
 /// RAII structure used to release the shared read access of a lock when
@@ -257,7 +266,10 @@ impl<T> Drop for RwLock<T> {
 
 struct Dummy(UnsafeCell<()>);
 unsafe impl Sync for Dummy {}
+#[cfg(stage0)] // SNAP 522d09d
 static DUMMY: Dummy = Dummy(UnsafeCell { value: () });
+#[cfg(not(stage0))] // SNAP 522d09d
+static DUMMY: Dummy = Dummy(UnsafeCell::new(()));
 
 impl StaticRwLock {
     /// Locks this rwlock with shared read access, blocking the current thread

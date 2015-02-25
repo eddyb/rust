@@ -211,7 +211,12 @@ impl Timer {
         // instead of ()
         HELPER.boot(|| {}, helper);
 
+        #[cfg(stage0)] // SNAP 522d09d
         static ID: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+
+        #[cfg(not(stage0))] // SNAP 522d09d
+        static ID: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
+
         let id = ID.fetch_add(1, Ordering::Relaxed);
         Ok(Timer {
             id: id,

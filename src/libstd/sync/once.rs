@@ -16,7 +16,7 @@
 use prelude::v1::*;
 
 use isize;
-use sync::atomic::{AtomicIsize, Ordering, ATOMIC_ISIZE_INIT};
+use sync::atomic::{AtomicIsize, Ordering};
 use sync::{StaticMutex, MUTEX_INIT};
 
 /// A synchronization primitive which can be used to run a one-time global
@@ -42,12 +42,21 @@ pub struct Once {
     lock_cnt: AtomicIsize,
 }
 
-/// Initialization value for static `Once` values.
 #[stable(feature = "rust1", since = "1.0.0")]
+#[cfg(stage0)] // SNAP 522d09d
 pub const ONCE_INIT: Once = Once {
     mutex: MUTEX_INIT,
-    cnt: ATOMIC_ISIZE_INIT,
-    lock_cnt: ATOMIC_ISIZE_INIT,
+    cnt: ::sync::atomic::ATOMIC_ISIZE_INIT,
+    lock_cnt: ::sync::atomic::ATOMIC_ISIZE_INIT,
+};
+
+/// Initialization value for static `Once` values.
+#[stable(feature = "rust1", since = "1.0.0")]
+#[cfg(not(stage0))] // SNAP 522d09d
+pub const ONCE_INIT: Once = Once {
+    mutex: MUTEX_INIT,
+    cnt: AtomicIsize::new(0),
+    lock_cnt: AtomicIsize::new(0),
 };
 
 impl Once {

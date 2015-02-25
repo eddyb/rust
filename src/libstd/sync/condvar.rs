@@ -10,7 +10,7 @@
 
 use prelude::v1::*;
 
-use sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use sync::atomic::{AtomicUsize, Ordering};
 use sync::poison::{self, LockResult};
 use sys::time::SteadyTime;
 use sys_common::condvar as sys;
@@ -80,12 +80,21 @@ pub struct StaticCondvar {
     mutex: AtomicUsize,
 }
 
+#[unstable(feature = "std_misc",
+           reason = "may be merged with Condvar in the future")]
+#[cfg(stage0)] // SNAP 522d09d
+pub const CONDVAR_INIT: StaticCondvar = StaticCondvar {
+    inner: sys::CONDVAR_INIT,
+    mutex: ::sync::atomic::ATOMIC_USIZE_INIT,
+};
+
 /// Constant initializer for a statically allocated condition variable.
 #[unstable(feature = "std_misc",
            reason = "may be merged with Condvar in the future")]
+#[cfg(not(stage0))] // SNAP 522d09d
 pub const CONDVAR_INIT: StaticCondvar = StaticCondvar {
     inner: sys::CONDVAR_INIT,
-    mutex: ATOMIC_USIZE_INIT,
+    mutex: AtomicUsize::new(0),
 };
 
 impl Condvar {
@@ -346,7 +355,7 @@ mod tests {
     use super::{StaticCondvar, CONDVAR_INIT};
     use sync::mpsc::channel;
     use sync::{StaticMutex, MUTEX_INIT, Condvar, Mutex, Arc};
-    use sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
+    use sync::atomic::{AtomicUsize, Ordering};
     use thread;
     use time::Duration;
 
@@ -439,7 +448,7 @@ mod tests {
     fn wait_timeout_with() {
         static C: StaticCondvar = CONDVAR_INIT;
         static M: StaticMutex = MUTEX_INIT;
-        static S: AtomicUsize = ATOMIC_USIZE_INIT;
+        static S: AtomicUsize = AtomicUsize::new(0);
 
         let g = M.lock().unwrap();
         let (g, success) = C.wait_timeout_with(g, Duration::nanoseconds(1000), |_| false).unwrap();

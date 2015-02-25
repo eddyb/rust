@@ -10,13 +10,21 @@
 
 use prelude::v1::*;
 
+#[cfg(stage0)] // SNAP 522d09d
 use cell::UnsafeCell;
+#[cfg(not(stage0))] // SNAP 522d09d
+use cell::Cell;
 use error::{Error, FromError};
 use fmt;
 use thread;
 
+#[cfg(stage0)] // SNAP 522d09d
 pub struct Flag { failed: UnsafeCell<bool> }
 
+#[cfg(not(stage0))] // SNAP 522d09d
+pub struct Flag { failed: Cell<bool> }
+
+#[cfg(stage0)] // SNAP 522d09d
 // This flag is only ever accessed with a lock previously held. Note that this
 // a totally private structure.
 unsafe impl Send for Flag {}
@@ -25,7 +33,13 @@ unsafe impl Sync for Flag {}
 pub const FLAG_INIT: Flag = Flag { failed: UnsafeCell { value: false } };
 
 impl Flag {
+    #[cfg(not(stage0))] // SNAP 522d09d
+    pub const fn new() -> Flag {
+        Flag { failed: Cell::new(false) }
+    }
+
     #[inline]
+    #[cfg(stage0)] // SNAP 522d09d
     pub fn borrow(&self) -> LockResult<Guard> {
         let ret = Guard { panicking: thread::panicking() };
         if unsafe { *self.failed.get() } {
@@ -36,6 +50,18 @@ impl Flag {
     }
 
     #[inline]
+    #[cfg(not(stage0))] // SNAP 522d09d
+    pub fn borrow(&self) -> LockResult<Guard> {
+        let ret = Guard { panicking: thread::panicking() };
+        if self.failed.get() {
+            Err(PoisonError::new(ret))
+        } else {
+            Ok(ret)
+        }
+    }
+
+    #[inline]
+    #[cfg(stage0)] // SNAP 522d09d
     pub fn done(&self, guard: &Guard) {
         if !guard.panicking && thread::panicking() {
             unsafe { *self.failed.get() = true; }
@@ -43,8 +69,23 @@ impl Flag {
     }
 
     #[inline]
+    #[cfg(not(stage0))] // SNAP 522d09d
+    pub fn done(&self, guard: &Guard) {
+        if !guard.panicking && thread::panicking() {
+            self.failed.set(true);
+        }
+    }
+
+    #[inline]
+    #[cfg(stage0)] // SNAP 522d09d
     pub fn get(&self) -> bool {
         unsafe { *self.failed.get() }
+    }
+
+    #[inline]
+    #[cfg(not(stage0))] // SNAP 522d09d
+    pub fn get(&self) -> bool {
+        self.failed.get()
     }
 }
 

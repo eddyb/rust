@@ -15,18 +15,18 @@ use prelude::v1::*;
 use env;
 use libc;
 use std::old_io::net::ip::*;
-use sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
+use sync::atomic::{AtomicUsize, Ordering};
 
 /// Get a port number, starting at 9600, for use in tests
 pub fn next_test_port() -> u16 {
-    static NEXT_OFFSET: AtomicUsize = ATOMIC_USIZE_INIT;
+    static NEXT_OFFSET: AtomicUsize = AtomicUsize::new(0);
     base_port() + NEXT_OFFSET.fetch_add(1, Ordering::Relaxed) as u16
 }
 
 // iOS has a pretty long tmpdir path which causes pipe creation
 // to like: invalid argument: path must be smaller than SUN_LEN
 fn next_test_unix_socket() -> String {
-    static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+    static COUNT: AtomicUsize = AtomicUsize::new(0);
     // base port and pid are an attempt to be unique between multiple
     // test-runners of different configurations running on one
     // buildbot, the count is to be unique within this executable.

@@ -45,6 +45,7 @@ pub mod scoped;
 
 // Sure wish we had macro hygiene, no?
 #[doc(hidden)]
+#[cfg(stage0)] // SNAP 522d09d
 #[stable(feature = "rust1", since = "1.0.0")]
 pub mod __impl {
     pub use super::imp::Key as KeyInner;
@@ -52,6 +53,8 @@ pub mod __impl {
     pub use sys_common::thread_local::INIT_INNER as OS_INIT_INNER;
     pub use sys_common::thread_local::StaticKey as OsStaticKey;
 }
+
+pub use self::imp::Key as __KeyInner;
 
 /// A thread local storage key which owns its contents.
 ///
@@ -105,51 +108,11 @@ pub struct Key<T> {
     // This is trivially devirtualizable by LLVM because we never store anything
     // to this field and rustc can declare the `static` as constant as well.
     #[doc(hidden)]
-    pub inner: fn() -> &'static __impl::KeyInner<UnsafeCell<Option<T>>>,
+    pub inner: fn() -> &'static __KeyInner<UnsafeCell<Option<T>>>,
 
     // initialization routine to invoke to create a value
     #[doc(hidden)]
     pub init: fn() -> T,
-}
-
-/// Declare a new thread local storage key of type `std::thread_local::Key`.
-#[macro_export]
-#[stable(feature = "rust1", since = "1.0.0")]
-macro_rules! thread_local {
-    (static $name:ident: $t:ty = $init:expr) => (
-        static $name: ::std::thread_local::Key<$t> = {
-            use std::cell::UnsafeCell as __UnsafeCell;
-            use std::thread_local::__impl::KeyInner as __KeyInner;
-            use std::option::Option as __Option;
-            use std::option::Option::None as __None;
-
-            __thread_local_inner!(static __KEY: __UnsafeCell<__Option<$t>> = {
-                __UnsafeCell { value: __None }
-            });
-            fn __init() -> $t { $init }
-            fn __getit() -> &'static __KeyInner<__UnsafeCell<__Option<$t>>> {
-                &__KEY
-            }
-            ::std::thread_local::Key { inner: __getit, init: __init }
-        };
-    );
-    (pub static $name:ident: $t:ty = $init:expr) => (
-        pub static $name: ::std::thread_local::Key<$t> = {
-            use std::cell::UnsafeCell as __UnsafeCell;
-            use std::thread_local::__impl::KeyInner as __KeyInner;
-            use std::option::Option as __Option;
-            use std::option::Option::None as __None;
-
-            __thread_local_inner!(static __KEY: __UnsafeCell<__Option<$t>> = {
-                __UnsafeCell { value: __None }
-            });
-            fn __init() -> $t { $init }
-            fn __getit() -> &'static __KeyInner<__UnsafeCell<__Option<$t>>> {
-                &__KEY
-            }
-            ::std::thread_local::Key { inner: __getit, init: __init }
-        };
-    );
 }
 
 // Macro pain #4586:
@@ -172,50 +135,120 @@ macro_rules! thread_local {
 // To get around this, we're forced to inject the #[cfg] logic into the macro
 // itself. Woohoo.
 
+/// Declare a new thread local storage key of type `std::thread_local::Key`.
 #[macro_export]
-#[doc(hidden)]
-macro_rules! __thread_local_inner {
+#[stable(feature = "rust1", since = "1.0.0")]
+macro_rules! thread_local {
     (static $name:ident: $t:ty = $init:expr) => (
-        #[cfg_attr(all(any(target_os = "macos", target_os = "linux"),
-                       not(target_arch = "aarch64")),
-                   thread_local)]
-        static $name: ::std::thread_local::__impl::KeyInner<$t> =
-            __thread_local_inner!($init, $t);
+        static $name: ::std::thread_local::Key<$t> = {
+            use std::cell::UnsafeCell as __UnsafeCell;
+            use std::option::Option as __Option;
+            #[cfg(stage0)] // SNAP 522d09d
+            use std::thread_local::__impl::KeyInner as __KeyInner;
+            #[cfg(stage0)] // SNAP 522d09d
+            use std::option::Option::None as __None;
+            #[cfg(not(stage0))] // SNAP 522d09d
+            use std::thread_local::__KeyInner;
+
+            #[cfg_attr(all(any(target_os = "macos", target_os = "linux"),
+                           not(target_arch = "aarch64")),
+                       thread_local)]
+            #[cfg(stage0)] // SNAP 522d09d
+            static __KEY: __KeyInner<__UnsafeCell<__Option<$t>>> = {
+                __thread_local_inner!(__UnsafeCell<__Option<$t>>,
+                                      __UnsafeCell { value: __None })
+            };
+
+            #[cfg_attr(all(any(target_os = "macos", target_os = "linux"),
+                           not(target_arch = "aarch64")),
+                       thread_local)]
+            #[cfg(not(stage0))] // SNAP 522d09d
+            static __KEY: __KeyInner<__UnsafeCell<__Option<$t>>> = __KeyInner::empty();
+
+            fn __init() -> $t { $init }
+            fn __getit() -> &'static __KeyInner<__UnsafeCell<__Option<$t>>> {
+                &__KEY
+            }
+            ::std::thread_local::Key { inner: __getit, init: __init }
+        };
     );
     (pub static $name:ident: $t:ty = $init:expr) => (
-        #[cfg_attr(all(any(target_os = "macos", target_os = "linux"),
-                       not(target_arch = "aarch64")),
-                   thread_local)]
-        pub static $name: ::std::thread_local::__impl::KeyInner<$t> =
-            __thread_local_inner!($init, $t);
+        pub static $name: ::std::thread_local::Key<$t> = {
+            use std::cell::UnsafeCell as __UnsafeCell;
+            use std::option::Option as __Option;
+            #[cfg(stage0)] // SNAP 522d09d
+            use std::thread_local::__impl::KeyInner as __KeyInner;
+            #[cfg(stage0)] // SNAP 522d09d
+            use std::option::Option::None as __None;
+            #[cfg(not(stage0))] // SNAP 522d09d
+            use std::thread_local::__KeyInner;
+
+            #[cfg_attr(all(any(target_os = "macos", target_os = "linux"),
+                           not(target_arch = "aarch64")),
+                       thread_local)]
+            #[cfg(stage0)] // SNAP 522d09d
+            static __KEY: __KeyInner<__UnsafeCell<__Option<$t>>> = {
+                __thread_local_inner!(__UnsafeCell<__Option<$t>>,
+                                      __UnsafeCell { value: __None })
+            };
+
+            #[cfg_attr(all(any(target_os = "macos", target_os = "linux"),
+                           not(target_arch = "aarch64")),
+                       thread_local)]
+            #[cfg(not(stage0))] // SNAP 522d09d
+            static __KEY: __KeyInner<__UnsafeCell<__Option<$t>>> = __KeyInner::empty();
+
+            fn __init() -> $t { $init }
+            fn __getit() -> &'static __KeyInner<__UnsafeCell<__Option<$t>>> {
+                &__KEY
+            }
+            ::std::thread_local::Key { inner: __getit, init: __init }
+        };
     );
-    ($init:expr, $t:ty) => ({
-        #[cfg(all(any(target_os = "macos", target_os = "linux"), not(target_arch = "aarch64")))]
+}
+
+#[macro_export]
+#[doc(hidden)]
+#[cfg(stage0)] // SNAP 522d09d
+macro_rules! __thread_local_inner {
+    ($t:ty, $init:expr) => ({
+        #[cfg(all(any(target_os = "macos", target_os = "linux"),
+                  not(target_arch = "aarch64")))]
         const _INIT: ::std::thread_local::__impl::KeyInner<$t> = {
             ::std::thread_local::__impl::KeyInner {
-                inner: ::std::cell::UnsafeCell { value: $init },
+                inner: $init,
                 dtor_registered: ::std::cell::UnsafeCell { value: false },
                 dtor_running: ::std::cell::UnsafeCell { value: false },
             }
         };
 
-        #[cfg(any(not(any(target_os = "macos", target_os = "linux")), target_arch = "aarch64"))]
+        #[cfg(any(not(any(target_os = "macos", target_os = "linux")),
+                  target_arch = "aarch64"))]
         const _INIT: ::std::thread_local::__impl::KeyInner<$t> = {
             unsafe extern fn __destroy(ptr: *mut u8) {
                 ::std::thread_local::__impl::destroy_value::<$t>(ptr);
             }
 
             ::std::thread_local::__impl::KeyInner {
-                inner: ::std::cell::UnsafeCell { value: $init },
+                inner: $init,
                 os: ::std::thread_local::__impl::OsStaticKey {
                     inner: ::std::thread_local::__impl::OS_INIT_INNER,
-                    dtor: ::std::option::Option::Some(__destroy as unsafe extern fn(*mut u8)),
+                    dtor: ::std::option::Option::Some(__destroy),
                 },
             }
         };
 
         _INIT
-    });
+    })
+}
+
+// HACK(eddyb) cfg takes effect too late, so thread_local! ends up
+// needing this even after stage0. Remove macro after next snapshot.
+#[macro_export]
+#[doc(hidden)]
+#[cfg(not(stage0))] // SNAP 522d09d
+macro_rules! __thread_local_inner {
+    ($t:ty, $init:expr) => ({})
 }
 
 /// Indicator of the state of a thread local storage key.
@@ -330,21 +363,16 @@ impl<T: 'static> Key<T> {
 mod imp {
     use prelude::v1::*;
 
-    use cell::UnsafeCell;
+    use cell::{Cell, UnsafeCell};
     use intrinsics;
     use ptr;
 
     #[doc(hidden)]
+    #[cfg(stage0)] // SNAP 522d09d
     #[stable(since = "1.0.0", feature = "rust1")]
     pub struct Key<T> {
-        // Place the inner bits in an `UnsafeCell` to currently get around the
-        // "only Sync statics" restriction. This allows any type to be placed in
-        // the cell.
-        //
-        // Note that all access requires `T: 'static` so it can't be a type with
-        // any borrowed pointers still.
         #[stable(since = "1.0.0", feature = "rust1")]
-        pub inner: UnsafeCell<T>,
+        pub inner: T,
 
         // Metadata to keep track of the state of the destructor. Remember that
         // these variables are thread-local, not global.
@@ -354,18 +382,54 @@ mod imp {
         pub dtor_running: UnsafeCell<bool>, // should be Cell
     }
 
+    #[doc(hidden)]
+    #[cfg(not(stage0))] // SNAP 522d09d
+    #[stable(since = "1.0.0", feature = "rust1")]
+    pub struct Key<T> {
+        inner: T,
+
+        // Metadata to keep track of the state of the destructor. Remember that
+        // these variables are thread-local, not global.
+        dtor_registered: Cell<bool>,
+        dtor_running: Cell<bool>,
+    }
+
     unsafe impl<T> ::marker::Sync for Key<T> { }
 
     #[doc(hidden)]
+    #[cfg(not(stage0))] // SNAP 522d09d
+    impl<T> Key<UnsafeCell<Option<T>>> {
+        #[stable(feature = "rust1", since = "1.0.0")]
+        pub const fn empty() -> Self {
+            Key {
+                inner: UnsafeCell::new(None),
+                dtor_registered: Cell::new(false),
+                dtor_running: Cell::new(false),
+            }
+        }
+    }
+
+    #[doc(hidden)]
     impl<T> Key<T> {
+        #[cfg(stage0)] // SNAP 522d09d
         pub unsafe fn get(&'static self) -> Option<&'static T> {
             if intrinsics::needs_drop::<T>() && *self.dtor_running.get() {
                 return None
             }
             self.register_dtor();
-            Some(&*self.inner.get())
+            Some(&self.inner)
         }
 
+        #[cfg(not(stage0))] // SNAP 522d09d
+        pub unsafe fn get(&'static self) -> Option<&'static T> {
+            if intrinsics::needs_drop::<T>() && self.dtor_running.get() {
+                return None
+            }
+            self.register_dtor();
+            Some(&self.inner)
+        }
+
+        #[cfg(stage0)] // SNAP 522d09d
         unsafe fn register_dtor(&self) {
             if !intrinsics::needs_drop::<T>() || *self.dtor_registered.get() {
                 return
@@ -374,6 +438,17 @@ mod imp {
             register_dtor(self as *const _ as *mut u8,
                           destroy_value::<T>);
             *self.dtor_registered.get() = true;
+        }
+
+        #[cfg(not(stage0))] // SNAP 522d09d
+        unsafe fn register_dtor(&self) {
+            if !intrinsics::needs_drop::<T>() || self.dtor_registered.get() {
+                return
+            }
+
+            register_dtor(self as *const _ as *mut u8,
+                          destroy_value::<T>);
+            self.dtor_registered.set(true);
         }
     }
 
@@ -418,7 +493,7 @@ mod imp {
         // flagged for destruction.
         static DTORS: os::StaticKey = os::StaticKey {
             inner: os::INIT_INNER,
-            dtor: Some(run_dtors as unsafe extern "C" fn(*mut u8)),
+            dtor: Some(run_dtors),
         };
         type List = Vec<(*mut u8, unsafe extern fn(*mut u8))>;
         if DTORS.get().is_null() {
@@ -453,6 +528,7 @@ mod imp {
     }
 
     #[doc(hidden)]
+    #[cfg(stage0)] // SNAP 522d09d
     #[stable(feature = "rust1", since = "1.0.0")]
     pub unsafe extern fn destroy_value<T>(ptr: *mut u8) {
         let ptr = ptr as *mut Key<T>;
@@ -460,7 +536,17 @@ mod imp {
         // destructor as running for this thread so calls to `get` will return
         // `None`.
         *(*ptr).dtor_running.get() = true;
-        ptr::read((*ptr).inner.get());
+        ptr::read(&(*ptr).inner);
+    }
+
+    #[cfg(not(stage0))] // SNAP 522d09d
+    unsafe extern fn destroy_value<T>(ptr: *mut u8) {
+        let ptr = ptr as *mut Key<T>;
+        // Right before we run the user destructor be sure to flag the
+        // destructor as running for this thread so calls to `get` will return
+        // `None`.
+        (*ptr).dtor_running.set(true);
+        ptr::read(&(*ptr).inner);
     }
 }
 
@@ -473,18 +559,28 @@ mod imp {
     use mem;
     use ptr;
     use sys_common::thread_local::StaticKey as OsStaticKey;
+    use sys_common::thread_local::INIT_INNER as OS_INIT_INNER;
 
     #[doc(hidden)]
+    #[cfg(stage0)] // SNAP 522d09d
     #[stable(since = "1.0.0", feature = "rust1")]
     pub struct Key<T> {
-        // Statically allocated initialization expression, using an `UnsafeCell`
-        // for the same reasons as above.
         #[stable(since = "1.0.0", feature = "rust1")]
-        pub inner: UnsafeCell<T>,
+        pub inner: T,
 
         // OS-TLS key that we'll use to key off.
         #[stable(since = "1.0.0", feature = "rust1")]
         pub os: OsStaticKey,
+    }
+
+    #[doc(hidden)]
+    #[cfg(not(stage0))] // SNAP 522d09d
+    #[stable(since = "1.0.0", feature = "rust1")]
+    pub struct Key<T> {
+        inner: T,
+
+        // OS-TLS key that we'll use to key off.
+        os: OsStaticKey,
     }
 
     unsafe impl<T> ::marker::Sync for Key<T> { }
@@ -492,6 +588,21 @@ mod imp {
     struct Value<T: 'static> {
         key: &'static Key<T>,
         value: T,
+    }
+
+    #[doc(hidden)]
+    #[cfg(not(stage0))] // SNAP 522d09d
+    impl<T> Key<UnsafeCell<Option<T>>> {
+        #[stable(feature = "rust1", since = "1.0.0")]
+        pub const fn empty() -> Self {
+            Key {
+                inner: UnsafeCell::new(None),
+                os: OsStaticKey {
+                    inner: OS_INIT_INNER,
+                    dtor: Some(destroy_value::<UnsafeCell<Option<T>>>),
+                },
+            }
+        }
     }
 
     #[doc(hidden)]
@@ -526,8 +637,25 @@ mod imp {
     }
 
     #[doc(hidden)]
+    #[cfg(stage0)] // SNAP 522d09d
     #[stable(feature = "rust1", since = "1.0.0")]
     pub unsafe extern fn destroy_value<T: 'static>(ptr: *mut u8) {
+        // The OS TLS ensures that this key contains a NULL value when this
+        // destructor starts to run. We set it back to a sentinel value of 1 to
+        // ensure that any future calls to `get` for this thread will return
+        // `None`.
+        //
+        // Note that to prevent an infinite loop we reset it back to null right
+        // before we return from the destructor ourselves.
+        let ptr: Box<Value<T>> = Box::from_raw(ptr as *mut Value<T>);
+        let key = ptr.key;
+        key.os.set(1 as *mut u8);
+        drop(ptr);
+        key.os.set(ptr::null_mut());
+    }
+
+    #[cfg(not(stage0))] // SNAP 522d09d
+    unsafe extern fn destroy_value<T: 'static>(ptr: *mut u8) {
         // The OS TLS ensures that this key contains a NULL value when this
         // destructor starts to run. We set it back to a sentinel value of 1 to
         // ensure that any future calls to `get` for this thread will return
@@ -563,7 +691,7 @@ mod tests {
 
     #[test]
     fn smoke_no_dtor() {
-        thread_local!(static FOO: UnsafeCell<i32> = UnsafeCell { value: 1 });
+        thread_local!(static FOO: UnsafeCell<i32> = UnsafeCell::new(1));
 
         FOO.with(|f| unsafe {
             assert_eq!(*f.get(), 1);
@@ -608,9 +736,7 @@ mod tests {
 
     #[test]
     fn smoke_dtor() {
-        thread_local!(static FOO: UnsafeCell<Option<Foo>> = UnsafeCell {
-            value: None
-        });
+        thread_local!(static FOO: UnsafeCell<Option<Foo>> = UnsafeCell::new(None));
 
         let (tx, rx) = channel();
         let _t = thread::spawn(move|| unsafe {
@@ -626,12 +752,8 @@ mod tests {
     fn circular() {
         struct S1;
         struct S2;
-        thread_local!(static K1: UnsafeCell<Option<S1>> = UnsafeCell {
-            value: None
-        });
-        thread_local!(static K2: UnsafeCell<Option<S2>> = UnsafeCell {
-            value: None
-        });
+        thread_local!(static K1: UnsafeCell<Option<S1>> = UnsafeCell::new(None));
+        thread_local!(static K2: UnsafeCell<Option<S2>> = UnsafeCell::new(None));
         static mut HITS: u32 = 0;
 
         impl Drop for S1 {
@@ -669,9 +791,7 @@ mod tests {
     #[test]
     fn self_referential() {
         struct S1;
-        thread_local!(static K1: UnsafeCell<Option<S1>> = UnsafeCell {
-            value: None
-        });
+        thread_local!(static K1: UnsafeCell<Option<S1>> = UnsafeCell::new(None));
 
         impl Drop for S1 {
             fn drop(&mut self) {
@@ -687,12 +807,8 @@ mod tests {
     #[test]
     fn dtors_in_dtors_in_dtors() {
         struct S1(Sender<()>);
-        thread_local!(static K1: UnsafeCell<Option<S1>> = UnsafeCell {
-            value: None
-        });
-        thread_local!(static K2: UnsafeCell<Option<Foo>> = UnsafeCell {
-            value: None
-        });
+        thread_local!(static K1: UnsafeCell<Option<S1>> = UnsafeCell::new(None));
+        thread_local!(static K2: UnsafeCell<Option<Foo>> = UnsafeCell::new(None));
 
         impl Drop for S1 {
             fn drop(&mut self) {

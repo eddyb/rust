@@ -22,7 +22,12 @@ pub use sys::backtrace::write;
 // For now logging is turned off by default, and this function checks to see
 // whether the magical environment variable is present to see if it's turned on.
 pub fn log_enabled() -> bool {
+    #[cfg(stage0)] // SNAP 522d09d
     static ENABLED: atomic::AtomicIsize = atomic::ATOMIC_ISIZE_INIT;
+
+    #[cfg(not(stage0))] // SNAP 522d09d
+    static ENABLED: atomic::AtomicIsize = atomic::AtomicIsize::new(0);
+
     match ENABLED.load(Ordering::SeqCst) {
         1 => return false,
         2 => return true,

@@ -8,29 +8,31 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::rand::{thread_rng, Rng, Rand};
 use std::thread;
 
 const REPEATS: usize = 5;
 const MAX_LEN: usize = 32;
-static drop_counts: [AtomicUsize;  MAX_LEN] =
+static drop_counts: [AtomicUsize;  MAX_LEN] = {
+    const INIT: AtomicUsize = AtomicUsize::new(0);
     // FIXME #5244: AtomicUsize is not Copy.
     [
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-        ATOMIC_USIZE_INIT, ATOMIC_USIZE_INIT,
-     ];
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT, INIT,
+        INIT, INIT,
+    ]
+};
 
-static creation_count: AtomicUsize = ATOMIC_USIZE_INIT;
+static creation_count: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord)]
 struct DropCounter { x: usize, creation_id: usize }

@@ -22,8 +22,14 @@ pub struct Condvar { inner: UnsafeCell<ffi::CONDITION_VARIABLE> }
 unsafe impl Send for Condvar {}
 unsafe impl Sync for Condvar {}
 
+#[cfg(stage0)] // SNAP 522d09d
 pub const CONDVAR_INIT: Condvar = Condvar {
     inner: UnsafeCell { value: ffi::CONDITION_VARIABLE_INIT }
+};
+
+#[cfg(not(stage0))] // SNAP 522d09d
+pub const CONDVAR_INIT: Condvar = Condvar {
+    inner: UnsafeCell::new(ffi::CONDITION_VARIABLE_INIT)
 };
 
 impl Condvar {

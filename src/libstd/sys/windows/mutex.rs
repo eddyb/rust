@@ -15,8 +15,14 @@ use sys::sync as ffi;
 
 pub struct Mutex { inner: UnsafeCell<ffi::SRWLOCK> }
 
+#[cfg(stage0)] // SNAP 522d09d
 pub const MUTEX_INIT: Mutex = Mutex {
     inner: UnsafeCell { value: ffi::SRWLOCK_INIT }
+};
+
+#[cfg(not(stage0))] // SNAP 522d09d
+pub const MUTEX_INIT: Mutex = Mutex {
+    inner: UnsafeCell::new(ffi::SRWLOCK_INIT)
 };
 
 unsafe impl Send for Mutex {}

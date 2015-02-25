@@ -47,7 +47,10 @@ pub fn limit_thread_creation_due_to_osx_and_valgrind() -> bool {
 }
 
 pub fn min_stack() -> uint {
+    #[cfg(stage0)] // SNAP 522d09d
     static MIN: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+    #[cfg(not(stage0))] // SNAP 522d09d
+    static MIN: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
     match MIN.load(Ordering::SeqCst) {
         0 => {}
         n => return n - 1,

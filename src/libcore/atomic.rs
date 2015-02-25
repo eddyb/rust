@@ -60,9 +60,9 @@
 //! Keep a global count of live tasks:
 //!
 //! ```
-//! use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+//! use std::sync::atomic::{AtomicUsize, Ordering};
 //!
-//! static GLOBAL_TASK_COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+//! static GLOBAL_TASK_COUNT: AtomicUsize = AtomicUsize::new(0);
 //!
 //! let old_task_count = GLOBAL_TASK_COUNT.fetch_add(1, Ordering::SeqCst);
 //! println!("live tasks: {}", old_task_count + 1);
@@ -76,7 +76,6 @@ use marker::Sync;
 
 use intrinsics;
 use cell::UnsafeCell;
-use marker::PhantomData;
 
 /// A boolean type which can be safely shared between threads.
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -105,8 +104,7 @@ unsafe impl Sync for AtomicUsize {}
 /// A raw pointer type which can be safely shared between threads.
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct AtomicPtr<T> {
-    p: UnsafeCell<usize>,
-    _marker: PhantomData<*mut T>,
+    p: UnsafeCell<*mut T>,
 }
 
 unsafe impl<T> Sync for AtomicPtr<T> {}
@@ -147,23 +145,46 @@ pub enum Ordering {
     SeqCst,
 }
 
-/// An `AtomicBool` initialized to `false`.
+#[cfg(stage0)] // SNAP 522d09d
 #[stable(feature = "rust1", since = "1.0.0")]
 pub const ATOMIC_BOOL_INIT: AtomicBool =
         AtomicBool { v: UnsafeCell { value: 0 } };
-/// An `AtomicIsize` initialized to `0`.
+#[cfg(stage0)] // SNAP 522d09d
 #[stable(feature = "rust1", since = "1.0.0")]
 pub const ATOMIC_ISIZE_INIT: AtomicIsize =
         AtomicIsize { v: UnsafeCell { value: 0 } };
-/// An `AtomicUsize` initialized to `0`.
+#[cfg(stage0)] // SNAP 522d09d
 #[stable(feature = "rust1", since = "1.0.0")]
 pub const ATOMIC_USIZE_INIT: AtomicUsize =
         AtomicUsize { v: UnsafeCell { value: 0, } };
+
+/// An `AtomicBool` initialized to `false`.
+#[cfg(not(stage0))] // SNAP 522d09d
+#[unstable(feature = "core")]
+#[deprecated(since = "1.0.0")]
+pub const ATOMIC_BOOL_INIT: AtomicBool = AtomicBool::new(false);
+/// An `AtomicIsize` initialized to `0`.
+#[cfg(not(stage0))] // SNAP 522d09d
+#[unstable(feature = "core")]
+#[deprecated(since = "1.0.0")]
+pub const ATOMIC_ISIZE_INIT: AtomicIsize = AtomicIsize::new(0);
+/// An `AtomicUsize` initialized to `0`.
+#[cfg(not(stage0))] // SNAP 522d09d
+#[unstable(feature = "core")]
+#[deprecated(since = "1.0.0")]
+pub const ATOMIC_USIZE_INIT: AtomicUsize = AtomicUsize::new(0);
 
 // NB: Needs to be -1 (0b11111111...) to make fetch_nand work correctly
 const UINT_TRUE: usize = -1;
 
 impl AtomicBool {
+    #[inline]
+    #[cfg(stage0)] // SNAP 522d09d
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub fn new(v: bool) -> AtomicBool {
+        AtomicBool { v: UnsafeCell::new(-(v as isize) as usize) }
+    }
+
     /// Creates a new `AtomicBool`.
     ///
     /// # Examples
@@ -175,10 +196,10 @@ impl AtomicBool {
     /// let atomic_false = AtomicBool::new(false);
     /// ```
     #[inline]
+    #[cfg(not(stage0))] // SNAP 522d09d
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn new(v: bool) -> AtomicBool {
-        let val = if v { UINT_TRUE } else { 0 };
-        AtomicBool { v: UnsafeCell::new(val) }
+    pub const fn new(v: bool) -> AtomicBool {
+        AtomicBool { v: UnsafeCell::new(-(v as isize) as usize) }
     }
 
     /// Loads a value from the bool.
@@ -407,6 +428,13 @@ impl AtomicBool {
 
 #[stable(feature = "rust1", since = "1.0.0")]
 impl AtomicIsize {
+    #[inline]
+    #[cfg(stage0)] // SNAP 522d09d
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub fn new(v: isize) -> AtomicIsize {
+        AtomicIsize {v: UnsafeCell::new(v)}
+    }
+
     /// Creates a new `AtomicIsize`.
     ///
     /// # Examples
@@ -417,8 +445,9 @@ impl AtomicIsize {
     /// let atomic_forty_two  = AtomicIsize::new(42);
     /// ```
     #[inline]
+    #[cfg(not(stage0))] // SNAP 522d09d
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn new(v: isize) -> AtomicIsize {
+    pub const fn new(v: isize) -> AtomicIsize {
         AtomicIsize {v: UnsafeCell::new(v)}
     }
 
@@ -594,6 +623,13 @@ impl AtomicIsize {
 
 #[stable(feature = "rust1", since = "1.0.0")]
 impl AtomicUsize {
+    #[inline]
+    #[cfg(stage0)] // SNAP 522d09d
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub fn new(v: usize) -> AtomicUsize {
+        AtomicUsize { v: UnsafeCell::new(v) }
+    }
+
     /// Creates a new `AtomicUsize`.
     ///
     /// # Examples
@@ -604,8 +640,9 @@ impl AtomicUsize {
     /// let atomic_forty_two = AtomicUsize::new(42);
     /// ```
     #[inline]
+    #[cfg(not(stage0))] // SNAP 522d09d
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn new(v: usize) -> AtomicUsize {
+    pub const fn new(v: usize) -> AtomicUsize {
         AtomicUsize { v: UnsafeCell::new(v) }
     }
 
@@ -780,6 +817,13 @@ impl AtomicUsize {
 }
 
 impl<T> AtomicPtr<T> {
+    #[inline]
+    #[cfg(stage0)] // SNAP 522d09d
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub fn new(p: *mut T) -> AtomicPtr<T> {
+        AtomicPtr { p: UnsafeCell::new(p), }
+    }
+
     /// Creates a new `AtomicPtr`.
     ///
     /// # Examples
@@ -791,10 +835,10 @@ impl<T> AtomicPtr<T> {
     /// let atomic_ptr  = AtomicPtr::new(ptr);
     /// ```
     #[inline]
+    #[cfg(not(stage0))] // SNAP 522d09d
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn new(p: *mut T) -> AtomicPtr<T> {
-        AtomicPtr { p: UnsafeCell::new(p as usize),
-                    _marker: PhantomData }
+    pub const fn new(p: *mut T) -> AtomicPtr<T> {
+        AtomicPtr { p: UnsafeCell::new(p), }
     }
 
     /// Loads a value from the pointer.
@@ -819,7 +863,7 @@ impl<T> AtomicPtr<T> {
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn load(&self, order: Ordering) -> *mut T {
         unsafe {
-            atomic_load(self.p.get(), order) as *mut T
+            atomic_load(self.p.get() as *mut usize, order) as *mut T
         }
     }
 
@@ -846,7 +890,7 @@ impl<T> AtomicPtr<T> {
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn store(&self, ptr: *mut T, order: Ordering) {
-        unsafe { atomic_store(self.p.get(), ptr as usize, order); }
+        unsafe { atomic_store(self.p.get() as *mut _, ptr as usize, order); }
     }
 
     /// Stores a value into the pointer, returning the old value.
@@ -868,7 +912,7 @@ impl<T> AtomicPtr<T> {
     #[inline]
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn swap(&self, ptr: *mut T, order: Ordering) -> *mut T {
-        unsafe { atomic_swap(self.p.get(), ptr as usize, order) as *mut T }
+        unsafe { atomic_swap(self.p.get() as *mut _, ptr as usize, order) as *mut T }
     }
 
     /// Stores a value into the pointer if the current value is the same as the expected value.
@@ -895,7 +939,7 @@ impl<T> AtomicPtr<T> {
     #[stable(feature = "rust1", since = "1.0.0")]
     pub fn compare_and_swap(&self, old: *mut T, new: *mut T, order: Ordering) -> *mut T {
         unsafe {
-            atomic_compare_and_swap(self.p.get(), old as usize,
+            atomic_compare_and_swap(self.p.get() as *mut _, old as usize,
                                     new as usize, order) as *mut T
         }
     }
@@ -1082,15 +1126,32 @@ unsafe impl Sync for AtomicUint {}
 #[unstable(feature = "core")]
 #[deprecated(since = "1.0.0",
              reason = "use ATOMIC_ISIZE_INIT instead")]
+#[cfg(stage0)] // SNAP 522d09d
 #[allow(missing_docs, deprecated)]
 pub const ATOMIC_INT_INIT: AtomicInt =
         AtomicInt { v: UnsafeCell { value: 0 } };
 #[unstable(feature = "core")]
 #[deprecated(since = "1.0.0",
              reason = "use ATOMIC_USIZE_INIT instead")]
+#[cfg(stage0)] // SNAP 522d09d
 #[allow(missing_docs, deprecated)]
 pub const ATOMIC_UINT_INIT: AtomicUint =
         AtomicUint { v: UnsafeCell { value: 0, } };
+
+#[unstable(feature = "core")]
+#[deprecated(since = "1.0.0",
+             reason = "use ATOMIC_ISIZE_INIT instead")]
+#[cfg(not(stage0))] // SNAP 522d09d
+#[allow(missing_docs, deprecated)]
+pub const ATOMIC_INT_INIT: AtomicInt =
+        AtomicInt { v: UnsafeCell::new(0) };
+#[unstable(feature = "core")]
+#[deprecated(since = "1.0.0",
+             reason = "use ATOMIC_USIZE_INIT instead")]
+#[cfg(not(stage0))] // SNAP 522d09d
+#[allow(missing_docs, deprecated)]
+pub const ATOMIC_UINT_INIT: AtomicUint =
+        AtomicUint { v: UnsafeCell::new(0) };
 
 #[allow(missing_docs, deprecated)]
 impl AtomicInt {

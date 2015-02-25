@@ -23,7 +23,7 @@ use ffi::{OsString, AsOsStr};
 use fmt;
 use io;
 use path::{AsPath, PathBuf};
-use sync::atomic::{AtomicIsize, ATOMIC_ISIZE_INIT, Ordering};
+use sync::atomic::{AtomicIsize, Ordering};
 use sync::{StaticMutex, MUTEX_INIT};
 use sys::os as os_imp;
 
@@ -402,7 +402,10 @@ pub fn current_exe() -> io::Result<PathBuf> {
     os_imp::current_exe()
 }
 
-static EXIT_STATUS: AtomicIsize = ATOMIC_ISIZE_INIT;
+#[cfg(stage0)] // SNAP 522d09d
+static EXIT_STATUS: AtomicIsize = ::sync::atomic::ATOMIC_ISIZE_INIT;
+#[cfg(not(stage0))] // SNAP 522d09d
+static EXIT_STATUS: AtomicIsize = AtomicIsize::new(0);
 
 /// Sets the process exit code
 ///

@@ -30,7 +30,7 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry::Vacant;
 use std::old_io::{self, File};
 use std::env;
-use std::sync::atomic::{AtomicBool, Ordering, ATOMIC_BOOL_INIT};
+use std::sync::atomic::{AtomicBool, Ordering};
 use syntax::ast;
 
 fn print_help_message() {
@@ -74,7 +74,11 @@ pub fn maybe_print_constraints_for<'a, 'tcx>(region_vars: &RegionVarBindings<'a,
     let output_path = {
         let output_template = match requested_output {
             Some(ref s) if &**s == "help" => {
-                static PRINTED_YET: AtomicBool = ATOMIC_BOOL_INIT;
+                #[cfg(stage0)] // SNAP 522d09d
+                static PRINTED_YET: AtomicBool = ::std::sync::atomic::ATOMIC_BOOL_INIT;
+                #[cfg(not(stage0))] // SNAP 522d09d
+                static PRINTED_YET: AtomicBool = AtomicBool::new(false);
+
                 if !PRINTED_YET.load(Ordering::SeqCst) {
                     print_help_message();
                     PRINTED_YET.store(true, Ordering::SeqCst);

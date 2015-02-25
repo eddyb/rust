@@ -15,8 +15,14 @@ use sys::sync as ffi;
 
 pub struct RWLock { inner: UnsafeCell<ffi::pthread_rwlock_t> }
 
+#[cfg(stage0)] // SNAP 522d09d
 pub const RWLOCK_INIT: RWLock = RWLock {
     inner: UnsafeCell { value: ffi::PTHREAD_RWLOCK_INITIALIZER },
+};
+
+#[cfg(not(stage0))] // SNAP 522d09d
+pub const RWLOCK_INIT: RWLock = RWLock {
+    inner: UnsafeCell::new(ffi::PTHREAD_RWLOCK_INITIALIZER),
 };
 
 unsafe impl Send for RWLock {}

@@ -158,6 +158,14 @@ pub struct Cell<T> {
 }
 
 impl<T:Copy> Cell<T> {
+    #[cfg(stage0)] // SNAP 522d09d
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub fn new(value: T) -> Cell<T> {
+        Cell {
+            value: UnsafeCell::new(value),
+        }
+    }
+
     /// Creates a new `Cell` containing the given value.
     ///
     /// # Examples
@@ -167,8 +175,9 @@ impl<T:Copy> Cell<T> {
     ///
     /// let c = Cell::new(5);
     /// ```
+    #[cfg(not(stage0))] // SNAP 522d09d
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn new(value: T) -> Cell<T> {
+    pub const fn new(value: T) -> Cell<T> {
         Cell {
             value: UnsafeCell::new(value),
         }
@@ -212,10 +221,6 @@ impl<T:Copy> Cell<T> {
 
     /// Get a reference to the underlying `UnsafeCell`.
     ///
-    /// # Unsafety
-    ///
-    /// This function is `unsafe` because `UnsafeCell`'s field is public.
-    ///
     /// # Examples
     ///
     /// ```
@@ -223,11 +228,12 @@ impl<T:Copy> Cell<T> {
     ///
     /// let c = Cell::new(5);
     ///
-    /// let uc = unsafe { c.as_unsafe_cell() };
+    /// let uc = c.as_unsafe_cell();
+    /// unsafe { *uc.get() = 6; }
     /// ```
     #[inline]
     #[unstable(feature = "core")]
-    pub unsafe fn as_unsafe_cell<'a>(&'a self) -> &'a UnsafeCell<T> {
+    pub fn as_unsafe_cell<'a>(&'a self) -> &'a UnsafeCell<T> {
         &self.value
     }
 }
@@ -461,11 +467,9 @@ impl<T> RefCell<T> {
     /// Get a reference to the underlying `UnsafeCell`.
     ///
     /// This can be used to circumvent `RefCell`'s safety checks.
-    ///
-    /// This function is `unsafe` because `UnsafeCell`'s field is public.
     #[inline]
     #[unstable(feature = "core")]
-    pub unsafe fn as_unsafe_cell<'a>(&'a self) -> &'a UnsafeCell<T> {
+    pub fn as_unsafe_cell<'a>(&'a self) -> &'a UnsafeCell<T> {
         &self.value
     }
 }
@@ -646,28 +650,28 @@ impl<'b, T> DerefMut for RefMut<'b, T> {
 ///
 /// unsafe impl<T> Sync for NotThreadSafe<T> {}
 /// ```
-///
-/// **NOTE:** `UnsafeCell<T>`'s fields are public to allow static initializers. It is not
-/// recommended to access its fields directly, `get` should be used instead.
 #[lang="unsafe_cell"]
 #[stable(feature = "rust1", since = "1.0.0")]
 pub struct UnsafeCell<T> {
-    /// Wrapped value
-    ///
-    /// This field should not be accessed directly, it is made public for static
-    /// initializers.
-    #[unstable(feature = "core")]
+    #[cfg(stage0)] // SNAP 522d09d
     pub value: T,
+    #[cfg(not(stage0))] // SNAP 522d09d
+    value: T,
 }
 
 impl<T> !Sync for UnsafeCell<T> {}
 
 impl<T> UnsafeCell<T> {
+    #[cfg(stage0)] // SNAP 522d09d
+    #[stable(feature = "rust1", since = "1.0.0")]
+    pub fn new(value: T) -> UnsafeCell<T> {
+        UnsafeCell { value: value }
+    }
+
     /// Construct a new instance of `UnsafeCell` which will wrap the specified
     /// value.
     ///
-    /// All access to the inner value through methods is `unsafe`, and it is highly discouraged to
-    /// access the fields directly.
+    /// All access to the inner value through methods is `unsafe`.
     ///
     /// # Examples
     ///
@@ -676,8 +680,9 @@ impl<T> UnsafeCell<T> {
     ///
     /// let uc = UnsafeCell::new(5);
     /// ```
+    #[cfg(not(stage0))] // SNAP 522d09d
     #[stable(feature = "rust1", since = "1.0.0")]
-    pub fn new(value: T) -> UnsafeCell<T> {
+    pub const fn new(value: T) -> UnsafeCell<T> {
         UnsafeCell { value: value }
     }
 

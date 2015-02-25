@@ -25,6 +25,7 @@ use path::PathBuf;
 use sync::{Once, ONCE_INIT};
 
 macro_rules! helper_init { (static $name:ident: Helper<$m:ty>) => (
+    #[cfg(stage0)] // SNAP 522d09d
     static $name: Helper<$m> = Helper {
         lock: ::sync::MUTEX_INIT,
         cond: ::sync::CONDVAR_INIT,
@@ -32,6 +33,15 @@ macro_rules! helper_init { (static $name:ident: Helper<$m:ty>) => (
         signal: ::cell::UnsafeCell { value: 0 },
         initialized: ::cell::UnsafeCell { value: false },
         shutdown: ::cell::UnsafeCell { value: false },
+    };
+    #[cfg(not(stage0))] // SNAP 522d09d
+    static $name: Helper<$m> = Helper {
+        lock: ::sync::MUTEX_INIT,
+        cond: ::sync::CONDVAR_INIT,
+        chan: ::cell::UnsafeCell::new(0 as *mut ::sync::mpsc::Sender<$m>),
+        signal: ::cell::UnsafeCell::new(0),
+        initialized: ::cell::UnsafeCell::new(false),
+        shutdown: ::cell::UnsafeCell::new(false),
     };
 ) }
 

@@ -310,10 +310,14 @@ pub mod compat {
                                       -> $rettype:ty { $fallback:expr }) => (
             #[inline(always)]
             pub unsafe fn $symbol($($argname: $argtype),*) -> $rettype {
-                use sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
+                use sync::atomic::{AtomicUsize, Ordering};
                 use mem;
 
-                static PTR: AtomicUsize = ATOMIC_USIZE_INIT;
+                #[cfg(stage0)] // SNAP 522d09d
+                static PTR: AtomicUsize = ::sync::atomic::ATOMIC_USIZE_INIT;
+
+                #[cfg(not(stage0))] // SNAP 522d09d
+                static PTR: AtomicUsize = AtomicUsize::new(0);
 
                 fn load() -> usize {
                     ::sys::c::compat::store_func(&PTR,

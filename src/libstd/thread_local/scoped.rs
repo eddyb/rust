@@ -105,9 +105,22 @@ macro_rules! __scoped_thread_local_inner {
                       target_os = "ios",
                       target_os = "openbsd",
                       target_arch = "aarch64")))]
+        #[cfg(stage0)] // SNAP 522d09d
         const _INIT: __Key<$t> = __Key {
             inner: ::std::thread_local::scoped::__impl::KeyInner {
                 inner: ::std::cell::UnsafeCell { value: 0 as *mut _ },
+            }
+        };
+
+        #[cfg(not(any(windows,
+                      target_os = "android",
+                      target_os = "ios",
+                      target_os = "openbsd",
+                      target_arch = "aarch64")))]
+        #[cfg(not(stage0))] // SNAP 522d09d
+        const _INIT: __Key<$t> = __Key {
+            inner: ::std::thread_local::scoped::__impl::KeyInner {
+                inner: ::std::cell::UnsafeCell::new(0 as *mut _),
             }
         };
 

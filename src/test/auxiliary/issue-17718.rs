@@ -8,15 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::sync::atomic;
+use std::sync::atomic::AtomicUsize;
 
 pub const C1: uint = 1;
-pub const C2: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+pub const C2: AtomicUsize = AtomicUsize::new(0);
 pub const C3: fn() = foo;
 pub const C4: uint = C1 * C1 + C1 / C1;
 pub const C5: &'static uint = &C4;
 
 pub static S1: uint = 3;
-pub static S2: atomic::AtomicUsize = atomic::ATOMIC_USIZE_INIT;
+pub static S2: AtomicUsize = AtomicUsize::new(0);
 
 fn foo() {}
