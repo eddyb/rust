@@ -379,7 +379,7 @@ impl<'ast> Map<'ast> {
                 match *ii {
                     MethodImplItem(ref m) => {
                         match m.node {
-                            MethDecl(ident, _, _, _, _, _, _, _) => {
+                            MethDecl(ident, _, _, _, _, _, _, _, _) => {
                                 PathName(ident.name)
                             }
                             MethMac(_) => {
@@ -394,7 +394,7 @@ impl<'ast> Map<'ast> {
                 RequiredMethod(ref m) => PathName(m.ident.name),
                 ProvidedMethod(ref m) => {
                     match m.node {
-                        MethDecl(ident, _, _, _, _, _, _, _) => {
+                        MethDecl(ident, _, _, _, _, _, _, _, _) => {
                             PathName(ident.name)
                         }
                         MethMac(_) => panic!("no path elem for {:?}", node),
@@ -674,7 +674,7 @@ impl Named for ImplItem {
 impl Named for Method {
     fn name(&self) -> Name {
         match self.node {
-            MethDecl(i, _, _, _, _, _, _, _) => i.name,
+            MethDecl(i, _, _, _, _, _, _, _, _) => i.name,
             MethMac(_) => panic!("encountered unexpanded method macro."),
         }
     }
@@ -1057,7 +1057,7 @@ fn node_id_to_string(map: &Map, id: NodeId, include_id: bool) -> String {
             match **ii {
                 MethodImplItem(ref m) => {
                     match m.node {
-                        MethDecl(ident, _, _, _, _, _, _, _) =>
+                        MethDecl(ident, _, _, _, _, _, _, _, _) =>
                             format!("method {} in {}{}",
                                     token::get_ident(ident),
                                     map.path_to_string(id), id_str),

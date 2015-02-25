@@ -734,6 +734,7 @@ impl<'a> MethodDef<'a> {
                                 abi,
                                 explicit_self,
                                 ast::Unsafety::Normal,
+                                ast::Constness::NotConst,
                                 fn_decl,
                                 body_block,
                                 ast::Inherited)

@@ -1277,7 +1277,7 @@ fn build_cfg(tcx: &ty::ctxt, id: ast::NodeId) -> (ast::NodeId, Option<cfg::CFG>)
     let blk = match tcx.map.find(id) {
         Some(ast_map::NodeItem(i)) => {
             match i.node {
-                ast::ItemFn(_, _, _, _, ref blk) => {
+                ast::ItemFn(_, _, _, _, _, ref blk) => {
                     blk
                 }
                 _ => tcx.sess.bug("unexpected item variant in has_nested_returns")
@@ -1287,7 +1287,7 @@ fn build_cfg(tcx: &ty::ctxt, id: ast::NodeId) -> (ast::NodeId, Option<cfg::CFG>)
             match *trait_method {
                 ast::ProvidedMethod(ref m) => {
                     match m.node {
-                        ast::MethDecl(_, _, _, _, _, _, ref blk, _) => {
+                        ast::MethDecl(_, _, _, _, _, _, _, ref blk, _) => {
                             blk
                         }
                         ast::MethMac(_) => tcx.sess.bug("unexpanded macro")
@@ -1307,7 +1307,7 @@ fn build_cfg(tcx: &ty::ctxt, id: ast::NodeId) -> (ast::NodeId, Option<cfg::CFG>)
             match *ii {
                 ast::MethodImplItem(ref m) => {
                     match m.node {
-                        ast::MethDecl(_, _, _, _, _, _, ref blk, _) => {
+                        ast::MethDecl(_, _, _, _, _, _, _, ref blk, _) => {
                             blk
                         }
                         ast::MethMac(_) => tcx.sess.bug("unexpanded macro")
@@ -2258,7 +2258,7 @@ pub fn trans_item(ccx: &CrateContext, item: &ast::Item) {
     let from_external = ccx.external_srcs().borrow().contains_key(&item.id);
 
     match item.node {
-      ast::ItemFn(ref decl, _fn_style, abi, ref generics, ref body) => {
+      ast::ItemFn(ref decl, _, _, abi, ref generics, ref body) => {
         if !generics.is_type_parameterized() {
             let trans_everywhere = attr::requests_inline(&item.attrs);
             // Ignore `trans_everywhere` for cross-crate inlined items
@@ -2790,7 +2790,7 @@ pub fn get_item_val(ccx: &CrateContext, id: ast::NodeId) -> ValueRef {
                     }
                 }
 
-                ast::ItemFn(_, _, abi, _, _) => {
+                ast::ItemFn(_, _, _, abi, _, _) => {
                     let sym = sym();
                     let llfn = if abi == Rust {
                         register_fn(ccx, i.span, sym, i.id, ty)

@@ -17,7 +17,7 @@ use ast::{ProvidedMethod, Public, Unsafety};
 use ast::{Mod, BiAdd, Arg, Arm, Attribute, BindByRef, BindByValue};
 use ast::{BiBitAnd, BiBitOr, BiBitXor, BiRem, BiLt, BiGt, Block};
 use ast::{BlockCheckMode, CaptureByRef, CaptureByValue, CaptureClause};
-use ast::{Crate, CrateConfig, Decl, DeclItem};
+use ast::{Crate, CrateConfig, Constness, Decl, DeclItem};
 use ast::{DeclLocal, DefaultBlock, DefaultReturn};
 use ast::{UnDeref, BiDiv, EMPTY_CTXT, EnumDef, ExplicitSelf};
 use ast::{Expr, Expr_, ExprAddrOf, ExprMatch, ExprAgain};
@@ -1318,7 +1318,7 @@ impl<'a> Parser<'a> {
                 let lo = p.span.lo;
 
                 let vis = p.parse_visibility();
-                let style = p.parse_unsafety();
+                let unsafety = p.parse_unsafety();
                 let abi = if p.eat_keyword(keywords::Extern) {
                     p.parse_opt_abi().unwrap_or(abi::C)
                 } else {
@@ -1346,7 +1346,7 @@ impl<'a> Parser<'a> {
                     RequiredMethod(TypeMethod {
                         ident: ident,
                         attrs: attrs,
-                        unsafety: style,
+                        unsafety: unsafety,
                         decl: d,
                         generics: generics,
                         abi: abi,
@@ -1370,7 +1370,8 @@ impl<'a> Parser<'a> {
                                             generics,
                                             abi,
                                             explicit_self,
-                                            style,
+                                            unsafety,
+                                            Constness::NotConst,
                                             d,
                                             body,
                                             vis)
@@ -4667,19 +4668,23 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse an item-position function declaration.
-    fn parse_item_fn(&mut self, unsafety: Unsafety, abi: abi::Abi) -> ItemInfo {
+    fn parse_item_fn(&mut self,
+                     unsafety: Unsafety,
+                     constness: Constness,
+                     abi: abi::Abi) -> ItemInfo {
         let (ident, mut generics) = self.parse_fn_header();
         let decl = self.parse_fn_decl(false);
         self.parse_where_clause(&mut generics);
         let (inner_attrs, body) = self.parse_inner_attrs_and_block();
-        (ident, ItemFn(decl, unsafety, abi, generics, body), Some(inner_attrs))
+        (ident, ItemFn(decl, unsafety, constness, abi, generics, body),
+         Some(inner_attrs))
     }
 
     /// Parse a method in a trait impl
     pub fn parse_method_with_outer_attributes(&mut self) -> P<Method> {
         let attrs = self.parse_outer_attributes();
         let visa = self.parse_visibility();
-        self.parse_method(attrs, visa)
+        self.parse_method(attrs, visa, true)
     }
 
     fn complain_if_pub_macro(&mut self, visa: Visibility, span: Span) {
@@ -4696,7 +4701,8 @@ impl<'a> Parser<'a> {
     /// Parse a method in a trait impl, starting with `attrs` attributes.
     pub fn parse_method(&mut self,
                         attrs: Vec<Attribute>,
-                        visa: Visibility)
+                        visa: Visibility,
+                        is_trait_impl: bool)
                         -> P<Method> {
         let lo = self.span.lo;
 
@@ -4728,11 +4734,17 @@ impl<'a> Parser<'a> {
                 }
                 (ast::MethMac(m), self.span.hi, attrs)
             } else {
-                let unsafety = self.parse_unsafety();
-                let abi = if self.eat_keyword(keywords::Extern) {
-                    self.parse_opt_abi().unwrap_or(abi::C)
+                let is_const_fn = !is_trait_impl && self.eat_keyword(keywords::Const);
+                let (constness, unsafety, abi) = if is_const_fn {
+                    (Constness::Const, Unsafety::Normal, abi::Rust)
                 } else {
-                    abi::Rust
+                    let unsafety = self.parse_unsafety();
+                    let abi = if self.eat_keyword(keywords::Extern) {
+                        self.parse_opt_abi().unwrap_or(abi::C)
+                    } else {
+                        abi::Rust
+                    };
+                    (Constness::NotConst, unsafety, abi)
                 };
                 self.expect_keyword(keywords::Fn);
                 let ident = self.parse_ident();
@@ -4750,6 +4762,7 @@ impl<'a> Parser<'a> {
                                abi,
                                explicit_self,
                                unsafety,
+                               constness,
                                decl,
                                body,
                                visa),
@@ -4792,7 +4805,8 @@ impl<'a> Parser<'a> {
         (ident, ItemTrait(unsafety, tps, bounds, meths), None)
     }
 
-    fn parse_impl_items(&mut self) -> (Vec<ImplItem>, Vec<Attribute>) {
+    fn parse_impl_items(&mut self, is_trait_impl: bool)
+                        -> (Vec<ImplItem>, Vec<Attribute>) {
         let mut impl_items = Vec::new();
         self.expect(&token::OpenDelim(token::Brace));
         let (inner_attrs, mut method_attrs) =
@@ -4811,7 +4825,8 @@ impl<'a> Parser<'a> {
             } else {
                 impl_items.push(MethodImplItem(self.parse_method(
                             method_attrs,
-                            vis)));
+                            vis,
+                            is_trait_impl)));
             }
             method_attrs = vec![];
         }
@@ -4884,7 +4899,7 @@ impl<'a> Parser<'a> {
                 ty = self.parse_ty_sum();
             }
             self.parse_where_clause(&mut generics);
-            let (impl_items, attrs) = self.parse_impl_items();
+            let (impl_items, attrs) = self.parse_impl_items(opt_trait.is_some());
 
             (ast_util::impl_pretty_name(&opt_trait, Some(&*ty)),
              ItemImpl(unsafety, polarity, generics, opt_trait, ty, impl_items),
@@ -5691,7 +5706,7 @@ impl<'a> Parser<'a> {
                 // EXTERN FUNCTION ITEM
                 let abi = opt_abi.unwrap_or(abi::C);
                 let (ident, item_, extra_attrs) =
-                    self.parse_item_fn(Unsafety::Normal, abi);
+                    self.parse_item_fn(Unsafety::Normal, Constness::NotConst, abi);
                 let last_span = self.last_span;
                 let item = self.mk_item(lo,
                                         last_span.hi,
@@ -5730,6 +5745,21 @@ impl<'a> Parser<'a> {
             return Ok(item);
         }
         if self.eat_keyword(keywords::Const) {
+            if self.check_keyword(keywords::Fn) {
+                // CONST FUNCTION ITEM
+                self.bump();
+                let (ident, item_, extra_attrs) =
+                    self.parse_item_fn(Unsafety::Normal, Constness::Const, abi::Rust);
+                let last_span = self.last_span;
+                let item = self.mk_item(lo,
+                                        last_span.hi,
+                                        ident,
+                                        item_,
+                                        visibility,
+                                        maybe_append(attrs, extra_attrs));
+                return Ok(item);
+            }
+
             // CONST ITEM
             if self.eat_keyword(keywords::Mut) {
                 let last_span = self.last_span;
@@ -5783,7 +5813,7 @@ impl<'a> Parser<'a> {
             // FUNCTION ITEM
             self.bump();
             let (ident, item_, extra_attrs) =
-                self.parse_item_fn(Unsafety::Normal, abi::Rust);
+                self.parse_item_fn(Unsafety::Normal, Constness::NotConst, abi::Rust);
             let last_span = self.last_span;
             let item = self.mk_item(lo,
                                     last_span.hi,
@@ -5804,7 +5834,7 @@ impl<'a> Parser<'a> {
             };
             self.expect_keyword(keywords::Fn);
             let (ident, item_, extra_attrs) =
-                self.parse_item_fn(Unsafety::Unsafe, abi);
+                self.parse_item_fn(Unsafety::Unsafe, Constness::NotConst, abi);
             let last_span = self.last_span;
             let item = self.mk_item(lo,
                                     last_span.hi,

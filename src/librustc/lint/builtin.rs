@@ -978,7 +978,7 @@ impl LintPass for NonSnakeCase {
                     => self.check_snake_case(cx, "trait method", ident, span),
                 _ => (),
             },
-            visit::FkItemFn(ident, _, _, _)
+            visit::FkItemFn(ident, _, _, _, _)
                 => self.check_snake_case(cx, "function", ident, span),
             _ => (),
         }
@@ -1309,11 +1309,11 @@ impl LintPass for UnsafeCode {
     fn check_fn(&mut self, cx: &Context, fk: visit::FnKind, _: &ast::FnDecl,
                 _: &ast::Block, span: Span, _: ast::NodeId) {
         match fk {
-            visit::FkItemFn(_, _, ast::Unsafety::Unsafe, _) =>
+            visit::FkItemFn(_, _, ast::Unsafety::Unsafe, _, _) =>
                 cx.span_lint(UNSAFE_CODE, span, "declaration of an `unsafe` function"),
 
             visit::FkMethod(_, _, m) => {
-                if let ast::Method_::MethDecl(_, _, _, _, ast::Unsafety::Unsafe, _, _, _) = m.node {
+                if let ast::Method_::MethDecl(_, _, _, _, ast::Unsafety::Unsafe, _, _, _, _) = m.node {
                     cx.span_lint(UNSAFE_CODE, m.span, "implementation of an `unsafe` method")
                 }
             },
@@ -1794,7 +1794,7 @@ impl LintPass for UnconditionalRecursion {
                               ast::NodeId, ast::NodeId, ast::Ident, ast::NodeId) -> bool;
 
         let (name, checker) = match fn_kind {
-            visit::FkItemFn(name, _, _, _) => (name, id_refers_to_this_fn as F),
+            visit::FkItemFn(name, _, _, _, _) => (name, id_refers_to_this_fn as F),
             visit::FkMethod(name, _, _) => (name, id_refers_to_this_method as F),
             // closures can't recur, so they don't matter.
             visit::FkFnBlock => return

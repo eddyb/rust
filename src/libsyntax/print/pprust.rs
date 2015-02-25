@@ -380,11 +380,15 @@ pub fn ident_to_string(id: &ast::Ident) -> String {
     $to_string(|s| s.print_ident(*id))
 }
 
-pub fn fun_to_string(decl: &ast::FnDecl, unsafety: ast::Unsafety, name: ast::Ident,
-                  opt_explicit_self: Option<&ast::ExplicitSelf_>,
-                  generics: &ast::Generics) -> String {
+pub fn fun_to_string(decl: &ast::FnDecl,
+                     unsafety: ast::Unsafety,
+                     constness: ast::Constness,
+                     name: ast::Ident,
+                     opt_explicit_self: Option<&ast::ExplicitSelf_>,
+                     generics: &ast::Generics)
+                     -> String {
     $to_string(|s| {
-        try!(s.print_fn(decl, Some(unsafety), abi::Rust,
+        try!(s.print_fn(decl, unsafety, constness, abi::Rust,
                         name, generics, opt_explicit_self, ast::Inherited));
         try!(s.end()); // Close the head box
         s.end() // Close the outer box
@@ -768,7 +772,9 @@ impl<'a> State<'a> {
         try!(self.print_outer_attributes(&item.attrs));
         match item.node {
             ast::ForeignItemFn(ref decl, ref generics) => {
-                try!(self.print_fn(&**decl, None, abi::Rust, item.ident, generics,
+                try!(self.print_fn(&**decl, ast::Unsafety::Normal,
+                                   ast::Constness::NotConst,
+                                   abi::Rust, item.ident, generics,
                                    None, item.vis));
                 try!(self.end()); // end head-ibox
                 try!(word(&mut self.s, ";"));
@@ -868,10 +874,11 @@ impl<'a> State<'a> {
                 try!(word(&mut self.s, ";"));
                 try!(self.end()); // end the outer cbox
             }
-            ast::ItemFn(ref decl, unsafety, abi, ref typarams, ref body) => {
+            ast::ItemFn(ref decl, unsafety, constness, abi, ref typarams, ref body) => {
                 try!(self.print_fn(
                     &**decl,
-                    Some(unsafety),
+                    unsafety,
+                    constness,
                     abi,
                     item.ident,
                     typarams,
@@ -1281,11 +1288,13 @@ impl<'a> State<'a> {
                           abi,
                           ref explicit_self,
                           unsafety,
+                          constness,
                           ref decl,
                           ref body,
                           vis) => {
                 try!(self.print_fn(&**decl,
-                                   Some(unsafety),
+                                   unsafety,
+                                   constness,
                                    abi,
                                    ident,
                                    generics,
@@ -2326,14 +2335,15 @@ impl<'a> State<'a> {
 
     pub fn print_fn(&mut self,
                     decl: &ast::FnDecl,
-                    unsafety: Option<ast::Unsafety>,
+                    unsafety: ast::Unsafety,
+                    constness: ast::Constness,
                     abi: abi::Abi,
                     name: ast::Ident,
                     generics: &ast::Generics,
                     opt_explicit_self: Option<&ast::ExplicitSelf_>,
                     vis: ast::Visibility) -> IoResult<()> {
         try!(self.head(""));
-        try!(self.print_fn_header_info(unsafety, abi, vis));
+        try!(self.print_fn_header_info(unsafety, constness, abi, vis));
         try!(self.nbsp());
         try!(self.print_ident(name));
         try!(self.print_generics(generics));
@@ -2707,7 +2717,9 @@ impl<'a> State<'a> {
                        opt_explicit_self: Option<&ast::ExplicitSelf_>)
                        -> IoResult<()> {
         try!(self.ibox(indent_unit));
-        try!(self.print_fn_header_info(Some(unsafety), abi, ast::Inherited));
+        try!(self.print_fn_header_info(unsafety,
+                                       ast::Constness::NotConst,
+                                       abi, ast::Inherited));
 
         match id {
             Some(id) => {
@@ -2942,14 +2954,6 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn print_opt_unsafety(&mut self,
-                            opt_unsafety: Option<ast::Unsafety>) -> IoResult<()> {
-        match opt_unsafety {
-            Some(unsafety) => self.print_unsafety(unsafety),
-            None => Ok(())
-        }
-    }
-
     pub fn print_opt_abi_and_extern_if_nondefault(&mut self,
                                                   opt_abi: Option<abi::Abi>)
         -> IoResult<()> {
@@ -2975,11 +2979,17 @@ impl<'a> State<'a> {
     }
 
     pub fn print_fn_header_info(&mut self,
-                                opt_unsafety: Option<ast::Unsafety>,
+                                unsafety: ast::Unsafety,
+                                constness: ast::Constness,
                                 abi: abi::Abi,
                                 vis: ast::Visibility) -> IoResult<()> {
         try!(word(&mut self.s, &visibility_qualified(vis, "")));
-        try!(self.print_opt_unsafety(opt_unsafety));
+        try!(self.print_unsafety(unsafety));
+
+        match constness {
+            ast::Constness::NotConst => {}
+            ast::Constness::Const => try!(self.word_nbsp("unsafe"))
+        }
 
         if abi != abi::Rust {
             try!(self.word_nbsp("extern"));
@@ -3018,8 +3028,10 @@ mod test {
             variadic: false
         };
         let generics = ast_util::empty_generics();
-        assert_eq!(fun_to_string(&decl, ast::Unsafety::Normal, abba_ident,
-                               None, &generics),
+        assert_eq!(fun_to_string(&decl, ast::Unsafety::Normal,
+                                 ast::Constness::NotConst,
+                                 abba_ident,
+                                 None, &generics),
                    "fn abba()");
     }
 

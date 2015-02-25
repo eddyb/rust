@@ -275,6 +275,7 @@ pub fn trait_method_to_ty_method(method: &Method) -> TypeMethod {
                  abi,
                  ref explicit_self,
                  unsafety,
+                 _,
                  ref decl,
                  _,
                  vis) => {
@@ -513,7 +514,7 @@ impl<'a, 'v, O: IdVisitingOperation> Visitor<'v> for IdVisitor<'a, O> {
         self.operation.visit_id(node_id);
 
         match function_kind {
-            visit::FkItemFn(_, generics, _, _) |
+            visit::FkItemFn(_, generics, _, _, _) |
             visit::FkMethod(_, generics, _) => {
                 self.visit_generics_helper(generics)
             }
@@ -711,6 +712,7 @@ pub trait PostExpansionMethod {
     fn pe_abi(&self) -> Abi;
     fn pe_explicit_self<'a>(&'a self) -> &'a ast::ExplicitSelf;
     fn pe_unsafety(&self) -> ast::Unsafety;
+    fn pe_constness(&self) -> ast::Constness;
     fn pe_fn_decl<'a>(&'a self) -> &'a ast::FnDecl;
     fn pe_body<'a>(&'a self) -> &'a ast::Block;
     fn pe_vis(&self) -> ast::Visibility;
@@ -731,20 +733,21 @@ macro_rules! mf_method{
 
 
 impl PostExpansionMethod for Method {
-    mf_method! { pe_ident,ast::Ident,MethDecl(ident,_,_,_,_,_,_,_),ident }
+    mf_method! { pe_ident,ast::Ident,MethDecl(ident,_,_,_,_,_,_,_,_),ident }
     mf_method! {
         pe_generics,&'a ast::Generics,
-        MethDecl(_,ref generics,_,_,_,_,_,_),generics
+        MethDecl(_,ref generics,_,_,_,_,_,_,_),generics
     }
-    mf_method! { pe_abi,Abi,MethDecl(_,_,abi,_,_,_,_,_),abi }
+    mf_method! { pe_abi,Abi,MethDecl(_,_,abi,_,_,_,_,_,_),abi }
     mf_method! {
         pe_explicit_self,&'a ast::ExplicitSelf,
-        MethDecl(_,_,_,ref explicit_self,_,_,_,_),explicit_self
+        MethDecl(_,_,_,ref explicit_self,_,_,_,_,_),explicit_self
     }
-    mf_method! { pe_unsafety,ast::Unsafety,MethDecl(_,_,_,_,unsafety,_,_,_),unsafety }
-    mf_method! { pe_fn_decl,&'a ast::FnDecl,MethDecl(_,_,_,_,_,ref decl,_,_),&**decl }
-    mf_method! { pe_body,&'a ast::Block,MethDecl(_,_,_,_,_,_,ref body,_),&**body }
-    mf_method! { pe_vis,ast::Visibility,MethDecl(_,_,_,_,_,_,_,vis),vis }
+    mf_method! { pe_unsafety,ast::Unsafety,MethDecl(_,_,_,_,unsafety,_,_,_,_),unsafety }
+    mf_method! { pe_constness,ast::Constness,MethDecl(_,_,_,_,_,constness,_,_,_),constness }
+    mf_method! { pe_fn_decl,&'a ast::FnDecl,MethDecl(_,_,_,_,_,_,ref decl,_,_),&**decl }
+    mf_method! { pe_body,&'a ast::Block,MethDecl(_,_,_,_,_,_,_,ref body,_),&**body }
+    mf_method! { pe_vis,ast::Visibility,MethDecl(_,_,_,_,_,_,_,_,vis),vis }
 }
 
 #[cfg(test)]

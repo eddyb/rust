@@ -24,7 +24,7 @@ use syntax::ast;
 use syntax::ast::{Attribute, Block, Crate, DefId, FnDecl, NodeId, Variant};
 use syntax::ast::{Item, RequiredMethod, ProvidedMethod, TraitItem};
 use syntax::ast::{TypeMethod, Method, Generics, StructField, TypeTraitItem};
-use syntax::ast_util::is_local;
+use syntax::ast_util::{is_local, PostExpansionMethod};
 use syntax::attr::{Stability, AttrMetaMethods};
 use syntax::visit::{FnKind, FkMethod, Visitor};
 use syntax::feature_gate::emit_feature_warn;
@@ -327,10 +327,7 @@ pub fn check_item(tcx: &ty::ctxt, item: &ast::Item, warn_about_defns: bool,
             for impl_item in impl_items {
                 let (ident, span) = match *impl_item {
                     ast::MethodImplItem(ref method) => {
-                        (match method.node {
-                            ast::MethDecl(ident, _, _, _, _, _, _, _) => ident,
-                            ast::MethMac(..) => unreachable!(),
-                        }, method.span)
+                        (method.pe_ident(), method.span)
                     }
                     ast::TypeImplItem(ref typedef) => {
                         (typedef.ident, typedef.span)
