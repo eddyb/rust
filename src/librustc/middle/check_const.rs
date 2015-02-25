@@ -171,11 +171,11 @@ impl<'a, 'tcx> CheckCrateVisitor<'a, 'tcx> {
         if mode == Mode::ConstFn {
             for arg in &fd.inputs {
                 match arg.pat.node {
-                    ast::PatIdent(ast::BindByValue(ast::MutImmutable), _, None) => {}
+                    ast::PatIdent(ast::BindByValue(_), _, None) => {}
                     _ => {
                         span_err!(self.tcx.sess, arg.pat.span, E0022,
                                   "arguments of constant functions can only \
-                                   be immutable by-value bindings");
+                                   be simple by-value bindings");
                     }
                 }
             }
