@@ -9,24 +9,24 @@
 // except according to those terms.
 
 pub fn main() {
-  let mut i = 0_usize;
+  let mut i = 0;
   loop {
     println!("a");
-    i += 1_usize;
-    if i == 10_usize {
+    i += 1;
+    if i == 10 {
       break;
     }
   }
-  assert_eq!(i, 10_usize);
+  assert_eq!(i, 10);
   let mut is_even = false;
   loop {
-    if i == 21_usize {
+    if i == 21 {
         break;
     }
     println!("b");
     is_even = false;
-    i += 1_usize;
-    if i % 2_usize != 0_usize {
+    i += 1;
+    if i % 2 != 0 {
         continue;
     }
     is_even = true;
@@ -34,12 +34,12 @@ pub fn main() {
   assert!(!is_even);
   loop {
     println!("c");
-    if i == 22_usize {
+    if i == 22 {
         break;
     }
     is_even = false;
-    i += 1_usize;
-    if i % 2_usize != 0_usize {
+    i += 1;
+    if i % 2 != 0 {
         continue;
     }
     is_even = true;

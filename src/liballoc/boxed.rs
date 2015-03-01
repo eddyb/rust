@@ -136,7 +136,7 @@ impl<T : ?Sized> Box<T> {
 /// ```
 /// use std::boxed;
 ///
-/// let seventeen = Box::new(17u32);
+/// let seventeen = Box::new(17);
 /// let raw = unsafe { boxed::into_raw(seventeen) };
 /// let boxed_again = unsafe { Box::from_raw(raw) };
 /// ```

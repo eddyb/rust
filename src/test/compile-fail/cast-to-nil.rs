@@ -9,4 +9,4 @@
 // except according to those terms.
 
 // error-pattern: non-scalar cast: `u32` as `()`
-fn main() { let u = 0u32 as (); }
+fn main() { let u = 0 as (); }

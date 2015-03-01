@@ -125,7 +125,7 @@ fn main() {
         the_fourth_field: "I'm so pretty, oh so pretty..."
     };
 
-    let tuple = ( true, 103u32, "blub" );
+    let tuple = ( true, 103, "blub" );
 
     let tuple_struct = TupleStruct(-104.5, 105);
 
@@ -139,7 +139,7 @@ fn main() {
     let mixed_enum_tuple_var = MixedEnumTupleVar(106, 107, false);
     let mixed_enum_struct_var = MixedEnumStructVar { field1: 108.5, field2: 109 };
 
-    let some = Some(110_usize);
+    let some = Some(110);
     let none: Option<int> = None;
     let some_fat = Some("abc");
     let none_fat: Option<&'static str> = None;

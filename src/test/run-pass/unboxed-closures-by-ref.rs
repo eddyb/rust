@@ -25,8 +25,8 @@ fn call_fn_once<F: FnOnce()>(f: F) {
 }
 
 fn main() {
-    let mut x = 0_usize;
-    let y = 2_usize;
+    let mut x = 0;
+    let y = 2;
 
     call_fn(|| assert_eq!(x, 0));
     call_fn_mut(|| x += y);

@@ -11,12 +11,12 @@
 
 #[cfg(any(target_arch = "x86", target_arch = "arm"))]
 fn target() {
-    assert_eq!(-1000 as uint >> 3_usize, 536870787_usize);
+    assert_eq!(-1000 as uint >> 3, 536870787);
 }
 
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn target() {
-    assert_eq!(-1000 as uint >> 3_usize, 2305843009213693827_usize);
+    assert_eq!(-1000 as uint >> 3, 2305843009213693827);
 }
 
 fn general() {

@@ -26,30 +26,30 @@ pub fn f2<T: Foo>(a: T) -> T::A {
 }
 
 pub fn f1_int_int() {
-    f1(2i32, 4i32);
+    f1(2, 4);
     //~^ ERROR mismatched types
     //~| expected u32
     //~| found i32
 }
 
 pub fn f1_int_uint() {
-    f1(2i32, 4u32);
+    f1(2, 4);
 }
 
 pub fn f1_uint_uint() {
-    f1(2u32, 4u32);
+    f1(2, 4);
     //~^ ERROR the trait `Foo` is not implemented
     //~| ERROR the trait `Foo` is not implemented
 }
 
 pub fn f1_uint_int() {
-    f1(2u32, 4i32);
+    f1(2, 4);
     //~^ ERROR the trait `Foo` is not implemented
     //~| ERROR the trait `Foo` is not implemented
 }
 
 pub fn f2_int() {
-    let _: i32 = f2(2i32);
+    let _: i32 = f2(2);
     //~^ ERROR mismatched types
     //~| expected `i32`
     //~| found `u32`

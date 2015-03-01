@@ -11,17 +11,17 @@
 // ignore-lexer-test FIXME #15877
 
 pub fn main() {
-    match 5_usize {
-      1_usize...5_usize => {}
+    match 5 {
+      1...5 => {}
       _ => panic!("should match range"),
     }
-    match 5_usize {
-      6_usize...7_usize => panic!("shouldn't match range"),
+    match 5 {
+      6...7 => panic!("shouldn't match range"),
       _ => {}
     }
-    match 5_usize {
-      1_usize => panic!("should match non-first range"),
-      2_usize...6_usize => {}
+    match 5 {
+      1 => panic!("should match non-first range"),
+      2...6 => {}
       _ => panic!("math is broken")
     }
     match 'c' {

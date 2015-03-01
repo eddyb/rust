@@ -81,9 +81,9 @@ impl Sudoku {
     }
 
     pub fn write(&self, writer: &mut old_io::Writer) {
-        for row in 0u8..9u8 {
+        for row in 0..9 {
             write!(writer, "{}", self.grid[row as uint][0]);
-            for col in 1u8..9u8 {
+            for col in 1..9 {
                 write!(writer, " {}", self.grid[row as uint][col as uint]);
             }
             write!(writer, "\n");

@@ -25,13 +25,13 @@
 //! ```
 //! let ys: Vec<i32> = vec![];
 //!
-//! let zs = vec![1i32, 2, 3, 4, 5];
+//! let zs = vec![1, 2, 3, 4, 5];
 //! ```
 //!
 //! Push:
 //!
 //! ```
-//! let mut xs = vec![1i32, 2];
+//! let mut xs = vec![1, 2];
 //!
 //! xs.push(3);
 //! ```
@@ -39,7 +39,7 @@
 //! And pop:
 //!
 //! ```
-//! let mut xs = vec![1i32, 2];
+//! let mut xs = vec![1, 2];
 //!
 //! let two = xs.pop();
 //! ```
@@ -1975,7 +1975,7 @@ mod tests {
 
     #[test]
     fn test_as_vec() {
-        let xs = [1u8, 2u8, 3u8];
+        let xs = [1, 2, 3];
         assert_eq!(&**as_vec(&xs), xs);
     }
 

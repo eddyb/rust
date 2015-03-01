@@ -20,13 +20,13 @@ fn main(){
         box move || t.clone()
     }
 
-    let mut f = bar(42_u32);
+    let mut f = bar(42);
     assert_eq!(f.call_mut(()), 42);
 
     let mut f = bar("forty-two");
     assert_eq!(f.call_mut(()), "forty-two");
 
-    let x = 42_u32;
+    let x = 42;
     let mut f = bar(&x);
     assert_eq!(f.call_mut(()), &x);
 

@@ -16,7 +16,7 @@ fn call<F>(f: F) where F : FnOnce() {
 
 fn main() {
     let y = vec!(format!("Hello"), format!("World"));
-    let mut counter = 22_u32;
+    let mut counter = 22;
 
     call(|| {
         // Move `y`, but do not move `counter`, even though it is read

@@ -9,12 +9,12 @@
 // except according to those terms.
 
 pub fn main() {
-    let a = 0xBEEF_isize;
-    let b = 0o755_isize;
-    let c = 0b10101_isize;
-    let d = -0xBEEF_isize;
-    let e = -0o755_isize;
-    let f = -0b10101_isize;
+    let a = 0xBEEF;
+    let b = 0o755;
+    let c = 0b10101;
+    let d = -0xBEEF;
+    let e = -0o755;
+    let f = -0b10101;
 
     assert_eq!(a, 48879);
     assert_eq!(b, 493);

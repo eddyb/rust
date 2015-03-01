@@ -21,54 +21,54 @@
 fn after_return() {
     return;
     let x = "0";
-    let (ref y,z) = (1i32, 2u32);
-    match (20i32, 'c') {
+    let (ref y,z) = (1, 2);
+    match (20, 'c') {
         (a, ref b) => {}
     }
-    for a in &[111i32] {}
+    for a in &[111] {}
 }
 
 fn after_panic() {
     panic!();
     let x = "0";
-    let (ref y,z) = (1i32, 2u32);
-    match (20i32, 'c') {
+    let (ref y,z) = (1, 2);
+    match (20, 'c') {
         (a, ref b) => {}
     }
-    for a in &[111i32] {}
+    for a in &[111] {}
 }
 
 fn after_diverging_function() {
     diverge();
     let x = "0";
-    let (ref y,z) = (1i32, 2u32);
-    match (20i32, 'c') {
+    let (ref y,z) = (1, 2);
+    match (20, 'c') {
         (a, ref b) => {}
     }
-    for a in &[111i32] {}
+    for a in &[111] {}
 }
 
 fn after_break() {
     loop {
         break;
         let x = "0";
-        let (ref y,z) = (1i32, 2u32);
-        match (20i32, 'c') {
+        let (ref y,z) = (1, 2);
+        match (20, 'c') {
             (a, ref b) => {}
         }
-        for a in &[111i32] {}
+        for a in &[111] {}
     }
 }
 
 fn after_continue() {
-    for _ in 0..10i32 {
+    for _ in 0..10 {
         break;
         let x = "0";
-        let (ref y,z) = (1i32, 2u32);
-        match (20i32, 'c') {
+        let (ref y,z) = (1, 2);
+        match (20, 'c') {
             (a, ref b) => {}
         }
-        for a in &[111i32] {}
+        for a in &[111] {}
     }
 }
 

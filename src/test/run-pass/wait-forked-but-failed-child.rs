@@ -53,7 +53,7 @@ fn find_zombies() {
 fn find_zombies() { }
 
 fn main() {
-    let too_long = format!("/NoSuchCommand{:0300}", 0u8);
+    let too_long = format!("/NoSuchCommand{:0300}", 0);
 
     let _failures = (0..100).map(|_| {
         let cmd = Command::new(&too_long);

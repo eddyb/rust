@@ -19,5 +19,5 @@ impl Foo for usize {}
 impl Bar for usize {}
 
 fn main() {
-    1_usize.method(); //~ ERROR E0034
+    1.method(); //~ ERROR E0034
 }

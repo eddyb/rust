@@ -97,7 +97,7 @@ use heap::deallocate;
 /// use std::thread;
 ///
 /// fn main() {
-///     let numbers: Vec<_> = (0..100u32).map(|i| i as f32).collect();
+///     let numbers: Vec<_> = (0..100).map(|i| i as f32).collect();
 ///     let shared_numbers = Arc::new(numbers);
 ///
 ///     for _ in 0..10 {
@@ -770,7 +770,7 @@ mod tests {
 
     #[test]
     fn test_strong_count() {
-        let a = Arc::new(0u32);
+        let a = Arc::new(0);
         assert!(strong_count(&a) == 1);
         let w = a.downgrade();
         assert!(strong_count(&a) == 1);
@@ -787,7 +787,7 @@ mod tests {
 
     #[test]
     fn test_weak_count() {
-        let a = Arc::new(0u32);
+        let a = Arc::new(0);
         assert!(strong_count(&a) == 1);
         assert!(weak_count(&a) == 0);
         let w = a.downgrade();
@@ -813,7 +813,7 @@ mod tests {
 
     #[test]
     fn show_arc() {
-        let a = Arc::new(5u32);
+        let a = Arc::new(5);
         assert_eq!(format!("{:?}", a), "5");
     }
 

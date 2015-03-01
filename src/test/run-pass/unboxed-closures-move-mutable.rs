@@ -20,19 +20,19 @@ fn set(x: &mut uint) { *x = 42; }
 
 fn main() {
     {
-        let mut x = 0_usize;
+        let mut x = 0;
         move || x += 1;
     }
     {
-        let mut x = 0_usize;
+        let mut x = 0;
         move || x += 1;
     }
     {
-        let mut x = 0_usize;
+        let mut x = 0;
         move || set(&mut x);
     }
     {
-        let mut x = 0_usize;
+        let mut x = 0;
         move || set(&mut x);
     }
 }

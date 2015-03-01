@@ -15,7 +15,7 @@
 #![feature(unboxed_closures)]
 
 fn main() {
-    let x = 2u8;
-    let y = 3u8;
+    let x = 2;
+    let y = 3;
     assert_eq!((move || x + y)(), 5);
 }

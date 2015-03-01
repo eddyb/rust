@@ -38,11 +38,11 @@ fn rename_directory() {
         let s = "hello".to_string();
         let buf = CString::new(b"hello").unwrap();
         let write_len = libc::fwrite(buf.as_ptr() as *mut _,
-                                     1_usize as libc::size_t,
-                                     (s.len() + 1_usize) as libc::size_t,
+                                     1 as libc::size_t,
+                                     (s.len() + 1) as libc::size_t,
                                      ostream);
         assert_eq!(write_len, (s.len() + 1) as libc::size_t);
-        assert_eq!(libc::fclose(ostream), (0_usize as libc::c_int));
+        assert_eq!(libc::fclose(ostream), (0 as libc::c_int));
 
         let new_path = tmpdir.join_many(&["quux", "blat"]);
         fs::mkdir_recursive(&new_path, old_io::USER_RWX);

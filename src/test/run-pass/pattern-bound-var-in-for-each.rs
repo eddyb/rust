@@ -16,13 +16,13 @@ fn foo(src: uint) {
 
     match Some(src) {
       Some(src_id) => {
-        for _i in 0_usize..10_usize {
+        for _i in 0..10 {
             let yyy = src_id;
-            assert_eq!(yyy, 0_usize);
+            assert_eq!(yyy, 0);
         }
       }
       _ => { }
     }
 }
 
-pub fn main() { foo(0_usize); }
+pub fn main() { foo(0); }

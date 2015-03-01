@@ -71,7 +71,7 @@ impl<'a> Drop for Sentinel<'a> {
 /// for _ in 0..8 {
 ///     let tx = tx.clone();
 ///     pool.execute(move|| {
-///         tx.send(1_u32).unwrap();
+///         tx.send(1).unwrap();
 ///     });
 /// }
 ///

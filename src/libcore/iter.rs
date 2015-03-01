@@ -2316,7 +2316,7 @@ impl<I: RandomAccessIterator, F> RandomAccessIterator for Inspect<I, F>
 /// // This iterator will yield up to the last Fibonacci number before the max
 /// // value of `u32`. You can simply change `u32` to `u64` in this line if
 /// // you want higher values than that.
-/// let mut fibonacci = Unfold::new((Some(0u32), Some(1u32)),
+/// let mut fibonacci = Unfold::new((Some(0), Some(1)),
 ///                                 |&mut (ref mut x2, ref mut x1)| {
 ///     // Attempt to get the next Fibonacci number
 ///     // `x1` will be `None` if previously overflowed.

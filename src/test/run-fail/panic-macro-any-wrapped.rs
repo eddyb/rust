@@ -14,5 +14,5 @@
 #![feature(box_syntax)]
 
 fn main() {
-    panic!(box 612_i64);
+    panic!(box 612);
 }

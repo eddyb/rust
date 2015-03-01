@@ -29,13 +29,13 @@ fn check_ty() {
 }
 
 fn check_pat() {
-    let     &_ =         & 1_usize;
-    let    &&_ =       & & 1_usize;
-    let   &&&_ =     & & & 1_usize;
-    let  & &&_ =     & & & 1_usize;
-    let  &&&&_ =   & & & & 1_usize;
-    let & &&&_ =   & & & & 1_usize;
-    let &&&&&_ = & & & & & 1_usize;
+    let     &_ =         & 1;
+    let    &&_ =       & & 1;
+    let   &&&_ =     & & & 1;
+    let  & &&_ =     & & & 1;
+    let  &&&&_ =   & & & & 1;
+    let & &&&_ =   & & & & 1;
+    let &&&&&_ = & & & & & 1;
 }
 
 pub fn main() {}

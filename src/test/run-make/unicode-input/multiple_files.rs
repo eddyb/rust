@@ -22,7 +22,7 @@ fn random_char() -> char {
     let mut rng = thread_rng();
     // a subset of the XID_start Unicode table (ensuring that the
     // compiler doesn't fail with an "unrecognised token" error)
-    let (lo, hi): (u32, u32) = match rng.gen_range(1u32, 4u32 + 1) {
+    let (lo, hi): (u32, u32) = match rng.gen_range(1, 4 + 1) {
         1 => (0x41, 0x5a),
         2 => (0xf8, 0x1ba),
         3 => (0x1401, 0x166c),

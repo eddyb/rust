@@ -477,7 +477,7 @@ fn test_rev() {
 
 #[test]
 fn test_cloned() {
-    let xs = [2u8, 4, 6, 8];
+    let xs = [2, 4, 6, 8];
 
     let mut it = xs.iter().cloned();
     assert_eq!(it.len(), 4);

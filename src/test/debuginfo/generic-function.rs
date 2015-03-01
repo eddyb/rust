@@ -86,7 +86,7 @@ fn dup_tup<T0: Clone, T1: Clone>(t0: &T0, t1: &T1) -> ((T0, T1), (T1, T0)) {
 fn main() {
 
     let _ = dup_tup(&1, &2.5f64);
-    let _ = dup_tup(&3.5f64, &4_u16);
+    let _ = dup_tup(&3.5f64, &4);
     let _ = dup_tup(&5, &Struct { a: 6, b: 7.5 });
 }
 

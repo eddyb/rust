@@ -12,7 +12,7 @@
 // and doesn't ICE.
 
 fn main() {
-    for &&x in Some(&0_usize).iter() {
+    for &&x in Some(&0).iter() {
         assert_eq!(x, 0)
     }
 }

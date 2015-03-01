@@ -26,13 +26,13 @@
 #![omit_gdb_pretty_printer_section]
 
 fn function_with_debuginfo() {
-    let abc = 10_usize;
+    let abc = 10;
     return (); // #break
 }
 
 #[no_debug]
 fn function_without_debuginfo() {
-    let abc = -57i32;
+    let abc = -57;
     return (); // #break
 }
 

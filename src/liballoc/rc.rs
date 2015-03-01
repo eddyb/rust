@@ -874,7 +874,7 @@ mod tests {
 
     #[test]
     fn test_strong_count() {
-        let a = Rc::new(0u32);
+        let a = Rc::new(0);
         assert!(strong_count(&a) == 1);
         let w = a.downgrade();
         assert!(strong_count(&a) == 1);
@@ -891,7 +891,7 @@ mod tests {
 
     #[test]
     fn test_weak_count() {
-        let a = Rc::new(0u32);
+        let a = Rc::new(0);
         assert!(strong_count(&a) == 1);
         assert!(weak_count(&a) == 0);
         let w = a.downgrade();

@@ -37,6 +37,6 @@ fn check<T>(x: Option<T>) -> (i32, i32)
 }
 
 fn main() {
-    assert_eq!(check(Some(23u32)), (23, 22));
+    assert_eq!(check(Some(23)), (23, 22));
     assert_eq!(check(Some(23)), (23, 22));
 }

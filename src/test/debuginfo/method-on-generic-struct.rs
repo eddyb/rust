@@ -139,7 +139,7 @@ impl<T> Struct<T> {
 }
 
 fn main() {
-    let stack = Struct { x: (8888_u32, -8888_i32) };
+    let stack = Struct { x: (8888, -8888) };
     let _ = stack.self_by_ref(-1, -2);
     let _ = stack.self_by_val(-3, -4);
 

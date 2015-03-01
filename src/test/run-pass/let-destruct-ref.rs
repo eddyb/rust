@@ -9,7 +9,7 @@
 // except according to those terms.
 
 pub fn main() {
-    let x = 3_usize;
+    let x = 3;
     let ref y = x;
     assert_eq!(x, *y);
 }

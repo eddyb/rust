@@ -34,8 +34,8 @@ impl uint_utils for uint {
         self.to_string()
     }
     fn multi<F>(&self, mut f: F) where F: FnMut(uint) {
-        let mut c = 0_usize;
-        while c < *self { f(c); c += 1_usize; }
+        let mut c = 0;
+        while c < *self { f(c); c += 1; }
     }
 }
 
@@ -58,15 +58,15 @@ impl<T> vec_utils<T> for Vec<T> {
 }
 
 pub fn main() {
-    assert_eq!(10_usize.plus(), 30);
+    assert_eq!(10.plus(), 30);
     assert_eq!(("hi".to_string()).plus(), 200);
 
     assert_eq!((vec!(1)).length_().str(), "1".to_string());
     let vect = vec!(3, 4).map_(|a| *a + 4);
     assert_eq!(vect[0], 7);
-    let vect = (vec!(3, 4)).map_::<uint, _>(|a| *a as uint + 4_usize);
-    assert_eq!(vect[0], 7_usize);
-    let mut x = 0_usize;
-    10_usize.multi(|_n| x += 2_usize );
-    assert_eq!(x, 20_usize);
+    let vect = (vec!(3, 4)).map_::<uint, _>(|a| *a as uint + 4);
+    assert_eq!(vect[0], 7);
+    let mut x = 0;
+    10.multi(|_n| x += 2 );
+    assert_eq!(x, 20);
 }

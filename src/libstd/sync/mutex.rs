@@ -88,7 +88,7 @@ use fmt;
 /// use std::sync::{Arc, Mutex};
 /// use std::thread;
 ///
-/// let lock = Arc::new(Mutex::new(0_u32));
+/// let lock = Arc::new(Mutex::new(0));
 /// let lock2 = lock.clone();
 ///
 /// let _ = thread::spawn(move || -> () {

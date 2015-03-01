@@ -23,7 +23,7 @@ pub fn main() {
     };
     assert_eq!(y_message, "lots".to_string());
 
-    let z = 1u64;
+    let z = 1;
     let z_message = match z {
       0 ... 1    => { "not many".to_string() }
       _          => { "lots".to_string() }

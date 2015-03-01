@@ -215,7 +215,7 @@ impl<'tcx> Expectation<'tcx> {
     // can lead us astray. Consider for example `if cond
     // {22} else {c} as u8` -- if we propagate the
     // "castable to u8" constraint to 22, it will pick the
-    // type 22u8, which is overly constrained (c might not
+    // type 22, which is overly constrained (c might not
     // be a u8). In effect, the problem is that the
     // "castable to" expectation is not the tightest thing
     // we can say, so we want to drop it in this case.
