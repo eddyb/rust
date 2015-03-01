@@ -13,7 +13,7 @@
 use std::cell::RefCell;
 
 fn main() {
-    let mut y = 1_usize;
+    let mut y = 1;
     let c = RefCell::new(vec![]);
     c.push(box || y = 0);
     c.push(box || y = 0);
@@ -21,7 +21,7 @@ fn main() {
 }
 
 fn ufcs() {
-    let mut y = 1_usize;
+    let mut y = 1;
     let c = RefCell::new(vec![]);
 
     Push::push(&c, box || y = 0);

@@ -66,7 +66,7 @@ pub fn main() {
             f: [T; 3]
         }
 
-        let data = box Foo_{f: [1i32, 2, 3] };
+        let data = box Foo_{f: [1, 2, 3] };
         let x: &Foo<i32> = mem::transmute(raw::Slice { len: 3, data: &*data });
         assert!(x.f.len() == 3);
         assert!(x.f[0] == 1);

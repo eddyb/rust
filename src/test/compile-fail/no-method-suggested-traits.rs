@@ -31,12 +31,12 @@ fn main() {
     // test the values themselves, and autoderef.
 
 
-    1u32.method();
+    1.method();
     //~^ HELP following traits are implemented but not in scope, perhaps add a `use` for one of them
     //~^^ ERROR does not implement
     //~^^^ HELP `foo::Bar`
     //~^^^^ HELP `no_method_suggested_traits::foo::PubPub`
-    std::rc::Rc::new(&mut Box::new(&1u32)).method();
+    std::rc::Rc::new(&mut Box::new(&1)).method();
     //~^ HELP following traits are implemented but not in scope, perhaps add a `use` for one of them
     //~^^ ERROR does not implement
     //~^^^ HELP `foo::Bar`
@@ -51,11 +51,11 @@ fn main() {
     //~^^ HELP the following trait is implemented but not in scope, perhaps add a `use` for it:
     //~^^^ HELP `foo::Bar`
 
-    1i32.method();
+    1.method();
     //~^ ERROR does not implement
     //~^^ HELP the following trait is implemented but not in scope, perhaps add a `use` for it:
     //~^^^ HELP `no_method_suggested_traits::foo::PubPub`
-    std::rc::Rc::new(&mut Box::new(&1i32)).method();
+    std::rc::Rc::new(&mut Box::new(&1)).method();
     //~^ ERROR does not implement
     //~^^ HELP the following trait is implemented but not in scope, perhaps add a `use` for it:
     //~^^^ HELP `no_method_suggested_traits::foo::PubPub`
@@ -79,11 +79,11 @@ fn main() {
     //~^^^^^^^ HELP `no_method_suggested_traits::qux::PrivPub`
     //~^^^^^^^^ HELP `no_method_suggested_traits::quz::PrivPriv`
 
-    1u64.method2();
+    1.method2();
     //~^ ERROR does not implement
     //~^^ HELP the following trait defines a method `method2`, perhaps you need to implement it
     //~^^^ HELP `foo::Bar`
-    std::rc::Rc::new(&mut Box::new(&1u64)).method2();
+    std::rc::Rc::new(&mut Box::new(&1)).method2();
     //~^ ERROR does not implement
     //~^^ HELP the following trait defines a method `method2`, perhaps you need to implement it
     //~^^^ HELP `foo::Bar`
@@ -123,8 +123,8 @@ fn main() {
     //~^^^ HELP `no_method_suggested_traits::foo::PubPub`
 
     // should have no help:
-    1_usize.method3(); //~ ERROR does not implement
-    std::rc::Rc::new(&mut Box::new(&1_usize)).method3(); //~ ERROR does not implement
+    1.method3(); //~ ERROR does not implement
+    std::rc::Rc::new(&mut Box::new(&1)).method3(); //~ ERROR does not implement
     no_method_suggested_traits::Foo.method3();  //~ ERROR does not implement
     std::rc::Rc::new(&mut Box::new(&no_method_suggested_traits::Foo)).method3();
     //~^ ERROR does not implement

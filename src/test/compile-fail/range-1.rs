@@ -12,7 +12,7 @@
 
 pub fn main() {
     // Mixed types.
-    let _ = 0u32..10i32;
+    let _ = 0..10;
     //~^ ERROR start and end of range have incompatible types
 
     // Float => does not implement iterator.
@@ -20,7 +20,7 @@ pub fn main() {
     //~^ ERROR the trait `core::num::Int` is not implemented for the type `f32`
 
     // Unsized type.
-    let arr: &[_] = &[1u32, 2, 3];
+    let arr: &[_] = &[1, 2, 3];
     let range = *arr..;
     //~^ ERROR the trait `core::marker::Sized` is not implemented
 }

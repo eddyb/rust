@@ -418,7 +418,7 @@ pub fn eval_const_expr_partial<'tcx>(tcx: &ty::ctxt<'tcx>,
       ast::ExprBlock(ref block) => {
         match block.expr {
             Some(ref expr) => eval_const_expr_partial(tcx, &**expr, ety),
-            None => Ok(const_int(0i64))
+            None => Ok(const_int(0))
         }
       }
       ast::ExprTupField(ref base, index) => {

@@ -15,6 +15,6 @@ fn foo(x: &uint) -> &uint { x }
 fn bar(x: &uint) -> uint { *x }
 
 pub fn main() {
-    let p = box 3_usize;
+    let p = box 3;
     assert_eq!(bar(foo(&*p)), 3);
 }

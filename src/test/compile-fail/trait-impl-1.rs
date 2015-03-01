@@ -23,6 +23,6 @@ impl<'a> T+'a {
 impl T for i32 {}
 
 fn main() {
-    let x = &42i32;
+    let x = &42;
     x.foo(); //~ERROR: type `&i32` does not implement any method in scope named `foo`
 }

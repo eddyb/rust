@@ -2204,11 +2204,11 @@ pub mod consts {
             pub const _IOFBF : c_int = 0;
             pub const _IONBF : c_int = 4;
             pub const _IOLBF : c_int = 64;
-            pub const BUFSIZ : c_uint = 512_u32;
-            pub const FOPEN_MAX : c_uint = 20_u32;
-            pub const FILENAME_MAX : c_uint = 260_u32;
-            pub const L_tmpnam : c_uint = 16_u32;
-            pub const TMP_MAX : c_uint = 32767_u32;
+            pub const BUFSIZ : c_uint = 512;
+            pub const FOPEN_MAX : c_uint = 20;
+            pub const FILENAME_MAX : c_uint = 260;
+            pub const L_tmpnam : c_uint = 16;
+            pub const TMP_MAX : c_uint = 32767;
 
             pub const WSAEINTR: c_int = 10004;
             pub const WSAEBADF: c_int = 10009;
@@ -2585,11 +2585,11 @@ pub mod consts {
             pub const _IOFBF : c_int = 0;
             pub const _IONBF : c_int = 2;
             pub const _IOLBF : c_int = 1;
-            pub const BUFSIZ : c_uint = 8192_u32;
-            pub const FOPEN_MAX : c_uint = 16_u32;
-            pub const FILENAME_MAX : c_uint = 4096_u32;
-            pub const L_tmpnam : c_uint = 20_u32;
-            pub const TMP_MAX : c_uint = 238328_u32;
+            pub const BUFSIZ : c_uint = 8192;
+            pub const FOPEN_MAX : c_uint = 16;
+            pub const FILENAME_MAX : c_uint = 4096;
+            pub const L_tmpnam : c_uint = 20;
+            pub const TMP_MAX : c_uint = 238328;
         }
         pub mod c99 {
         }
@@ -3451,11 +3451,11 @@ pub mod consts {
             pub const _IOFBF : c_int = 0;
             pub const _IONBF : c_int = 2;
             pub const _IOLBF : c_int = 1;
-            pub const BUFSIZ : c_uint = 1024_u32;
-            pub const FOPEN_MAX : c_uint = 20_u32;
-            pub const FILENAME_MAX : c_uint = 1024_u32;
-            pub const L_tmpnam : c_uint = 1024_u32;
-            pub const TMP_MAX : c_uint = 308915776_u32;
+            pub const BUFSIZ : c_uint = 1024;
+            pub const FOPEN_MAX : c_uint = 20;
+            pub const FILENAME_MAX : c_uint = 1024;
+            pub const L_tmpnam : c_uint = 1024;
+            pub const TMP_MAX : c_uint = 308915776;
         }
         pub mod c99 {
         }
@@ -3859,11 +3859,11 @@ pub mod consts {
             pub const _IOFBF : c_int = 0;
             pub const _IONBF : c_int = 2;
             pub const _IOLBF : c_int = 1;
-            pub const BUFSIZ : c_uint = 1024_u32;
-            pub const FOPEN_MAX : c_uint = 20_u32;
-            pub const FILENAME_MAX : c_uint = 1024_u32;
-            pub const L_tmpnam : c_uint = 1024_u32;
-            pub const TMP_MAX : c_uint = 308915776_u32;
+            pub const BUFSIZ : c_uint = 1024;
+            pub const FOPEN_MAX : c_uint = 20;
+            pub const FILENAME_MAX : c_uint = 1024;
+            pub const L_tmpnam : c_uint = 1024;
+            pub const TMP_MAX : c_uint = 308915776;
         }
         pub mod c99 {
         }
@@ -4237,11 +4237,11 @@ pub mod consts {
             pub const _IOFBF : c_int = 0;
             pub const _IONBF : c_int = 2;
             pub const _IOLBF : c_int = 1;
-            pub const BUFSIZ : c_uint = 1024_u32;
-            pub const FOPEN_MAX : c_uint = 20_u32;
-            pub const FILENAME_MAX : c_uint = 1024_u32;
-            pub const L_tmpnam : c_uint = 1024_u32;
-            pub const TMP_MAX : c_uint = 308915776_u32;
+            pub const BUFSIZ : c_uint = 1024;
+            pub const FOPEN_MAX : c_uint = 20;
+            pub const FILENAME_MAX : c_uint = 1024;
+            pub const L_tmpnam : c_uint = 1024;
+            pub const TMP_MAX : c_uint = 308915776;
         }
         pub mod c99 {
         }
