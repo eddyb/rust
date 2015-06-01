@@ -719,6 +719,9 @@ impl<'a> State<'a> {
             ast::TyPolyTraitRef(ref bounds) => {
                 try!(self.print_bounds("", &bounds[..]));
             }
+            ast::TyAnon(ref bounds) => {
+                try!(self.print_bounds("impl ", &bounds[..]));
+            }
             ast::TyFixedLengthVec(ref ty, ref v) => {
                 try!(word(&mut self.s, "["));
                 try!(self.print_type(&**ty));

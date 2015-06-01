@@ -1433,6 +1433,9 @@ pub enum Type {
 
     // for<'a> Foo(&'a)
     PolyTraitRef(Vec<TyParamBound>),
+
+    // impl FooTrait+BarTrait
+    Anon(Vec<TyParamBound>)
 }
 
 #[derive(Clone, RustcEncodable, RustcDecodable, PartialEq, Eq, Hash, Copy, Debug)]
@@ -1604,6 +1607,9 @@ impl Clean<Type> for ast::Ty {
             TyParen(ref ty) => ty.clean(cx),
             TyPolyTraitRef(ref bounds) => {
                 PolyTraitRef(bounds.clean(cx))
+            },
+            TyAnon(ref bounds) => {
+                Anon(bounds.clean(cx))
             },
             TyInfer(..) => {
                 Infer

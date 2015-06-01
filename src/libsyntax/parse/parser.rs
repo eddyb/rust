@@ -1044,7 +1044,7 @@ impl<'a> Parser<'a> {
     pub fn parse_for_in_type(&mut self) -> PResult<Ty_> {
         /*
         Parses whatever can come after a `for` keyword in a type.
-        The `for` has already been consumed.
+        The `for` hasn't been consumed.
 
         Deprecated:
 
@@ -1082,6 +1082,22 @@ impl<'a> Parser<'a> {
                 .collect();
             Ok(ast::TyPolyTraitRef(all_bounds))
         }
+    }
+
+    pub fn parse_anon_type(&mut self) -> PResult<Ty_> {
+        /*
+        Parses whatever can come after a `impl` keyword in a type.
+        The `impl` has already been consumed.
+        */
+
+        let bounds = try!(self.parse_ty_param_bounds(BoundParsingMode::Bare));
+
+        if !bounds.iter().any(|b| if let TraitTyParamBound(..) = *b { true } else { false }) {
+            let last_span = self.last_span;
+            self.span_err(last_span, "at least trait must be specified");
+        }
+
+        Ok(ast::TyAnon(bounds))
     }
 
     pub fn parse_ty_path(&mut self) -> PResult<Ty_> {
@@ -1350,6 +1366,8 @@ impl<'a> Parser<'a> {
             try!(self.parse_borrowed_pointee())
         } else if self.check_keyword(keywords::For) {
             try!(self.parse_for_in_type())
+        } else if try!(self.eat_keyword(keywords::Impl)) {
+            try!(self.parse_anon_type())
         } else if self.token_is_bare_fn_keyword() {
             // BARE FUNCTION
             try!(self.parse_ty_bare_fn(Vec::new()))

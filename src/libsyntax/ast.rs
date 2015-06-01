@@ -1464,6 +1464,8 @@ pub enum Ty_ {
     TyObjectSum(P<Ty>, TyParamBounds),
     /// A type like `for<'a> Foo<&'a Bar>`
     TyPolyTraitRef(TyParamBounds),
+    /// An anonymized and bounded type, e.g. `impl TraitA+TraitB`
+    TyAnon(TyParamBounds),
     /// No-op; kept solely so that we can pretty-print faithfully
     TyParen(P<Ty>),
     /// Unused for now
