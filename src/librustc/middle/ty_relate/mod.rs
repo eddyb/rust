@@ -494,9 +494,10 @@ pub fn super_relate_tys<'a,'tcx:'a,R>(relation: &mut R,
 
         (&ty::TyTrait(ref a_), &ty::TyTrait(ref b_)) =>
         {
-            let principal = try!(relation.relate(&a_.principal, &b_.principal));
-            let bounds = try!(relation.relate(&a_.bounds, &b_.bounds));
-            Ok(tcx.mk_trait(principal, bounds))
+            Ok(tcx.mk_trait(ty::TraitTy {
+                principal: try!(relation.relate(&a_.principal, &b_.principal)),
+                bounds: try!(relation.relate(&a_.bounds, &b_.bounds))
+            }))
         }
 
         (&ty::TyStruct(a_id, a_substs), &ty::TyStruct(b_id, b_substs))

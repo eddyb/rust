@@ -2450,7 +2450,10 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     projection_bounds: data_a.bounds.projection_bounds.clone(),
                 };
 
-                let new_trait = tcx.mk_trait(data_a.principal.clone(), bounds);
+                let new_trait = tcx.mk_trait(ty::TraitTy {
+                    principal: data_a.principal.clone(),
+                    bounds: bounds
+                });
                 let origin = infer::Misc(obligation.cause.span);
                 if self.infcx.sub_types(false, origin, new_trait, target).is_err() {
                     return Err(Unimplemented);

@@ -3758,18 +3758,9 @@ impl<'tcx> ctxt<'tcx> {
         }))
     }
 
-    pub fn mk_trait(&self,
-                    principal: ty::PolyTraitRef<'tcx>,
-                    bounds: ExistentialBounds<'tcx>)
-                    -> Ty<'tcx>
-    {
-        assert!(bound_list_is_sorted(&bounds.projection_bounds));
-
-        let inner = box TraitTy {
-            principal: principal,
-            bounds: bounds
-        };
-        self.mk_ty(TyTrait(inner))
+    pub fn mk_trait(&self, object: TraitTy<'tcx>) -> Ty<'tcx> {
+        assert!(bound_list_is_sorted(&object.bounds.projection_bounds));
+        self.mk_ty(TyTrait(box object))
     }
 
     pub fn mk_projection(&self,

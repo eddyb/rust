@@ -478,7 +478,10 @@ fn parse_ty_<'a, 'tcx, F>(st: &mut PState<'a, 'tcx>, conv: &mut F) -> Ty<'tcx> w
         let trait_ref = ty::Binder(parse_trait_ref_(st, conv));
         let bounds = parse_existential_bounds_(st, conv);
         assert_eq!(next(st), ']');
-        return tcx.mk_trait(trait_ref, bounds);
+        return tcx.mk_trait(ty::TraitTy {
+            principal: trait_ref,
+            bounds: bounds
+        });
       }
       'p' => {
         assert_eq!(next(st), '[');

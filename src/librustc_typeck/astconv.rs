@@ -1050,18 +1050,20 @@ fn trait_ref_to_object_type<'tcx>(this: &AstConv<'tcx>,
                                                      projection_bounds,
                                                      bounds);
 
-    let result = make_object_type(this, span, trait_ref, existential_bounds);
-    debug!("trait_ref_to_object_type: result={:?}",
-           result);
+    let ty = match make_trait_object(this, span, trait_ref, existential_bounds) {
+        Ok(object) => this.tcx().mk_trait(object),
+        Err(_) => this.tcx().types.err
+    };
+    debug!("trait_ref_to_object_type: result={:?}", ty);
 
-    result
+    ty
 }
 
-fn make_object_type<'tcx>(this: &AstConv<'tcx>,
-                          span: Span,
-                          principal: ty::PolyTraitRef<'tcx>,
-                          bounds: ty::ExistentialBounds<'tcx>)
-                          -> Ty<'tcx> {
+fn make_trait_object<'tcx>(this: &AstConv<'tcx>,
+                           span: Span,
+                           principal: ty::PolyTraitRef<'tcx>,
+                           bounds: ty::ExistentialBounds<'tcx>)
+                           -> Result<ty::TraitTy<'tcx>, ()> {
     let tcx = this.tcx();
     let object = ty::TraitTy {
         principal: principal,
@@ -1072,7 +1074,7 @@ fn make_object_type<'tcx>(this: &AstConv<'tcx>,
 
     // ensure the super predicates and stop if we encountered an error
     if this.ensure_super_predicates(span, object.principal_def_id()).is_err() {
-        return tcx.types.err;
+        return Err(());
     }
 
     let mut associated_types: FnvHashSet<(ast::DefId, ast::Name)> =
@@ -1099,7 +1101,7 @@ fn make_object_type<'tcx>(this: &AstConv<'tcx>,
                     tcx.item_path_str(trait_def_id));
     }
 
-    tcx.mk_trait(object.principal, object.bounds)
+    Ok(object)
 }
 
 fn report_ambiguous_associated_type(tcx: &ty::ctxt,
@@ -1580,7 +1582,10 @@ pub fn ast_ty_to_ty<'tcx>(this: &AstConv<'tcx>,
             tcx.mk_fn(None, tcx.mk_bare_fn(bare_fn))
         }
         ast::TyPolyTraitRef(ref bounds) => {
-            conv_ty_poly_trait_ref(this, rscope, ast_ty.span, bounds)
+            match conv_ty_poly_trait_ref(this, rscope, ast_ty.span, bounds) {
+                Ok(object) => this.tcx().mk_trait(object),
+                Err(_) => this.tcx().types.err
+            }
         }
         ast::TyPath(ref maybe_qself, ref path) => {
             let path_res = if let Some(&d) = tcx.def_map.borrow().get(&ast_ty.id) {
@@ -1979,7 +1984,7 @@ fn conv_ty_poly_trait_ref<'tcx>(
     rscope: &RegionScope,
     span: Span,
     ast_bounds: &[ast::TyParamBound])
-    -> Ty<'tcx>
+    -> Result<ty::TraitTy<'tcx>, ()>
 {
     let mut partitioned_bounds = partition_bounds(this.tcx(), span, &ast_bounds[..]);
 
@@ -1994,7 +1999,7 @@ fn conv_ty_poly_trait_ref<'tcx>(
     } else {
         span_err!(this.tcx().sess, span, E0224,
                   "at least one non-builtin trait is required for an object type");
-        return this.tcx().types.err;
+        return Err(());
     };
 
     let bounds =
@@ -2005,7 +2010,7 @@ fn conv_ty_poly_trait_ref<'tcx>(
                                                         projection_bounds,
                                                         partitioned_bounds);
 
-    make_object_type(this, span, main_trait_bound, bounds)
+    make_trait_object(this, span, main_trait_bound, bounds)
 }
 
 pub fn conv_existential_bounds_from_partitioned_bounds<'tcx>(
