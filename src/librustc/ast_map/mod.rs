@@ -109,6 +109,7 @@ pub enum Node<'ast> {
     NodeVariant(&'ast Variant),
     NodeExpr(&'ast Expr),
     NodeStmt(&'ast Stmt),
+    NodeTy(&'ast Ty),
     NodeArg(&'ast Pat),
     NodeLocal(&'ast Pat),
     NodePat(&'ast Pat),
@@ -136,6 +137,7 @@ enum MapEntry<'ast> {
     EntryVariant(NodeId, &'ast Variant),
     EntryExpr(NodeId, &'ast Expr),
     EntryStmt(NodeId, &'ast Stmt),
+    EntryTy(NodeId, &'ast Ty),
     EntryArg(NodeId, &'ast Pat),
     EntryLocal(NodeId, &'ast Pat),
     EntryPat(NodeId, &'ast Pat),
@@ -171,6 +173,7 @@ impl<'ast> MapEntry<'ast> {
             NodeVariant(n) => EntryVariant(p, n),
             NodeExpr(n) => EntryExpr(p, n),
             NodeStmt(n) => EntryStmt(p, n),
+            NodeTy(n) => EntryTy(p, n),
             NodeArg(n) => EntryArg(p, n),
             NodeLocal(n) => EntryLocal(p, n),
             NodePat(n) => EntryPat(p, n),
@@ -190,6 +193,7 @@ impl<'ast> MapEntry<'ast> {
             EntryVariant(id, _) => id,
             EntryExpr(id, _) => id,
             EntryStmt(id, _) => id,
+            EntryTy(id, _) => id,
             EntryArg(id, _) => id,
             EntryLocal(id, _) => id,
             EntryPat(id, _) => id,
@@ -210,6 +214,7 @@ impl<'ast> MapEntry<'ast> {
             EntryVariant(_, n) => NodeVariant(n),
             EntryExpr(_, n) => NodeExpr(n),
             EntryStmt(_, n) => NodeStmt(n),
+            EntryTy(_, n) => NodeTy(n),
             EntryArg(_, n) => NodeArg(n),
             EntryLocal(_, n) => NodeLocal(n),
             EntryPat(_, n) => NodePat(n),
@@ -573,6 +578,7 @@ impl<'ast> Map<'ast> {
             Some(NodeVariant(variant)) => variant.span,
             Some(NodeExpr(expr)) => expr.span,
             Some(NodeStmt(stmt)) => stmt.span,
+            Some(NodeTy(ty)) => ty.span,
             Some(NodeArg(pat)) | Some(NodeLocal(pat)) => pat.span,
             Some(NodePat(pat)) => pat.span,
             Some(NodeBlock(block)) => block.span,
@@ -769,11 +775,6 @@ impl<'ast> Visitor<'ast> for NodeCollector<'ast> {
         self.parent_node = i.id;
 
         match i.node {
-            ItemImpl(_, _, _, _, _, ref impl_items) => {
-                for ii in impl_items {
-                    self.insert(ii.id, NodeImplItem(ii));
-                }
-            }
             ItemEnum(ref enum_definition, _) => {
                 for v in &enum_definition.variants {
                     self.insert(v.node.id, NodeVariant(&**v));
@@ -793,15 +794,11 @@ impl<'ast> Visitor<'ast> for NodeCollector<'ast> {
                     None => {}
                 }
             }
-            ItemTrait(_, _, ref bounds, ref trait_items) => {
+            ItemTrait(_, _, ref bounds, _) => {
                 for b in bounds.iter() {
                     if let TraitTyParamBound(ref t, TraitBoundModifier::None) = *b {
                         self.insert(t.trait_ref.ref_id, NodeItem(i));
                     }
-                }
-
-                for ti in trait_items {
-                    self.insert(ti.id, NodeTraitItem(ti));
                 }
             }
             ItemUse(ref view_path) => {
@@ -829,6 +826,7 @@ impl<'ast> Visitor<'ast> for NodeCollector<'ast> {
     }
 
     fn visit_trait_item(&mut self, ti: &'ast TraitItem) {
+        self.insert(ti.id, NodeTraitItem(ti));
         let parent_node = self.parent_node;
         self.parent_node = ti.id;
         visit::walk_trait_item(self, ti);
@@ -836,6 +834,7 @@ impl<'ast> Visitor<'ast> for NodeCollector<'ast> {
     }
 
     fn visit_impl_item(&mut self, ii: &'ast ImplItem) {
+        self.insert(ii.id, NodeImplItem(ii));
         let parent_node = self.parent_node;
         self.parent_node = ii.id;
 
@@ -884,6 +883,7 @@ impl<'ast> Visitor<'ast> for NodeCollector<'ast> {
     }
 
     fn visit_ty(&mut self, ty: &'ast Ty) {
+        self.insert(ty.id, NodeTy(ty));
         let parent_node = self.parent_node;
         self.parent_node = ty.id;
         match ty.node {
@@ -1025,6 +1025,7 @@ impl<'a> NodePrinter for pprust::State<'a> {
             NodeVariant(a)     => self.print_variant(&*a),
             NodeExpr(a)        => self.print_expr(&*a),
             NodeStmt(a)        => self.print_stmt(&*a),
+            NodeTy(a)          => self.print_type(&*a),
             NodePat(a)         => self.print_pat(&*a),
             NodeBlock(a)       => self.print_block(&*a),
             NodeLifetime(a)    => self.print_lifetime(&*a),
@@ -1116,6 +1117,9 @@ fn node_id_to_string(map: &Map, id: NodeId, include_id: bool) -> String {
         }
         Some(NodeStmt(ref stmt)) => {
             format!("stmt {}{}", pprust::stmt_to_string(&**stmt), id_str)
+        }
+        Some(NodeTy(ref ty)) => {
+            format!("type {}{}", pprust::ty_to_string(&**ty), id_str)
         }
         Some(NodeArg(ref pat)) => {
             format!("arg {}{}", pprust::pat_to_string(&**pat), id_str)

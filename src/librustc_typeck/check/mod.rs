@@ -93,11 +93,12 @@ use middle::privacy::{AllPublic, LastMod};
 use middle::region::{self, CodeExtent};
 use middle::subst::{self, Subst, Substs, VecPerParamSpace, ParamSpace, TypeSpace};
 use middle::traits::{self, report_fulfillment_errors};
+use middle::ty::ToPredicate;
 use middle::ty::{FnSig, GenericPredicates, TypeScheme};
 use middle::ty::{Disr, ParamTy, ParameterEnvironment};
 use middle::ty::{self, HasTypeFlags, RegionEscape, ToPolyTraitRef, Ty};
 use middle::ty::{MethodCall, MethodCallee};
-use middle::ty_fold::{TypeFolder, TypeFoldable};
+use middle::ty_fold::{BottomUpFolder, TypeFolder, TypeFoldable};
 use require_c_abi_if_variadic;
 use rscope::{ElisionFailureInfo, RegionScope};
 use session::Session;
@@ -170,6 +171,12 @@ pub struct Inherited<'a, 'tcx: 'a> {
     deferred_call_resolutions: RefCell<DefIdMap<Vec<DeferredCallResolutionHandler<'tcx>>>>,
 
     deferred_cast_checks: RefCell<Vec<cast::CastCheck<'tcx>>>,
+
+    // Anonymized types found in explicit return types and their
+    // associated fresh inference variable. Writeback resolves these
+    // variables to get the concrete type, which can be used to
+    // deanonymize TyAnon, after typeck is done with all functions.
+    anon_types: RefCell<Vec<(DefId, Ty<'tcx>)>>,
 }
 
 trait DeferredCallResolution<'tcx> {
@@ -308,6 +315,7 @@ impl<'a, 'tcx> Inherited<'a, 'tcx> {
             fn_sig_map: RefCell::new(NodeMap()),
             deferred_call_resolutions: RefCell::new(DefIdMap()),
             deferred_cast_checks: RefCell::new(Vec::new()),
+            anon_types: RefCell::new(Vec::new()),
         }
     }
 
@@ -623,7 +631,9 @@ fn check_fn<'a, 'tcx>(ccx: &'a CrateCtxt<'a, 'tcx>,
     }
 
     check_block_with_expected(&fcx, body, match ret_ty {
-        ty::FnConverging(result_type) => ExpectHasType(result_type),
+        ty::FnConverging(result_type) => {
+            ExpectHasType(fcx.instantiate_anon_types(result_type))
+        }
         ty::FnDiverging => NoExpectation
     });
 
@@ -1351,6 +1361,50 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         }
     }
 
+    /// Replace all anonymized types with fresh inference variables
+    /// and record them for writeback.
+    fn instantiate_anon_types(&self, ty: Ty<'tcx>) -> Ty<'tcx> {
+        let tcx = self.tcx();
+        let mut anon_types = self.inh.anon_types.borrow_mut();
+        ty.fold_with(&mut BottomUpFolder {
+            tcx: tcx,
+            fldop: |ty| {
+                if let ty::TyAnon(def_id, _, ref data) = ty.sty {
+                    let ty_var = self.infcx().next_ty_var();
+                    anon_types.push((def_id, ty_var));
+
+                    let span = tcx.map.def_id_span(def_id, codemap::DUMMY_SP);
+                    let cause = traits::ObligationCause::new(span, self.body_id,
+                                                                traits::ReturnType);
+                    let obligation = |predicate| {
+                        traits::Obligation::new(cause.clone(), predicate)
+                    };
+
+                    // Require that the type to be anonymized implements the exposed trait.
+                    let trait_ref = data.principal_trait_ref_with_self_ty(tcx, ty_var);
+                    self.register_predicate(obligation(trait_ref.to_predicate()));
+
+                    // Create obligations for the projection predicates.
+                    for bound in data.projection_bounds_with_self_ty(tcx, ty_var) {
+                        self.register_predicate(obligation(bound.to_predicate()));
+                    }
+
+                    // Create obligations for builtin bounds.
+                    for bound in &data.bounds.builtin_bounds {
+                        self.require_type_meets(ty_var, span, traits::ReturnType, bound);
+                    }
+
+                    // Require that the type outlives the exposed region, if any.
+                    self.register_region_obligation(ty_var, data.bounds.region_bound,
+                                                    cause.clone());
+
+                    ty_var
+                } else {
+                    ty
+                }
+            }
+        })
+    }
 
     fn normalize_associated_types_in<T>(&self, span: Span, value: &T) -> T
         where T : TypeFoldable<'tcx> + HasTypeFlags

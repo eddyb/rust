@@ -1734,7 +1734,8 @@ pub fn ty_of_method<'tcx>(this: &AstConv<'tcx>,
 }
 
 pub fn ty_of_bare_fn<'tcx>(this: &AstConv<'tcx>, unsafety: ast::Unsafety, abi: abi::Abi,
-                           decl: &ast::FnDecl, anon_scope: Option<AnonTypeScope>) -> ty::BareFnTy<'tcx> {
+                           decl: &ast::FnDecl, anon_scope: Option<AnonTypeScope>)
+                           -> ty::BareFnTy<'tcx> {
     let (bare_fn_ty, _) = ty_of_method_or_bare_fn(this, unsafety, abi, None, decl, anon_scope);
     bare_fn_ty
 }

@@ -60,6 +60,7 @@ pub fn resolve_type_vars_in_fn(fcx: &FnCtxt,
     }
     wbcx.visit_upvar_borrow_map();
     wbcx.visit_closures();
+    wbcx.visit_anon_types();
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -240,6 +241,20 @@ impl<'cx, 'tcx> WritebackCx<'cx, 'tcx> {
         }
     }
 
+    fn visit_anon_types(&self) {
+        if self.fcx.writeback_errors.get() {
+            return
+        }
+
+        for &(def_id, concrete_ty) in &*self.fcx.inh.anon_types.borrow() {
+            let concrete_ty = self.resolve(&concrete_ty, ResolvingAnonTy(def_id));
+            self.fcx.tcx().tcache.borrow_mut().insert(def_id, ty::TypeScheme {
+                ty: concrete_ty,
+                generics: ty::Generics::empty()
+            });
+        }
+    }
+
     fn visit_node_id(&self, reason: ResolveReason, id: ast::NodeId) {
         // Resolve any borrowings for the node with id `id`
         self.visit_adjustments(reason, id);
@@ -338,6 +353,7 @@ enum ResolveReason {
     ResolvingPattern(Span),
     ResolvingUpvar(ty::UpvarId),
     ResolvingClosure(ast::DefId),
+    ResolvingAnonTy(ast::DefId),
 }
 
 impl ResolveReason {
@@ -349,12 +365,9 @@ impl ResolveReason {
             ResolvingUpvar(upvar_id) => {
                 tcx.expr_span(upvar_id.closure_expr_id)
             }
-            ResolvingClosure(did) => {
-                if did.krate == ast::LOCAL_CRATE {
-                    tcx.expr_span(did.node)
-                } else {
-                    DUMMY_SP
-                }
+            ResolvingClosure(did) |
+            ResolvingAnonTy(did) => {
+                tcx.map.def_id_span(did, DUMMY_SP)
             }
         }
     }
@@ -424,6 +437,12 @@ impl<'cx, 'tcx> Resolver<'cx, 'tcx> {
                     let span = self.reason.span(self.tcx);
                     span_err!(self.tcx.sess, span, E0196,
                               "cannot determine a type for this closure")
+                }
+
+                ResolvingAnonTy(_) => {
+                    let span = self.reason.span(self.tcx);
+                    span_err!(self.tcx.sess, span, E0399,
+                              "cannot determine a concrete type for this anonymized type")
                 }
             }
         }

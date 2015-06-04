@@ -2475,4 +2475,5 @@ register_diagnostics! {
     E0436, // functional record update requires a struct
     E0439, // anonymized types are not allowed outside of function and
            // impl method return types
+    E0440  // cannot determine a concrete type for this anonymized type
 }

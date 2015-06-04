@@ -269,6 +269,7 @@ pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
         ast_map::NodeTyParam(..) |
         ast_map::NodeExpr(..) |
         ast_map::NodeStmt(..) |
+        ast_map::NodeTy(..) |
         ast_map::NodeArg(..) |
         ast_map::NodeBlock(..) |
         ast_map::NodePat(..) |
