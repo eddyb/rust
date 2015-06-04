@@ -2472,5 +2472,7 @@ register_diagnostics! {
            // type because its default value `{}` references the type `Self`"
     E0399, // trait items need to be implemented because the associated
            // type `{}` was overridden
-    E0436  // functional record update requires a struct
+    E0436, // functional record update requires a struct
+    E0439, // anonymized types are not allowed outside of function and
+           // impl method return types
 }

@@ -9,6 +9,7 @@
 // except according to those terms.
 
 
+use middle::subst;
 use middle::ty;
 use middle::ty_fold;
 
@@ -51,6 +52,70 @@ pub trait RegionScope {
     /// computing `object_lifetime_default` (in particular, in legacy
     /// modes, it may not be relevant).
     fn base_object_lifetime_default(&self, span: Span) -> ty::Region;
+
+    /// If this scope allows anonymized types, return a fresh set of
+    /// substitutions for the function's generics. This property is
+    /// controlled by the region scope because it's fine-grained enough
+    /// to allow restriction of anonymized types to the syntactical extent
+    /// of a function's return type.
+    fn substs_for_anon_type<'tcx>(&self, _tcx: &ty::ctxt<'tcx>)
+                                  -> Option<&'tcx subst::Substs<'tcx>> {
+        None
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct AnonTypeScope<'a, 'tcx:'a> {
+    generics: &'a ty::Generics<'tcx>
+}
+
+impl<'a, 'tcx> AnonTypeScope<'a, 'tcx> {
+    pub fn new(generics: &'a ty::Generics<'tcx>) -> AnonTypeScope<'a, 'tcx> {
+        AnonTypeScope {
+            generics: generics
+        }
+    }
+}
+
+/// A scope wrapper which optionally allows anonymized types.
+#[derive(Copy, Clone)]
+pub struct MaybeWithAnonTypes<'a, 'tcx:'a, R> {
+    base_scope: R,
+    anon_scope: Option<AnonTypeScope<'a, 'tcx>>
+}
+
+impl<'a, 'tcx, R: RegionScope> MaybeWithAnonTypes<'a, 'tcx, R>  {
+    pub fn new(base_scope: R, anon_scope: Option<AnonTypeScope<'a, 'tcx>>) -> Self {
+        MaybeWithAnonTypes {
+            base_scope: base_scope,
+            anon_scope: anon_scope
+        }
+    }
+}
+
+impl<'a, 'tcx, R: RegionScope> RegionScope for MaybeWithAnonTypes<'a, 'tcx, R> {
+    fn object_lifetime_default(&self, span: Span) -> Option<ty::Region> {
+        self.base_scope.object_lifetime_default(span)
+    }
+
+    fn anon_regions(&self,
+                    span: Span,
+                    count: usize)
+                    -> Result<Vec<ty::Region>, Option<Vec<ElisionFailureInfo>>> {
+        self.base_scope.anon_regions(span, count)
+    }
+
+    fn base_object_lifetime_default(&self, span: Span) -> ty::Region {
+        self.base_scope.base_object_lifetime_default(span)
+    }
+
+    fn substs_for_anon_type<'tcx2>(&self, tcx: &ty::ctxt<'tcx2>)
+                                   -> Option<&'tcx2 subst::Substs<'tcx2>> {
+        use collect::mk_item_substs;
+        self.anon_scope.map(|anon_scope| {
+            tcx.mk_substs(mk_item_substs(tcx, anon_scope.generics))
+        })
+    }
 }
 
 // A scope in which all regions must be explicitly named. This is used
@@ -222,6 +287,11 @@ impl<'r> RegionScope for ObjectLifetimeDefaultRscope<'r> {
     {
         self.base_scope.anon_regions(span, count)
     }
+
+    fn substs_for_anon_type<'tcx>(&self, tcx: &ty::ctxt<'tcx>)
+                                  -> Option<&'tcx subst::Substs<'tcx>> {
+        self.base_scope.substs_for_anon_type(tcx)
+    }
 }
 
 /// A scope which simply shifts the Debruijn index of other scopes
@@ -262,5 +332,10 @@ impl<'r> RegionScope for ShiftedRscope<'r> {
                 Err(errs)
             }
         }
+    }
+
+    fn substs_for_anon_type<'tcx>(&self, tcx: &ty::ctxt<'tcx>)
+                                  -> Option<&'tcx subst::Substs<'tcx>> {
+        self.base_scope.substs_for_anon_type(tcx)
     }
 }

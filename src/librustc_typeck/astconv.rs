@@ -60,9 +60,10 @@ use middle::traits;
 use middle::ty::{self, RegionEscape, Ty, ToPredicate, HasTypeFlags};
 use middle::ty_fold;
 use require_c_abi_if_variadic;
-use rscope::{self, UnelidableRscope, RegionScope, ElidableRscope,
-             ObjectLifetimeDefaultRscope, ShiftedRscope, BindingRscope,
-             ElisionFailureInfo, ElidedLifetime};
+use rscope::{self, AnonTypeScope, MaybeWithAnonTypes};
+use rscope::{UnelidableRscope, RegionScope, ElidableRscope};
+use rscope::{ObjectLifetimeDefaultRscope, ShiftedRscope, BindingRscope};
+use rscope::{ElisionFailureInfo, ElidedLifetime};
 use util::common::{ErrorReported, FN_OUTPUT_NAME};
 use util::nodemap::FnvHashSet;
 
@@ -561,20 +562,21 @@ fn find_implied_output_region<'tcx>(tcx: &ty::ctxt<'tcx>,
 
 fn convert_ty_with_lifetime_elision<'tcx>(this: &AstConv<'tcx>,
                                           elided_lifetime: ElidedLifetime,
-                                          ty: &ast::Ty)
+                                          ty: &ast::Ty,
+                                          anon_scope: Option<AnonTypeScope>)
                                           -> Ty<'tcx>
 {
     match elided_lifetime {
         Ok(implied_output_region) => {
             let rb = ElidableRscope::new(implied_output_region);
-            ast_ty_to_ty(this, &rb, ty)
+            ast_ty_to_ty(this, &MaybeWithAnonTypes::new(rb, anon_scope), ty)
         }
         Err(param_lifetimes) => {
             // All regions must be explicitly specified in the output
             // if the lifetime elision rules do not apply. This saves
             // the user from potentially-confusing errors.
             let rb = UnelidableRscope::new(param_lifetimes);
-            ast_ty_to_ty(this, &rb, ty)
+            ast_ty_to_ty(this, &MaybeWithAnonTypes::new(rb, anon_scope), ty)
         }
     }
 }
@@ -607,7 +609,8 @@ fn convert_parenthesized_parameters<'tcx>(this: &AstConv<'tcx>,
         Some(ref output_ty) => {
             (convert_ty_with_lifetime_elision(this,
                                               implied_output_region,
-                                              &output_ty),
+                                              &output_ty,
+                                              None),
              output_ty.span)
         }
         None => {
@@ -1578,7 +1581,7 @@ pub fn ast_ty_to_ty<'tcx>(this: &AstConv<'tcx>,
         ast::TyParen(ref typ) => ast_ty_to_ty(this, rscope, &**typ),
         ast::TyBareFn(ref bf) => {
             require_c_abi_if_variadic(tcx, &bf.decl, bf.abi, ast_ty.span);
-            let bare_fn = ty_of_bare_fn(this, bf.unsafety, bf.abi, &*bf.decl);
+            let bare_fn = ty_of_bare_fn(this, bf.unsafety, bf.abi, &*bf.decl, None);
             tcx.mk_fn(None, tcx.mk_bare_fn(bare_fn))
         }
         ast::TyPolyTraitRef(ref bounds) => {
@@ -1588,16 +1591,23 @@ pub fn ast_ty_to_ty<'tcx>(this: &AstConv<'tcx>,
             }
         }
         ast::TyAnon(ref bounds) => {
-            match conv_ty_poly_trait_ref(this, rscope, ast_ty.span, bounds) {
-                Ok(mut object) => {
+            let substs = rscope.substs_for_anon_type(this.tcx());
+            let object = conv_ty_poly_trait_ref(this, rscope, ast_ty.span, bounds);
+
+            match (substs, object) {
+                (None, _) => {
+                    span_err!(this.tcx().sess, ast_ty.span, E0439,
+                              "anonymized types are not allowed outside of function and \
+                               impl method return types");
+                    this.tcx().types.err
+                }
+                (Some(_), Err(_)) => this.tcx().types.err,
+                (Some(substs), Ok(mut object)) => {
                     // Imply +Sized by default. When the syntax is implemented,
                     // +?Sized will be used to remove this default Sized bound.
                     object.bounds.builtin_bounds.insert(ty::BoundSized);
-                    this.tcx().mk_anon(ast_util::local_def(ast_ty.id),
-                                       this.tcx().mk_substs(Substs::empty()),
-                                       object)
+                    this.tcx().mk_anon(ast_util::local_def(ast_ty.id), substs, object)
                 }
-                Err(_) => this.tcx().types.err
             }
         }
         ast::TyPath(ref maybe_qself, ref path) => {
@@ -1706,7 +1716,8 @@ struct SelfInfo<'a, 'tcx> {
 
 pub fn ty_of_method<'tcx>(this: &AstConv<'tcx>,
                           sig: &ast::MethodSig,
-                          untransformed_self_ty: Ty<'tcx>)
+                          untransformed_self_ty: Ty<'tcx>,
+                          anon_scope: Option<AnonTypeScope>)
                           -> (ty::BareFnTy<'tcx>, ty::ExplicitSelfCategory) {
     let self_info = Some(SelfInfo {
         untransformed_self_ty: untransformed_self_ty,
@@ -1717,13 +1728,14 @@ pub fn ty_of_method<'tcx>(this: &AstConv<'tcx>,
                                 sig.unsafety,
                                 sig.abi,
                                 self_info,
-                                &sig.decl);
+                                &sig.decl,
+                                anon_scope);
     (bare_fn_ty, optional_explicit_self_category.unwrap())
 }
 
 pub fn ty_of_bare_fn<'tcx>(this: &AstConv<'tcx>, unsafety: ast::Unsafety, abi: abi::Abi,
-                                              decl: &ast::FnDecl) -> ty::BareFnTy<'tcx> {
-    let (bare_fn_ty, _) = ty_of_method_or_bare_fn(this, unsafety, abi, None, decl);
+                           decl: &ast::FnDecl, anon_scope: Option<AnonTypeScope>) -> ty::BareFnTy<'tcx> {
+    let (bare_fn_ty, _) = ty_of_method_or_bare_fn(this, unsafety, abi, None, decl, anon_scope);
     bare_fn_ty
 }
 
@@ -1731,7 +1743,8 @@ fn ty_of_method_or_bare_fn<'a, 'tcx>(this: &AstConv<'tcx>,
                                      unsafety: ast::Unsafety,
                                      abi: abi::Abi,
                                      opt_self_info: Option<SelfInfo<'a, 'tcx>>,
-                                     decl: &ast::FnDecl)
+                                     decl: &ast::FnDecl,
+                                     anon_scope: Option<AnonTypeScope>)
                                      -> (ty::BareFnTy<'tcx>, Option<ty::ExplicitSelfCategory>)
 {
     debug!("ty_of_method_or_bare_fn");
@@ -1817,7 +1830,8 @@ fn ty_of_method_or_bare_fn<'a, 'tcx>(this: &AstConv<'tcx>,
         ast::Return(ref output) =>
             ty::FnConverging(convert_ty_with_lifetime_elision(this,
                                                               implied_output_region,
-                                                              &output)),
+                                                              &output,
+                                                              anon_scope)),
         ast::DefaultReturn(..) => ty::FnConverging(this.tcx().mk_nil()),
         ast::NoReturn(..) => ty::FnDiverging
     };

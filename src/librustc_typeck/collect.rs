@@ -619,9 +619,14 @@ fn convert_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
     let ty_generic_predicates =
         ty_generic_predicates_for_fn(ccx, &sig.generics, rcvr_ty_predicates);
 
-    let (fty, explicit_self_category) =
+    let (fty, explicit_self_category) = {
+        let anon_scope = match container {
+            ImplContainer(_) => Some(AnonTypeScope::new(&ty_generics)),
+            TraitContainer(_) => None
+        };
         astconv::ty_of_method(&ccx.icx(&(rcvr_ty_predicates, &sig.generics)),
-                              sig, untransformed_rcvr_ty);
+                              sig, untransformed_rcvr_ty, anon_scope)
+    };
 
     let def_id = local_def(id);
     let ty_method = ty::Method::new(ident.name,
@@ -1103,7 +1108,7 @@ fn convert_struct<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
 
     tcx.struct_fields.borrow_mut().insert(local_def(id), Rc::new(field_tys));
 
-    let substs = mk_item_substs(ccx, &scheme.generics);
+    let substs = mk_item_substs(ccx.tcx, &scheme.generics);
     let selfty = tcx.mk_struct(local_def(id), tcx.mk_substs(substs));
 
     // If this struct is enum-like or tuple-like, create the type of its
@@ -1462,7 +1467,8 @@ fn compute_type_scheme_of_item<'a,'tcx>(ccx: &CrateCtxt<'a,'tcx>,
         }
         ast::ItemFn(ref decl, unsafety, _, abi, ref generics, _) => {
             let ty_generics = ty_generics_for_fn(ccx, generics, &ty::Generics::empty());
-            let tofd = astconv::ty_of_bare_fn(&ccx.icx(generics), unsafety, abi, &**decl);
+            let tofd = astconv::ty_of_bare_fn(&ccx.icx(generics), unsafety, abi, &**decl,
+                                              Some(AnonTypeScope::new(&ty_generics)));
             let ty = tcx.mk_fn(Some(local_def(it.id)), tcx.mk_bare_fn(tofd));
             ty::TypeScheme { ty: ty, generics: ty_generics }
         }
@@ -1474,13 +1480,13 @@ fn compute_type_scheme_of_item<'a,'tcx>(ccx: &CrateCtxt<'a,'tcx>,
         ast::ItemEnum(_, ref generics) => {
             // Create a new generic polytype.
             let ty_generics = ty_generics_for_type_or_impl(ccx, generics);
-            let substs = mk_item_substs(ccx, &ty_generics);
+            let substs = mk_item_substs(ccx.tcx, &ty_generics);
             let t = tcx.mk_enum(local_def(it.id), tcx.mk_substs(substs));
             ty::TypeScheme { ty: t, generics: ty_generics }
         }
         ast::ItemStruct(_, ref generics) => {
             let ty_generics = ty_generics_for_type_or_impl(ccx, generics);
-            let substs = mk_item_substs(ccx, &ty_generics);
+            let substs = mk_item_substs(ccx.tcx, &ty_generics);
             let t = tcx.mk_struct(local_def(it.id), tcx.mk_substs(substs));
             ty::TypeScheme { ty: t, generics: ty_generics }
         }
@@ -2167,13 +2173,13 @@ fn compute_type_scheme_of_foreign_fn_decl<'a, 'tcx>(
     }
 }
 
-fn mk_item_substs<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
-                            ty_generics: &ty::Generics<'tcx>)
+pub fn mk_item_substs<'tcx>(tcx: &ty::ctxt<'tcx>,
+                            ty_generics: &ty::Generics)
                             -> Substs<'tcx>
 {
     let types =
         ty_generics.types.map(
-            |def| ccx.tcx.mk_param_from_def(def));
+            |def| tcx.mk_param_from_def(def));
 
     let regions =
         ty_generics.regions.map(
