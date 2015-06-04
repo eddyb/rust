@@ -637,6 +637,7 @@ fn assemble_candidates_from_object_type<'cx,'tcx>(
            object_ty);
     let data = match object_ty.sty {
         ty::TyTrait(ref data) => data,
+        ty::TyAnon(_, _, ref data) => data,
         _ => {
             selcx.tcx().sess.span_bug(
                 obligation.cause.span,
@@ -685,7 +686,8 @@ fn assemble_candidates_from_impls<'cx,'tcx>(
             candidate_set.vec.push(
                 ProjectionTyCandidate::Impl(data));
         }
-        super::VtableObject(_) => {
+        super::VtableObject(_) |
+        super::VtableAnon(_) => {
             assemble_candidates_from_object_type(
                 selcx, obligation, obligation_trait_ref, candidate_set);
         }

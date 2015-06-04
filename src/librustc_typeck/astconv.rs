@@ -1587,6 +1587,19 @@ pub fn ast_ty_to_ty<'tcx>(this: &AstConv<'tcx>,
                 Err(_) => this.tcx().types.err
             }
         }
+        ast::TyAnon(ref bounds) => {
+            match conv_ty_poly_trait_ref(this, rscope, ast_ty.span, bounds) {
+                Ok(mut object) => {
+                    // Imply +Sized by default. When the syntax is implemented,
+                    // +?Sized will be used to remove this default Sized bound.
+                    object.bounds.builtin_bounds.insert(ty::BoundSized);
+                    this.tcx().mk_anon(ast_util::local_def(ast_ty.id),
+                                       this.tcx().mk_substs(Substs::empty()),
+                                       object)
+                }
+                Err(_) => this.tcx().types.err
+            }
+        }
         ast::TyPath(ref maybe_qself, ref path) => {
             let path_res = if let Some(&d) = tcx.def_map.borrow().get(&ast_ty.id) {
                 d

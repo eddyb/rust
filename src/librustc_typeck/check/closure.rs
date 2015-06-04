@@ -113,7 +113,7 @@ fn deduce_expectations_from_expected_type<'a,'tcx>(
            expected_ty);
 
     match expected_ty.sty {
-        ty::TyTrait(ref object_type) => {
+        ty::TyTrait(ref object_type) | ty::TyAnon(_, _, ref object_type) => {
             let proj_bounds = object_type.projection_bounds_with_self_ty(fcx.tcx(),
                                                                          fcx.tcx().types.err);
             let sig = proj_bounds.iter()

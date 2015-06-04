@@ -75,7 +75,7 @@ fn get_base_type_def_id<'a, 'tcx>(inference_context: &InferCtxt<'a, 'tcx>,
             None
         }
 
-        TyInfer(..) | TyClosure(..) => {
+        TyInfer(..) | TyClosure(..) | ty::TyAnon(..) => {
             // `ty` comes from a user declaration so we should only expect types
             // that the user can type
             inference_context.tcx.sess.span_bug(

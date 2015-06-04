@@ -500,6 +500,16 @@ pub fn super_relate_tys<'a,'tcx:'a,R>(relation: &mut R,
             }))
         }
 
+        (&ty::TyAnon(a_id, a_substs, ref a_), &ty::TyAnon(b_id, b_substs, ref b_))
+            if a_id == b_id =>
+        {
+            let substs = try!(relate_substs(relation, None, a_substs, b_substs));
+            Ok(tcx.mk_anon(a_id, tcx.mk_substs(substs), ty::TraitTy {
+                principal: try!(relation.relate(&a_.principal, &b_.principal)),
+                bounds: try!(relation.relate(&a_.bounds, &b_.bounds))
+            }))
+        }
+
         (&ty::TyStruct(a_id, a_substs), &ty::TyStruct(b_id, b_substs))
             if a_id == b_id =>
         {

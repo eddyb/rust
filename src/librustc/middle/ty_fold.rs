@@ -496,6 +496,7 @@ impl<'tcx, N: TypeFoldable<'tcx>> TypeFoldable<'tcx> for traits::Vtable<'tcx, N>
             traits::VtableParam(ref n) => traits::VtableParam(n.fold_with(folder)),
             traits::VtableBuiltin(ref d) => traits::VtableBuiltin(d.fold_with(folder)),
             traits::VtableObject(ref d) => traits::VtableObject(d.fold_with(folder)),
+            traits::VtableAnon(ref d) => traits::VtableAnon(d.fold_with(folder)),
         }
     }
 }
@@ -505,6 +506,14 @@ impl<'tcx> TypeFoldable<'tcx> for traits::VtableObjectData<'tcx> {
         traits::VtableObjectData {
             upcast_trait_ref: self.upcast_trait_ref.fold_with(folder),
             vtable_base: self.vtable_base
+        }
+    }
+}
+
+impl<'tcx> TypeFoldable<'tcx> for traits::VtableAnonData<'tcx> {
+    fn fold_with<F:TypeFolder<'tcx>>(&self, folder: &mut F) -> traits::VtableAnonData<'tcx> {
+        traits::VtableAnonData {
+            upcast_trait_ref: self.upcast_trait_ref.fold_with(folder),
         }
     }
 }
@@ -594,6 +603,13 @@ pub fn super_fold_ty<'tcx, T: TypeFolder<'tcx>>(this: &mut T,
         }
         ty::TyTrait(box ty::TraitTy { ref principal, ref bounds }) => {
             ty::TyTrait(box ty::TraitTy {
+                principal: principal.fold_with(this),
+                bounds: bounds.fold_with(this),
+            })
+        }
+        ty::TyAnon(def_id, substs, box ty::TraitTy { ref principal, ref bounds }) => {
+            let substs = substs.fold_with(this);
+            ty::TyAnon(def_id, this.tcx().mk_substs(substs), box ty::TraitTy {
                 principal: principal.fold_with(this),
                 bounds: bounds.fold_with(this),
             })

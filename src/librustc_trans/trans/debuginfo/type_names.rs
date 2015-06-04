@@ -158,6 +158,7 @@ pub fn push_debuginfo_type_name<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>,
         }
         ty::TyError |
         ty::TyInfer(_) |
+        ty::TyAnon(..) |
         ty::TyProjection(..) |
         ty::TyParam(_) => {
             cx.sess().bug(&format!("debuginfo: Trying to create type name for \

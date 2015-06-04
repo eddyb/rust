@@ -934,7 +934,7 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
                     variance);
             }
 
-            ty::TyTrait(ref data) => {
+            ty::TyTrait(ref data) | ty::TyAnon(_, _, ref data) => {
                 let poly_trait_ref =
                     data.principal_trait_ref_with_self_ty(self.tcx(),
                                                           self.tcx().types.err);

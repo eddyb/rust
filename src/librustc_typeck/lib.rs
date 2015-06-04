@@ -79,6 +79,7 @@ This API is completely unstable and subject to change.
 #![feature(box_patterns)]
 #![feature(box_syntax)]
 #![feature(drain)]
+#![feature(enumset)]
 #![feature(iter_cmp)]
 #![feature(iter_arith)]
 #![feature(quote)]

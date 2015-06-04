@@ -1697,6 +1697,25 @@ impl<'tcx> Clean<Type> for ty::Ty<'tcx> {
                     is_generic: false,
                 }
             }
+            ty::TyAnon(_, _, box ty::TraitTy { ref principal, ref bounds }) => {
+                let did = principal.def_id();
+                let fqn = csearch::get_item_path(cx.tcx(), did);
+                let fqn: Vec<_> = fqn.into_iter().map(|i| i.to_string()).collect();
+                let (typarams, bindings) = bounds.clean(cx);
+                let path = external_path(cx, &fqn.last().unwrap().to_string(),
+                                         Some(did), bindings, principal.substs());
+                cx.external_paths.borrow_mut().as_mut().unwrap().insert(did, (fqn, TypeTrait));
+                Anon(vec![TraitBound(PolyTrait {
+                    trait_: ResolvedPath {
+                            path: path,
+                            typarams: Some(typarams),
+                            did: did,
+                            is_generic: false,
+                        },
+                    lifetimes: late_bounds
+                }, ast::TraitBoundModifier::None)])
+            }
+
             ty::TyTuple(ref t) => Tuple(t.clean(cx)),
 
             ty::TyProjection(ref data) => data.clean(cx),

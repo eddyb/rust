@@ -490,6 +490,9 @@ impl<'tcx, N:fmt::Debug> fmt::Debug for super::Vtable<'tcx, N> {
             super::VtableObject(ref d) =>
                 write!(f, "{:?}", d),
 
+            super::VtableAnon(ref d) =>
+                write!(f, "{:?}", d),
+
             super::VtableParam(ref n) =>
                 write!(f, "VtableParam({:?})", n),
 
@@ -536,6 +539,13 @@ impl<'tcx> fmt::Debug for super::VtableObjectData<'tcx> {
         write!(f, "VtableObject(upcast={:?}, vtable_base={})",
                self.upcast_trait_ref,
                self.vtable_base)
+    }
+}
+
+impl<'tcx> fmt::Debug for super::VtableAnonData<'tcx> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "VtableAnon(upcast={:?})",
+               self.upcast_trait_ref)
     }
 }
 

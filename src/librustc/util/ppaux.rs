@@ -14,7 +14,7 @@ use middle::ty::{BoundRegion, BrAnon, BrNamed};
 use middle::ty::{ReEarlyBound, BrFresh, ctxt};
 use middle::ty::{ReFree, ReScope, ReInfer, ReStatic, Region, ReEmpty};
 use middle::ty::{ReSkolemized, ReVar, BrEnv};
-use middle::ty::{TyBool, TyChar, TyStruct, TyEnum};
+use middle::ty::{TyAnon, TyBool, TyChar, TyStruct, TyEnum};
 use middle::ty::{TyError, TyStr, TyArray, TySlice, TyFloat, TyBareFn};
 use middle::ty::{TyParam, TyRawPtr, TyRef, TyTuple};
 use middle::ty::TyClosure;
@@ -660,6 +660,7 @@ impl<'tcx> fmt::Display for ty::TypeVariants<'tcx> {
                 })
             }
             TyTrait(ref data) => write!(f, "{}", data),
+            TyAnon(_, _, ref data) => write!(f, "impl {}", data),
             ty::TyProjection(ref data) => write!(f, "{}", data),
             TyStr => write!(f, "str"),
             TyClosure(ref did, ref substs) => ty::tls::with(|tcx| {

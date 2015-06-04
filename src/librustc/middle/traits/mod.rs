@@ -238,6 +238,9 @@ pub enum Vtable<'tcx, N> {
     /// Virtual calls through an object
     VtableObject(VtableObjectData<'tcx>),
 
+    /// Successful resolution for a trait implemented by an anonymized type.
+    VtableAnon(VtableAnonData<'tcx>),
+
     /// Successful resolution for a builtin trait.
     VtableBuiltin(VtableBuiltinData<N>),
 
@@ -298,6 +301,13 @@ pub struct VtableObjectData<'tcx> {
     /// the base object trait and all supertraits; this is the start of
     /// `upcast_trait_ref`'s methods in that vtable.
     pub vtable_base: usize
+}
+
+/// A vtable for some anonymized type implementing the trait `Foo`.
+#[derive(PartialEq,Eq,Clone)]
+pub struct VtableAnonData<'tcx> {
+    /// `Foo` upcast to the obligation trait. This will be some supertrait of `Foo`.
+    pub upcast_trait_ref: ty::PolyTraitRef<'tcx>,
 }
 
 /// Creates predicate obligations from the generic bounds.
@@ -524,7 +534,8 @@ impl<'tcx, N> Vtable<'tcx, N> {
             VtableBuiltin(i) => i.nested,
             VtableDefaultImpl(d) => d.nested,
             VtableClosure(c) => c.nested,
-            VtableObject(_) | VtableFnPointer(..) => vec![]
+            VtableObject(_) | VtableAnon(_) |
+            VtableFnPointer(..) => vec![]
         }
     }
 
@@ -549,7 +560,8 @@ impl<'tcx, N> Vtable<'tcx, N> {
                 closure_def_id: c.closure_def_id,
                 substs: c.substs,
                 nested: c.nested.into_iter().map(f).collect(),
-            })
+            }),
+            VtableAnon(p) => VtableAnon(p)
         }
     }
 }

@@ -1345,7 +1345,7 @@ impl<'tcx> ctxt<'tcx> {
         sty_debug_print!(
             self,
             TyEnum, TyBox, TyArray, TySlice, TyRawPtr, TyRef, TyBareFn, TyTrait,
-            TyStruct, TyClosure, TyTuple, TyParam, TyInfer, TyProjection);
+            TyAnon, TyStruct, TyClosure, TyTuple, TyParam, TyInfer, TyProjection);
 
         println!("Substs interner: #{}", self.substs_interner.borrow().len());
         println!("BareFnTy interner: #{}", self.bare_fn_interner.borrow().len());
@@ -1801,6 +1801,12 @@ pub enum TypeVariants<'tcx> {
 
     /// A trait, defined with `trait`.
     TyTrait(Box<TraitTy<'tcx>>),
+
+    /// Anonymized type found in the return type of a function.
+    /// The DefId comes from the `impl Trait` ast::Ty node, and the
+    /// substitutions are for the generics of the function in question.
+    /// After typeck, the actual type can be found in the `tcache` map.
+    TyAnon(DefId, &'tcx Substs<'tcx>, Box<TraitTy<'tcx>>),
 
     /// The anonymous type of a closure. Used to represent the type of
     /// `|a| a`.
@@ -3374,6 +3380,21 @@ impl FlagComputation {
                 self.add_bounds(bounds);
             }
 
+            &TyAnon(_, substs, box TraitTy { ref principal, ref bounds }) => {
+                self.add_substs(substs);
+
+                let mut computation = FlagComputation::new();
+                computation.add_substs(principal.0.substs);
+                for projection_bound in &bounds.projection_bounds {
+                    let mut proj_computation = FlagComputation::new();
+                    proj_computation.add_projection_predicate(&projection_bound.0);
+                    computation.add_bound_computation(&proj_computation);
+                }
+                self.add_bound_computation(&computation);
+
+                self.add_bounds(bounds);
+            }
+
             &TyBox(tt) | &TyArray(tt, _) | &TySlice(tt) => {
                 self.add_ty(tt)
             }
@@ -3761,6 +3782,13 @@ impl<'tcx> ctxt<'tcx> {
     pub fn mk_trait(&self, object: TraitTy<'tcx>) -> Ty<'tcx> {
         assert!(bound_list_is_sorted(&object.bounds.projection_bounds));
         self.mk_ty(TyTrait(box object))
+    }
+
+    pub fn mk_anon(&self, def_id: ast::DefId,
+                   substs: &'tcx Substs<'tcx>,
+                   traits: TraitTy<'tcx>) -> Ty<'tcx> {
+        assert!(bound_list_is_sorted(&traits.bounds.projection_bounds));
+        self.mk_ty(TyAnon(def_id, substs, box traits))
     }
 
     pub fn mk_projection(&self,
@@ -4245,7 +4273,7 @@ impl<'tcx> TyS<'tcx> {
                     tc_ty(cx, typ, cache).owned_pointer()
                 }
 
-                TyTrait(_) => {
+                TyTrait(_) | TyAnon(..) => {
                     TC::All - TC::InteriorParam
                 }
 
@@ -4368,7 +4396,8 @@ impl<'tcx> TyS<'tcx> {
 
             TyArray(..) | TySlice(_) | TyTrait(..) | TyTuple(..) |
             TyClosure(..) | TyEnum(..) | TyStruct(..) |
-            TyProjection(..) | TyParam(..) | TyInfer(..) | TyError => None
+            TyProjection(..) | TyParam(..) | TyInfer(..) |
+            TyAnon(..) | TyError => None
         }.unwrap_or_else(|| !self.impls_bound(param_env, ty::BoundCopy, span));
 
         if !self.has_param_types() && !self.has_self_ty() {
@@ -4406,7 +4435,7 @@ impl<'tcx> TyS<'tcx> {
             TyStr | TyTrait(..) | TySlice(_) => Some(false),
 
             TyEnum(..) | TyStruct(..) | TyProjection(..) | TyParam(..) |
-            TyInfer(..) | TyError => None
+            TyInfer(..) | TyAnon(..) | TyError => None
         }.unwrap_or_else(|| self.impls_bound(param_env, ty::BoundSized, span));
 
         if !self.has_param_types() && !self.has_self_ty() {
@@ -4487,7 +4516,8 @@ impl<'tcx> TyS<'tcx> {
 
                 TyError |
                 TyInfer(_) |
-                TyClosure(..) => {
+                TyClosure(..) |
+                TyAnon(..) => {
                     // this check is run on type definitions, so we don't expect to see
                     // inference by-products or closure types
                     cx.sess.bug(&format!("requires check invoked on inapplicable type: {:?}", ty))
@@ -4960,6 +4990,9 @@ impl<'tcx> TyS<'tcx> {
             TyBareFn(None, _) => "fn pointer".to_string(),
             TyTrait(ref inner) => {
                 format!("trait {}", cx.item_path_str(inner.principal_def_id()))
+            }
+            TyAnon(_, _, ref inner) => {
+                format!("anonymized type (impl {})", cx.item_path_str(inner.principal_def_id()))
             }
             TyStruct(id, _) => {
                 format!("struct `{}`", cx.item_path_str(id))
@@ -6508,6 +6541,23 @@ impl<'tcx> ctxt<'tcx> {
                         byte!(23);
                         did(state, data.trait_ref.def_id);
                         hash!(data.item_name.as_str());
+                    }
+                    TyAnon(def_id, substs, ref data) => {
+                        byte!(24);
+                        did(state, def_id);
+                        for subty in substs.types.iter() {
+                            helper(tcx, *subty, svh, state);
+                        }
+
+                        did(state, data.principal_def_id());
+                        hash!(data.bounds);
+
+                        let principal = tcx.anonymize_late_bound_regions(&data.principal).0;
+                        for subty in principal.substs.types.iter() {
+                            helper(tcx, *subty, svh, state);
+                        }
+
+                        return false;
                     }
                 }
                 true

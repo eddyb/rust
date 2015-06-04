@@ -138,7 +138,7 @@ impl<'a, 'tcx> Implicator<'a, 'tcx> {
                 }
             }
 
-            ty::TyTrait(ref t) => {
+            ty::TyTrait(ref t) | ty::TyAnon(_, _, ref t) => {
                 let required_region_bounds =
                     object_region_bounds(self.tcx(), &t.principal, t.bounds.builtin_bounds);
                 self.accumulate_from_object_ty(ty, t.bounds.region_bound, required_region_bounds)

@@ -370,6 +370,7 @@ fn trans_monomorphized_callee<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                           idx);
             Callee { bcx: bcx, data: Fn(datum.val), ty: datum.ty }
         }
+        traits::VtableAnon(..) |
         traits::VtableBuiltin(..) |
         traits::VtableDefaultImpl(..) |
         traits::VtableParam(..) => {
@@ -658,7 +659,7 @@ pub fn get_vtable<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
                     &format!("cannot get vtable for an object type: {:?}",
                             data));
             }
-            traits::VtableParam(..) => {
+            traits::VtableParam(..) | traits::VtableAnon(..) => {
                 tcx.sess.bug(
                     &format!("resolved vtable for {:?} to bad vtable {:?} in trans",
                             trait_ref,

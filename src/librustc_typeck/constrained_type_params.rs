@@ -58,7 +58,7 @@ fn parameters_for_type_shallow<'tcx>(ty: Ty<'tcx>) -> Vec<Parameter> {
         ty::TyStruct(_, substs) |
         ty::TyEnum(_, substs) =>
             parameters_for_regions_in_substs(substs),
-        ty::TyTrait(ref data) =>
+        ty::TyTrait(ref data) | ty::TyAnon(_, _, ref data) =>
             parameters_for_regions_in_substs(&data.principal.skip_binder().substs),
         _ =>
             vec![],

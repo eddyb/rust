@@ -87,6 +87,13 @@ fn push_subtypes<'tcx>(stack: &mut Vec<Ty<'tcx>>, parent_ty: Ty<'tcx>) {
                 pred.0.ty
             }).collect::<Vec<_>>());
         }
+        ty::TyAnon(_, substs, box ty::TraitTy { ref principal, ref bounds }) => {
+            push_reversed(stack, substs.types.as_slice());
+            push_reversed(stack, principal.substs().types.as_slice());
+            push_reversed(stack, &bounds.projection_bounds.iter().map(|pred| {
+                pred.0.ty
+            }).collect::<Vec<_>>());
+        }
         ty::TyEnum(_, ref substs) |
         ty::TyStruct(_, ref substs) => {
             push_reversed(stack, substs.types.as_slice());

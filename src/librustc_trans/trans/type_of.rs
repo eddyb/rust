@@ -233,7 +233,8 @@ pub fn sizing_type_of<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>, t: Ty<'tcx>) -> Typ
             }
         }
 
-        ty::TyProjection(..) | ty::TyInfer(..) | ty::TyParam(..) | ty::TyError(..) => {
+        ty::TyAnon(..) | ty::TyProjection(..) | ty::TyInfer(..) |
+        ty::TyParam(..) | ty::TyError(..) => {
             cx.sess().bug(&format!("fictitious type {:?} in sizing_type_of()",
                                    t))
         }
@@ -420,9 +421,10 @@ pub fn in_memory_type_of<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>, t: Ty<'tcx>) -> 
           }
       }
 
+      ty::TyAnon(..) => cx.sess().bug("type_of with TyAnon"),
       ty::TyInfer(..) => cx.sess().bug("type_of with TyInfer"),
       ty::TyProjection(..) => cx.sess().bug("type_of with TyProjection"),
-      ty::TyParam(..) => cx.sess().bug("type_of with ty_param"),
+      ty::TyParam(..) => cx.sess().bug("type_of with TyParam"),
       ty::TyError(..) => cx.sess().bug("type_of with TyError"),
     };
 

@@ -483,6 +483,20 @@ fn parse_ty_<'a, 'tcx, F>(st: &mut PState<'a, 'tcx>, conv: &mut F) -> Ty<'tcx> w
             bounds: bounds
         });
       }
+      'A' => {
+        assert_eq!(next(st), '[');
+        let def_id = parse_def_(st, NominalType, conv);
+        let substs = parse_substs_(st, conv);
+        assert_eq!(next(st), ']');
+        assert_eq!(next(st), '[');
+        let trait_ref = ty::Binder(parse_trait_ref_(st, conv));
+        let bounds = parse_existential_bounds_(st, conv);
+        assert_eq!(next(st), ']');
+        return tcx.mk_anon(def_id, st.tcx.mk_substs(substs), ty::TraitTy {
+            principal: trait_ref,
+            bounds: bounds
+        });
+      }
       'p' => {
         assert_eq!(next(st), '[');
         let index = parse_u32(st);

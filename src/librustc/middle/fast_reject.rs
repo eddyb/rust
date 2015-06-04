@@ -27,6 +27,7 @@ pub enum SimplifiedType {
     PtrSimplifiedType,
     TupleSimplifiedType(usize),
     TraitSimplifiedType(ast::DefId),
+    AnonSimplifiedType(ast::DefId),
     StructSimplifiedType(ast::DefId),
     ClosureSimplifiedType(ast::DefId),
     FunctionSimplifiedType(usize),
@@ -59,6 +60,9 @@ pub fn simplify_type(tcx: &ty::ctxt,
         ty::TyRawPtr(_) => Some(PtrSimplifiedType),
         ty::TyTrait(ref trait_info) => {
             Some(TraitSimplifiedType(trait_info.principal_def_id()))
+        }
+        ty::TyAnon(def_id, _, _) => {
+            Some(AnonSimplifiedType(def_id))
         }
         ty::TyStruct(def_id, _) => {
             Some(StructSimplifiedType(def_id))

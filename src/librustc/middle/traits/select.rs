@@ -29,6 +29,7 @@ use super::{ObjectCastObligation, Obligation};
 use super::TraitNotObjectSafe;
 use super::Selection;
 use super::SelectionResult;
+use super::{VtableAnon, VtableAnonData};
 use super::{VtableBuiltin, VtableImpl, VtableParam, VtableClosure,
             VtableFnPointer, VtableObject, VtableDefaultImpl};
 use super::{VtableImplData, VtableObjectData, VtableBuiltinData,
@@ -208,6 +209,8 @@ enum SelectionCandidate<'tcx> {
     FnPointerCandidate,
 
     ObjectCandidate,
+
+    AnonCandidate,
 
     BuiltinObjectCandidate,
 
@@ -933,6 +936,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 try!(self.assemble_fn_pointer_candidates(obligation, &mut candidates));
                 try!(self.assemble_candidates_from_impls(obligation, &mut candidates));
                 self.assemble_candidates_from_object_ty(obligation, &mut candidates);
+                self.assemble_candidates_from_anon_ty(obligation, &mut candidates);
             }
         }
 
@@ -1263,6 +1267,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                         candidates.vec.push(DefaultImplObjectCandidate(def_id));
                     }
                 }
+                ty::TyAnon(..) |
                 ty::TyParam(..) |
                 ty::TyProjection(..) => {
                     // In these cases, we don't know what the actual
@@ -1366,6 +1371,70 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 candidates.ambiguous = true;
             } else if upcast_trait_refs == 1 {
                 candidates.vec.push(ObjectCandidate);
+            }
+
+            Ok::<(),()>(())
+        }).unwrap();
+    }
+
+    /// Search for impls that might apply to `obligation`.
+    fn assemble_candidates_from_anon_ty(&mut self,
+                                        obligation: &TraitObligation<'tcx>,
+                                        candidates: &mut SelectionCandidateSet<'tcx>)
+    {
+        debug!("assemble_candidates_from_anon_ty(self_ty={})",
+               self.infcx.shallow_resolve(*obligation.self_ty().skip_binder()));
+
+        self.infcx.commit_if_ok(|snapshot| {
+            let bound_self_ty =
+                self.infcx.resolve_type_vars_if_possible(&obligation.self_ty());
+            let (self_ty, _) =
+                self.infcx().skolemize_late_bound_regions(&bound_self_ty, snapshot);
+            let poly_trait_ref = match self_ty.sty {
+                ty::TyAnon(_, _, ref data) => {
+                    match self.tcx().lang_items.to_builtin_kind(obligation.predicate.def_id()) {
+                        Some(bound @ ty::BoundSend) | Some(bound @ ty::BoundSync) => {
+                            if data.bounds.builtin_bounds.contains(&bound) {
+                                debug!("assemble_candidates_from_anon_ty: matched builtin bound, \
+                                        pushing candidate");
+                                candidates.vec.push(BuiltinObjectCandidate);
+                                return Ok(());
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    data.principal_trait_ref_with_self_ty(self.tcx(), self_ty)
+                }
+                ty::TyInfer(ty::TyVar(_)) => {
+                    debug!("assemble_candidates_from_anon_ty: ambiguous");
+                    candidates.ambiguous = true; // could wind up being an anon type
+                    return Ok(());
+                }
+                _ => {
+                    return Ok(());
+                }
+            };
+
+            debug!("assemble_candidates_from_anon_ty: poly_trait_ref={}",
+                   poly_trait_ref);
+
+            // see whether the anon trait can be upcast to the trait we are looking for
+            let upcast_trait_refs =
+                util::supertraits(self.tcx(), poly_trait_ref)
+                .filter(|upcast_trait_ref| {
+                    self.infcx.probe(|_| {
+                        let upcast_trait_ref = upcast_trait_ref.clone();
+                        self.match_poly_trait_ref(obligation, upcast_trait_ref).is_ok()
+                    })
+                })
+                .count();
+
+            if upcast_trait_refs > 1 {
+                // can be upcast in many ways; need more type information
+                candidates.ambiguous = true;
+            } else if upcast_trait_refs == 1 {
+                candidates.vec.push(AnonCandidate);
             }
 
             Ok::<(),()>(())
@@ -1508,7 +1577,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         }
 
         match other {
-            &ObjectCandidate(..) |
+            &ObjectCandidate(..) | &AnonCandidate |
             &ParamCandidate(_) | &ProjectionCandidate => match victim {
                 &DefaultImplCandidate(..) => {
                     self.tcx().sess.bug(
@@ -1529,6 +1598,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                     // for impls.
                     true
                 }
+                &AnonCandidate |
                 &ObjectCandidate(..) |
                 &ProjectionCandidate => {
                     // Arbitrarily give param candidates priority
@@ -1634,6 +1704,33 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                             let copy_def_id = obligation.predicate.def_id();
                             for tr in util::supertraits(self.tcx(), principal) {
                                 if tr.def_id() == copy_def_id {
+                                    return ok_if(Vec::new())
+                                }
+                            }
+
+                            Err(Unimplemented)
+                        }
+                    }
+                    ty::BoundSync | ty::BoundSend => {
+                        self.tcx().sess.bug("Send/Sync shouldn't occur in builtin_bounds()");
+                    }
+                }
+            }
+
+            ty::TyAnon(_, _, ref data) => {
+                match bound {
+                    ty::BoundSized | ty::BoundCopy => {
+                        if data.bounds.builtin_bounds.contains(&bound) {
+                            ok_if(Vec::new())
+                        } else {
+                            // Recursively check all supertraits to find out if any further
+                            // bounds are required and thus we must fulfill.
+                            let principal =
+                                data.principal_trait_ref_with_self_ty(self.tcx(),
+                                                                      self.tcx().types.err);
+                            let desired_def_id = obligation.predicate.def_id();
+                            for tr in util::supertraits(self.tcx(), principal) {
+                                if tr.def_id() == desired_def_id {
                                     return ok_if(Vec::new())
                                 }
                             }
@@ -1817,6 +1914,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             }
 
             ty::TyTrait(..) |
+            ty::TyAnon(..) |
             ty::TyParam(..) |
             ty::TyProjection(..) |
             ty::TyInfer(ty::TyVar(_)) |
@@ -2015,6 +2113,11 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             ObjectCandidate => {
                 let data = self.confirm_object_candidate(obligation);
                 Ok(VtableObject(data))
+            }
+
+            AnonCandidate => {
+                let data = self.confirm_anon_candidate(obligation);
+                Ok(VtableAnon(data))
             }
 
             FnPointerCandidate => {
@@ -2322,6 +2425,42 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             upcast_trait_ref: upcast_trait_ref.unwrap(),
             vtable_base: vtable_base,
         }
+    }
+
+    fn confirm_anon_candidate(&mut self,
+                              obligation: &TraitObligation<'tcx>)
+                              -> VtableAnonData<'tcx>
+    {
+        debug!("confirm_anon_candidate({:?})", obligation);
+
+        // FIXME skipping binder here seems wrong -- we should
+        // probably flatten the binder from the obligation and the
+        // binder from the anon. Have to try to make a broken test
+        // case that results. -nmatsakis
+        let self_ty = self.infcx.shallow_resolve(*obligation.self_ty().skip_binder());
+        let poly_trait_ref = match self_ty.sty {
+            ty::TyAnon(_, _, ref data) => {
+                data.principal_trait_ref_with_self_ty(self.tcx(), self_ty)
+            }
+            _ => {
+                self.tcx().sess.span_bug(obligation.cause.span,
+                                         "anon candidate with non-anon");
+            }
+        };
+
+        // Upcast the anon type to the obligation type. There must
+        // be exactly one applicable trait-reference; if this were not
+        // the case, we would have reported an ambiguity error rather
+        // than successfully selecting one of the candidates.
+        for supertrait in util::supertraits(self.tcx(), poly_trait_ref) {
+            if let Ok(_) = self.infcx.commit_if_ok(
+                    |_| self.match_poly_trait_ref(obligation, supertrait)) {
+                return VtableAnonData { upcast_trait_ref: supertrait };
+            }
+        }
+
+        self.tcx().sess.span_bug(obligation.cause.span,
+                                    "failed to match trait refs");
     }
 
     fn confirm_fn_pointer_candidate(&mut self,

@@ -584,6 +584,11 @@ impl<'a, 'tcx> ImproperCTypesVisitor<'a, 'tcx> {
                            consider using a raw pointer instead")
             }
 
+            ty::TyAnon(..) => {
+                FfiUnsafe("found Rust anonymized type in foreign module, \
+                           consider using an explicit type instead")
+            }
+
             ty::TyStr => {
                 FfiUnsafe("found Rust type `str` in foreign module; \
                            consider using a `*const libc::c_char`")

@@ -97,6 +97,15 @@ pub fn enc_ty<'a, 'tcx>(w: &mut Encoder, cx: &ctxt<'a, 'tcx>, t: Ty<'tcx>) {
             enc_existential_bounds(w, cx, bounds);
             mywrite!(w, "]");
         }
+        ty::TyAnon(def_id, substs, box ty::TraitTy { ref principal,
+                                                     ref bounds }) => {
+            mywrite!(w, "A[{}|", (cx.ds)(def_id));
+            enc_substs(w, cx, substs);
+            mywrite!(w, "][");
+            enc_trait_ref(w, cx, principal.0);
+            enc_existential_bounds(w, cx, bounds);
+            mywrite!(w, "]");
+        }
         ty::TyTuple(ref ts) => {
             mywrite!(w, "T[");
             for t in ts { enc_ty(w, cx, *t); }

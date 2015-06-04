@@ -331,6 +331,7 @@ fn ty_is_local_constructor<'tcx>(tcx: &ty::ctxt<'tcx>,
         }
 
         ty::TyClosure(..) |
+        ty::TyAnon(..) |
         ty::TyError => {
             tcx.sess.bug(
                 &format!("ty_is_local invoked on unexpected type: {:?}",

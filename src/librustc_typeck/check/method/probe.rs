@@ -286,6 +286,9 @@ impl<'a,'tcx> ProbeContext<'a,'tcx> {
                 self.assemble_inherent_candidates_from_object(self_ty, data);
                 self.assemble_inherent_impl_candidates_for_type(data.principal_def_id());
             }
+            ty::TyAnon(_, _, ref data) => {
+                self.assemble_inherent_candidates_from_anon(self_ty, data);
+            }
             ty::TyEnum(did, _) |
             ty::TyStruct(did, _) |
             ty::TyClosure(did, _) => {
@@ -456,6 +459,28 @@ impl<'a,'tcx> ProbeContext<'a,'tcx> {
                 xform_self_ty: xform_self_ty,
                 item: item,
                 kind: ObjectCandidate
+            });
+        });
+    }
+
+    fn assemble_inherent_candidates_from_anon(&mut self,
+                                              self_ty: Ty<'tcx>,
+                                              data: &ty::TraitTy<'tcx>) {
+        debug!("assemble_inherent_candidates_from_anon(self_ty={})",
+               self_ty);
+
+        let trait_ref = data.principal_trait_ref_with_self_ty(self.tcx(), self_ty);
+        self.elaborate_bounds(&[trait_ref.clone()], |this, new_trait_ref, item| {
+            let new_trait_ref = this.erase_late_bound_regions(&new_trait_ref);
+
+            let xform_self_ty = this.xform_self_ty(&item,
+                                                   new_trait_ref.self_ty(),
+                                                   new_trait_ref.substs);
+
+            this.inherent_candidates.push(Candidate {
+                xform_self_ty: xform_self_ty,
+                item: item,
+                kind: TraitCandidate
             });
         });
     }
