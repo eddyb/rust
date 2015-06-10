@@ -240,10 +240,11 @@ impl<'a,'b,'tcx> AssociatedTypeNormalizer<'a,'b,'tcx> {
     fn fold<T:TypeFoldable<'tcx> + HasTypeFlags>(&mut self, value: &T) -> T {
         let value = self.selcx.infcx().resolve_type_vars_if_possible(value);
 
-        if !value.has_projection_types() {
-            value.clone()
-        } else {
+        if value.has_projection_types() ||
+           self.selcx.infcx().deanonymize() && value.has_anonymized_types() {
             value.fold_with(self)
+        } else {
+            value.clone()
         }
     }
 }
@@ -288,6 +289,16 @@ impl<'a,'b,'tcx> TypeFolder<'tcx> for AssociatedTypeNormalizer<'a,'b,'tcx> {
                                               self.depth);
                 self.obligations.extend(obligations);
                 ty
+            }
+
+            ty::TyAnon(def_id, substs, ref data) => {
+                if self.selcx.infcx().deanonymize() && !data.principal.has_escaping_regions() {
+                    let generic_ty = self.tcx().lookup_item_type(def_id).ty;
+                    let concrete_ty = generic_ty.subst(self.tcx(), substs);
+                    self.fold_ty(concrete_ty)
+                } else {
+                    ty
+                }
             }
 
             _ => {
@@ -373,7 +384,8 @@ fn opt_normalize_projection_type<'a,'b,'tcx>(
                    depth,
                    obligations);
 
-            if projected_ty.has_projection_types() {
+            if projected_ty.has_projection_types() ||
+               selcx.infcx().deanonymize() && projected_ty.has_anonymized_types() {
                 let mut normalizer = AssociatedTypeNormalizer::new(selcx, cause, depth);
                 let normalized_ty = normalizer.fold(&projected_ty);
 

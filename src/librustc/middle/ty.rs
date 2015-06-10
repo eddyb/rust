@@ -1247,10 +1247,11 @@ bitflags! {
         const HAS_TY_ERR         = 1 << 6,
         const HAS_PROJECTION     = 1 << 7,
         const HAS_TY_CLOSURE     = 1 << 8,
+        const HAS_ANONYMIZED     = 1 << 9,
 
         // true if there are "names" of types and regions and so forth
         // that are local to a particular fn
-        const HAS_LOCAL_NAMES   = 1 << 9,
+        const HAS_LOCAL_NAMES   = 1 << 10,
 
         const NEEDS_SUBST        = TypeFlags::HAS_PARAMS.bits |
                                    TypeFlags::HAS_SELF.bits |
@@ -1268,6 +1269,7 @@ bitflags! {
                                   TypeFlags::HAS_TY_ERR.bits |
                                   TypeFlags::HAS_PROJECTION.bits |
                                   TypeFlags::HAS_TY_CLOSURE.bits |
+                                  TypeFlags::HAS_ANONYMIZED.bits |
                                   TypeFlags::HAS_LOCAL_NAMES.bits,
 
         // Caches for type_is_sized, type_moves_by_default
@@ -3381,6 +3383,8 @@ impl FlagComputation {
             }
 
             &TyAnon(_, substs, box TraitTy { ref principal, ref bounds }) => {
+                self.add_flags(TypeFlags::HAS_ANONYMIZED);
+
                 self.add_substs(substs);
 
                 let mut computation = FlagComputation::new();
@@ -7067,6 +7071,9 @@ pub trait HasTypeFlags {
     fn has_type_flags(&self, flags: TypeFlags) -> bool;
     fn has_projection_types(&self) -> bool {
         self.has_type_flags(TypeFlags::HAS_PROJECTION)
+    }
+    fn has_anonymized_types(&self) -> bool {
+        self.has_type_flags(TypeFlags::HAS_ANONYMIZED)
     }
     fn references_error(&self) -> bool {
         self.has_type_flags(TypeFlags::HAS_TY_ERR)

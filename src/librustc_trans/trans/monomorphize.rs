@@ -15,7 +15,6 @@ use llvm;
 use middle::infer;
 use middle::subst;
 use middle::subst::{Subst, Substs};
-use middle::traits;
 use middle::ty_fold::{TypeFolder, TypeFoldable};
 use rustc::ast_map;
 use trans::attributes;
@@ -31,7 +30,6 @@ use syntax::abi;
 use syntax::ast;
 use syntax::ast_util::local_def;
 use syntax::attr;
-use syntax::codemap::DUMMY_SP;
 use std::hash::{Hasher, Hash, SipHasher};
 
 pub fn monomorphic_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
@@ -310,31 +308,6 @@ pub fn apply_param_substs<'tcx,T>(tcx: &ty::ctxt<'tcx>,
 pub fn normalize_associated_type<'tcx,T>(tcx: &ty::ctxt<'tcx>, value: &T) -> T
     where T : TypeFoldable<'tcx> + HasTypeFlags
 {
-    debug!("normalize_associated_type(t={:?})", value);
-
-    let value = erase_regions(tcx, value);
-
-    if !value.has_projection_types() {
-        return value;
-    }
-
-    // FIXME(#20304) -- cache
-    let infcx = infer::normalizing_infer_ctxt(tcx, &tcx.tables);
-    let mut selcx = traits::SelectionContext::new(&infcx);
-    let cause = traits::ObligationCause::dummy();
-    let traits::Normalized { value: result, obligations } =
-        traits::normalize(&mut selcx, cause, &value);
-
-    debug!("normalize_associated_type: result={:?} obligations={:?}",
-           result,
-           obligations);
-
-    let mut fulfill_cx = infcx.fulfillment_cx.borrow_mut();
-
-    for obligation in obligations {
-        fulfill_cx.register_predicate_obligation(&infcx, obligation);
-    }
-    let result = drain_fulfillment_cx_or_panic(DUMMY_SP, &infcx, &mut fulfill_cx, &result);
-
-    result
+    let infcx = infer::normalizing_deanynonymizing_infer_ctxt(tcx, &tcx.tables);
+    infer::normalize_associated_type(&infcx, value)
 }

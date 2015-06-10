@@ -435,6 +435,12 @@ fn is_repr_nullable_ptr<'tcx>(variants: &Vec<Rc<ty::VariantInfo<'tcx>>>) -> bool
     false
 }
 
+fn normalize_associated_type<'tcx>(tcx: &ty::ctxt<'tcx>, ty: Ty<'tcx>)
+                                   -> Ty<'tcx> {
+    let infcx = infer::new_infer_ctxt(tcx, &tcx.tables, None, true);
+    infer::normalize_associated_type(&infcx, &ty)
+}
+
 fn ast_ty_to_normalized<'tcx>(tcx: &ty::ctxt<'tcx>,
                               id: ast::NodeId)
                               -> Ty<'tcx> {
@@ -442,7 +448,7 @@ fn ast_ty_to_normalized<'tcx>(tcx: &ty::ctxt<'tcx>,
         Some(&t) => t,
         None => panic!("ast_ty_to_ty_cache was incomplete after typeck!")
     };
-    infer::normalize_associated_type(tcx, &tty)
+    normalize_associated_type(tcx, tty)
 }
 
 impl<'a, 'tcx> ImproperCTypesVisitor<'a, 'tcx> {
@@ -484,7 +490,7 @@ impl<'a, 'tcx> ImproperCTypesVisitor<'a, 'tcx> {
                 }
 
                 for field in fields {
-                    let field_ty = infer::normalize_associated_type(cx, &field.mt.ty);
+                    let field_ty = normalize_associated_type(cx, field.mt.ty);
                     let r = self.check_type_for_ffi(cache, field_ty);
                     match r {
                         FfiSafe => {}
@@ -539,8 +545,8 @@ impl<'a, 'tcx> ImproperCTypesVisitor<'a, 'tcx> {
 
                 // Check the contained variants.
                 for variant in variants {
-                    for arg in &variant.args {
-                        let arg = infer::normalize_associated_type(cx, arg);
+                    for &arg in &variant.args {
+                        let arg = normalize_associated_type(cx, arg);
                         let r = self.check_type_for_ffi(cache, arg);
                         match r {
                             FfiSafe => {}

@@ -117,7 +117,8 @@ pub fn declare_rust_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>, name: &str,
             (&f.sig, f.abi, None)
         }
         ty::TyClosure(closure_did, ref substs) => {
-            let infcx = infer::normalizing_infer_ctxt(ccx.tcx(), &ccx.tcx().tables);
+            let tcx = ccx.tcx();
+            let infcx = infer::normalizing_deanynonymizing_infer_ctxt(tcx, &tcx.tables);
             function_type = infcx.closure_type(closure_did, substs);
             let self_type = base::self_type_for_closure(ccx, closure_did, fn_type);
             let llenvironment_type = type_of::type_of_explicit_arg(ccx, self_type);

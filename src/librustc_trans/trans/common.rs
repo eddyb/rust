@@ -949,7 +949,7 @@ pub fn fulfill_obligation<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
 
     // Do the initial selection for the obligation. This yields the
     // shallow result we are looking for -- that is, what specific impl.
-    let infcx = infer::normalizing_infer_ctxt(tcx, &tcx.tables);
+    let infcx = infer::normalizing_deanynonymizing_infer_ctxt(tcx, &tcx.tables);
     let mut selcx = traits::SelectionContext::new(&infcx);
 
     let obligation =
@@ -1010,7 +1010,7 @@ pub fn normalize_and_test_predicates<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
            predicates);
 
     let tcx = ccx.tcx();
-    let infcx = infer::normalizing_infer_ctxt(tcx, &tcx.tables);
+    let infcx = infer::normalizing_deanynonymizing_infer_ctxt(tcx, &tcx.tables);
     let mut selcx = traits::SelectionContext::new(&infcx);
     let mut fulfill_cx = infcx.fulfillment_cx.borrow_mut();
     let cause = traits::ObligationCause::dummy();

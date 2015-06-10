@@ -94,6 +94,11 @@ pub struct InferCtxt<'a, 'tcx: 'a> {
     // directly.
     normalize: bool,
 
+    /// Whether to resolve anonymized types to their concrete values.
+    /// This can cause inconsistent results or ICEs if used before
+    /// type-checking finishes processing all the functions.
+    deanonymize: bool,
+
     err_count_on_creation: usize,
 }
 
@@ -350,15 +355,17 @@ pub fn new_infer_ctxt<'a, 'tcx>(tcx: &'a ty::ctxt<'tcx>,
         parameter_environment: param_env.unwrap_or(tcx.empty_parameter_environment()),
         fulfillment_cx: RefCell::new(traits::FulfillmentContext::new(errors_will_be_reported)),
         normalize: false,
+        deanonymize: false,
         err_count_on_creation: tcx.sess.err_count()
     }
 }
 
-pub fn normalizing_infer_ctxt<'a, 'tcx>(tcx: &'a ty::ctxt<'tcx>,
-                                        tables: &'a RefCell<ty::Tables<'tcx>>)
-                                        -> InferCtxt<'a, 'tcx> {
+pub fn normalizing_deanynonymizing_infer_ctxt<'a, 'tcx>(tcx: &'a ty::ctxt<'tcx>,
+                                                        tables: &'a RefCell<ty::Tables<'tcx>>)
+                                                        -> InferCtxt<'a, 'tcx> {
     let mut infcx = new_infer_ctxt(tcx, tables, None, false);
     infcx.normalize = true;
+    infcx.deanonymize = true;
     infcx
 }
 
@@ -473,19 +480,19 @@ pub struct CombinedSnapshot {
     region_vars_snapshot: RegionSnapshot,
 }
 
-pub fn normalize_associated_type<'tcx,T>(tcx: &ty::ctxt<'tcx>, value: &T) -> T
+pub fn normalize_associated_type<'a, 'tcx, T>(infcx: &InferCtxt<'a,'tcx>, value: &T) -> T
     where T : TypeFoldable<'tcx> + HasTypeFlags
 {
     debug!("normalize_associated_type(t={:?})", value);
 
-    let value = erase_regions(tcx, value);
+    let value = erase_regions(infcx.tcx, value);
 
-    if !value.has_projection_types() {
+    if !value.has_projection_types() &&
+       !(infcx.deanonymize && value.has_anonymized_types()) {
         return value;
     }
 
-    let infcx = new_infer_ctxt(tcx, &tcx.tables, None, true);
-    let mut selcx = traits::SelectionContext::new(&infcx);
+    let mut selcx = traits::SelectionContext::new(infcx);
     let cause = traits::ObligationCause::dummy();
     let traits::Normalized { value: result, obligations } =
         traits::normalize(&mut selcx, cause, &value);
@@ -497,10 +504,10 @@ pub fn normalize_associated_type<'tcx,T>(tcx: &ty::ctxt<'tcx>, value: &T) -> T
     let mut fulfill_cx = infcx.fulfillment_cx.borrow_mut();
 
     for obligation in obligations {
-        fulfill_cx.register_predicate_obligation(&infcx, obligation);
+        fulfill_cx.register_predicate_obligation(infcx, obligation);
     }
 
-    let result = drain_fulfillment_cx_or_panic(DUMMY_SP, &infcx, &mut fulfill_cx, &result);
+    let result = drain_fulfillment_cx_or_panic(DUMMY_SP, infcx, &mut fulfill_cx, &result);
 
     result
 }
@@ -617,6 +624,10 @@ pub fn erase_regions<'tcx,T>(cx: &ty::ctxt<'tcx>, value: &T) -> T
 }
 
 impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
+    pub fn deanonymize(&self) -> bool {
+        self.deanonymize
+    }
+
     pub fn freshen<T:TypeFoldable<'tcx>>(&self, t: T) -> T {
         t.fold_with(&mut self.freshener())
     }
@@ -1504,7 +1515,10 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                              .subst(self.tcx, &substs.func_substs);
 
         if self.normalize {
-            normalize_associated_type(&self.tcx, &closure_ty)
+            let mut infcx = new_infer_ctxt(self.tcx, self.tables, None, true);
+            infcx.normalize = true;
+            infcx.deanonymize = self.deanonymize;
+            normalize_associated_type(&infcx, &closure_ty)
         } else {
             closure_ty
         }
