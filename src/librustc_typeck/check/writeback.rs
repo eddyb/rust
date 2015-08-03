@@ -14,8 +14,9 @@
 use self::ResolveReason::*;
 
 use astconv::AstConv;
-use check::FnCtxt;
+use check::{FnCtxt, demand};
 use middle::pat_util;
+use middle::subst::{FnSpace, TypeSpace};
 use middle::ty::{self, Ty, MethodCall, MethodCallee};
 use middle::ty_fold::{TypeFolder,TypeFoldable};
 use middle::infer;
@@ -246,12 +247,35 @@ impl<'cx, 'tcx> WritebackCx<'cx, 'tcx> {
             return
         }
 
-        for &(def_id, concrete_ty) in &*self.fcx.inh.anon_types.borrow() {
-            let concrete_ty = self.resolve(&concrete_ty, ResolvingAnonTy(def_id));
-            self.fcx.tcx().tcache.borrow_mut().insert(def_id, ty::TypeScheme {
-                ty: concrete_ty,
-                generics: ty::Generics::empty()
-            });
+        for &(def_id, param_space, concrete_ty) in &*self.fcx.inh.anon_types.borrow() {
+            let reason = ResolvingAnonTy(def_id);
+            let concrete_ty = self.resolve(&concrete_ty, reason);
+            let old_ty = self.fcx.tcx().tcache.borrow_mut().get(&def_id).as_ref().map(|t| t.ty);
+
+            if let Some(old_ty) = old_ty {
+                // Ensure all anonymized type assignments agree with eachother.
+                demand::eqtype(self.fcx, reason.span(self.fcx.tcx()), old_ty, concrete_ty);
+            } else {
+                // Do not let method type parameters escape into anonymized types
+                // defined inside an associated type, which is only parametrized
+                // on the impl type parameters.
+                if param_space == TypeSpace {
+                    for ty in concrete_ty.walk() {
+                        if let ty::TyParam(ty::ParamTy { space: FnSpace, .. }) = ty.sty {
+                            let span = reason.span(self.fcx.tcx());
+                            span_err!(self.fcx.tcx().sess, span, E0441,
+                                      "method type parameter `{}` cannot be used in an \
+                                       anonymized type defined in an associated type",
+                                       ty);
+                        }
+                    }
+                }
+
+                self.fcx.tcx().tcache.borrow_mut().insert(def_id, ty::TypeScheme {
+                    ty: concrete_ty,
+                    generics: ty::Generics::empty()
+                });
+            }
         }
     }
 
@@ -441,7 +465,7 @@ impl<'cx, 'tcx> Resolver<'cx, 'tcx> {
 
                 ResolvingAnonTy(_) => {
                     let span = self.reason.span(self.tcx);
-                    span_err!(self.tcx.sess, span, E0399,
+                    span_err!(self.tcx.sess, span, E0440,
                               "cannot determine a concrete type for this anonymized type")
                 }
             }

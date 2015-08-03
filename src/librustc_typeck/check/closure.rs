@@ -84,6 +84,7 @@ fn check_closure<'a,'tcx>(fcx: &FnCtxt<'a,'tcx>,
              expr.id,
              &fn_sig,
              decl,
+             None,
              expr.id,
              &*body,
              fcx.inh);

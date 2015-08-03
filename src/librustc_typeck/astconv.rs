@@ -1598,7 +1598,7 @@ pub fn ast_ty_to_ty<'tcx>(this: &AstConv<'tcx>,
                 (None, _) => {
                     span_err!(this.tcx().sess, ast_ty.span, E0439,
                               "anonymized types are not allowed outside of function and \
-                               impl method return types");
+                               impl method return types and impl associated types");
                     this.tcx().types.err
                 }
                 (Some(_), Err(_)) => this.tcx().types.err,

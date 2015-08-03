@@ -916,7 +916,9 @@ fn convert_item(ccx: &CrateCtxt, it: &ast::Item) {
                                   "associated types are not allowed in inherent impls");
                     }
 
-                    let typ = ccx.icx(&ty_predicates).to_ty(&ExplicitRscope, ty);
+                    let anon_scope = Some(AnonTypeScope::new(&ty_generics));
+                    let rscope = MaybeWithAnonTypes::new(ExplicitRscope, anon_scope);
+                    let typ = ccx.icx(&ty_predicates).to_ty(&rscope, ty);
 
                     convert_associated_type(ccx, ImplContainer(local_def(it.id)),
                                             impl_item.ident, impl_item.id, impl_item.vis,

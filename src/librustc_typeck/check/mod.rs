@@ -172,11 +172,13 @@ pub struct Inherited<'a, 'tcx: 'a> {
 
     deferred_cast_checks: RefCell<Vec<cast::CastCheck<'tcx>>>,
 
-    // Anonymized types found in explicit return types and their
-    // associated fresh inference variable. Writeback resolves these
-    // variables to get the concrete type, which can be used to
-    // deanonymize TyAnon, after typeck is done with all functions.
-    anon_types: RefCell<Vec<(DefId, Ty<'tcx>)>>,
+    // Anonymized types found in explicit return types, their param
+    // space of definition (TypeSpace in associated types, FnSpace in
+    // function return types) and their respective fresh inference
+    // variable. Writeback resolves these variables to get the concrete
+    // type, which can be used to deanonymize TyAnon, after typeck is
+    // done processing all functions.
+    anon_types: RefCell<Vec<(DefId, ParamSpace, Ty<'tcx>)>>,
 }
 
 trait DeferredCallResolution<'tcx> {
@@ -364,6 +366,7 @@ fn static_inherited_fields<'a, 'tcx>(ccx: &'a CrateCtxt<'a, 'tcx>,
 
 struct CheckItemTypesVisitor<'a, 'tcx: 'a> { ccx: &'a CrateCtxt<'a, 'tcx> }
 struct CheckItemBodiesVisitor<'a, 'tcx: 'a> { ccx: &'a CrateCtxt<'a, 'tcx> }
+struct CheckAnonTypesVisitor<'a, 'tcx: 'a> { ccx: &'a CrateCtxt<'a, 'tcx> }
 
 impl<'a, 'tcx> Visitor<'tcx> for CheckItemTypesVisitor<'a, 'tcx> {
     fn visit_item(&mut self, i: &'tcx ast::Item) {
@@ -388,6 +391,22 @@ impl<'a, 'tcx> Visitor<'tcx> for CheckItemBodiesVisitor<'a, 'tcx> {
         check_item_body(self.ccx, i);
         visit::walk_item(self, i);
     }
+}
+
+impl<'a, 'tcx> Visitor<'tcx> for CheckAnonTypesVisitor<'a, 'tcx> {
+    fn visit_ty(&mut self, ty: &'tcx ast::Ty) {
+        if let ast::TyAnon(_) = ty.node {
+            if !self.ccx.tcx.tcache.borrow().contains_key(&local_def(ty.id)) {
+                span_err!(self.ccx.tcx.sess, ty.span, E0442,
+                          "anonymized types must be used in a return \
+                           type in the same impl");
+            }
+        }
+        visit::walk_ty(self, ty);
+    }
+
+    // Do not recurse into items.
+    fn visit_item(&mut self, _: &ast::Item) {}
 }
 
 pub fn check_item_types(ccx: &CrateCtxt) {
@@ -425,6 +444,7 @@ pub fn check_item_types(ccx: &CrateCtxt) {
 }
 
 fn check_bare_fn<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
+                           impl_id: Option<ast::NodeId>,
                            decl: &'tcx ast::FnDecl,
                            body: &'tcx ast::Block,
                            fn_id: ast::NodeId,
@@ -449,7 +469,7 @@ fn check_bare_fn<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                                                   &fn_sig);
 
             let fcx = check_fn(ccx, fn_ty.unsafety, fn_id, &fn_sig,
-                               decl, fn_id, body, &inh);
+                               decl, impl_id, fn_id, body, &inh);
 
             fcx.select_all_obligations_and_apply_defaults();
             upvar::closure_analyze_fn(&fcx, fn_id, decl, body);
@@ -559,6 +579,7 @@ fn check_fn<'a, 'tcx>(ccx: &'a CrateCtxt<'a, 'tcx>,
                       unsafety_id: ast::NodeId,
                       fn_sig: &ty::FnSig<'tcx>,
                       decl: &'tcx ast::FnDecl,
+                      impl_id: Option<ast::NodeId>,
                       fn_id: ast::NodeId,
                       body: &'tcx ast::Block,
                       inherited: &'a Inherited<'a, 'tcx>)
@@ -632,7 +653,7 @@ fn check_fn<'a, 'tcx>(ccx: &'a CrateCtxt<'a, 'tcx>,
 
     check_block_with_expected(&fcx, body, match ret_ty {
         ty::FnConverging(result_type) => {
-            ExpectHasType(fcx.instantiate_anon_types(result_type))
+            ExpectHasType(fcx.instantiate_anon_types(result_type, fn_id, impl_id))
         }
         ty::FnDiverging => NoExpectation
     });
@@ -725,7 +746,7 @@ pub fn check_item_body<'a,'tcx>(ccx: &CrateCtxt<'a,'tcx>, it: &'tcx ast::Item) {
       ast::ItemFn(ref decl, _, _, _, _, ref body) => {
         let fn_pty = ccx.tcx.lookup_item_type(ast_util::local_def(it.id));
         let param_env = ParameterEnvironment::for_item(ccx.tcx, it.id);
-        check_bare_fn(ccx, &**decl, &**body, it.id, it.span, fn_pty.ty, param_env);
+        check_bare_fn(ccx, None, &**decl, &**body, it.id, it.span, fn_pty.ty, param_env);
       }
       ast::ItemImpl(_, _, _, _, _, ref impl_items) => {
         debug!("ItemImpl {} with id {}", it.ident, it.id);
@@ -738,13 +759,21 @@ pub fn check_item_body<'a,'tcx>(ccx: &CrateCtxt<'a,'tcx>, it: &'tcx ast::Item) {
                     check_const(ccx, impl_item.span, &*expr, impl_item.id)
                 }
                 ast::MethodImplItem(ref sig, ref body) => {
-                    check_method_body(ccx, &impl_pty.generics, sig, body,
-                                      impl_item.id, impl_item.span);
+                    check_method_body(ccx, Some(it.id), &impl_pty.generics, sig,
+                                      body, impl_item.id, impl_item.span);
                 }
                 ast::TypeImplItem(_) |
                 ast::MacImplItem(_) => {
                     // Nothing to do here.
                 }
+            }
+        }
+
+        // Check that if we had anonymized types in an associated type,
+        // they were assigned by one of the methods in this impl.
+        for impl_item in impl_items {
+            if let ast::TypeImplItem(ref ty) = impl_item.node {
+                CheckAnonTypesVisitor { ccx: ccx }.visit_ty(ty);
             }
         }
       }
@@ -758,8 +787,8 @@ pub fn check_item_body<'a,'tcx>(ccx: &CrateCtxt<'a,'tcx>, it: &'tcx ast::Item) {
                 ast::MethodTraitItem(ref sig, Some(ref body)) => {
                     check_trait_fn_not_const(ccx, trait_item.span, sig.constness);
 
-                    check_method_body(ccx, &trait_def.generics, sig, body,
-                                      trait_item.id, trait_item.span);
+                    check_method_body(ccx, None, &trait_def.generics, sig,
+                                      body, trait_item.id, trait_item.span);
                 }
                 ast::MethodTraitItem(ref sig, None) => {
                     check_trait_fn_not_const(ccx, trait_item.span, sig.constness);
@@ -842,6 +871,7 @@ fn check_trait_on_unimplemented<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
 /// * `self_bound`: bound for the `Self` type parameter, if any
 /// * `method`: the method definition
 fn check_method_body<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
+                               impl_id: Option<ast::NodeId>,
                                item_generics: &ty::Generics<'tcx>,
                                sig: &'tcx ast::MethodSig,
                                body: &'tcx ast::Block,
@@ -853,7 +883,7 @@ fn check_method_body<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
     let fty = ccx.tcx.node_id_to_type(id);
     debug!("check_method_body: fty={:?}", fty);
 
-    check_bare_fn(ccx, &sig.decl, body, id, span, fty, param_env);
+    check_bare_fn(ccx, impl_id, &sig.decl, body, id, span, fty, param_env);
 }
 
 fn check_impl_items_against_trait<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
@@ -1363,15 +1393,32 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
     /// Replace all anonymized types with fresh inference variables
     /// and record them for writeback.
-    fn instantiate_anon_types(&self, ty: Ty<'tcx>) -> Ty<'tcx> {
+    fn instantiate_anon_types(&self, ty: Ty<'tcx>, fn_id: ast::NodeId,
+                              impl_id: Option<ast::NodeId>) -> Ty<'tcx> {
         let tcx = self.tcx();
         let mut anon_types = self.inh.anon_types.borrow_mut();
         ty.fold_with(&mut BottomUpFolder {
             tcx: tcx,
             fldop: |ty| {
                 if let ty::TyAnon(def_id, _, ref data) = ty.sty {
+                    // Do not instantiate an `impl Trait` type unless it was
+                    // defined in the same function's return type or in an
+                    // associated type of the impl, in the case of methods.
+                    if def_id.krate != ast::LOCAL_CRATE {
+                        return ty;
+                    }
+
+                    let parent = tcx.map.get_parent(def_id.node);
+                    let param_space = if parent == fn_id {
+                        subst::FnSpace
+                    } else if Some(tcx.map.get_parent(parent)) == impl_id {
+                        subst::TypeSpace
+                    } else {
+                        return ty;
+                    };
+
                     let ty_var = self.infcx().next_ty_var();
-                    anon_types.push((def_id, ty_var));
+                    anon_types.push((def_id, param_space, ty_var));
 
                     let span = tcx.map.def_id_span(def_id, codemap::DUMMY_SP);
                     let cause = traits::ObligationCause::new(span, self.body_id,

@@ -2474,6 +2474,9 @@ register_diagnostics! {
            // type `{}` was overridden
     E0436, // functional record update requires a struct
     E0439, // anonymized types are not allowed outside of function and
-           // impl method return types
-    E0440  // cannot determine a concrete type for this anonymized type
+           // impl method return types and impl associated types
+    E0440, // cannot determine a concrete type for this anonymized type
+    E0441, // method type parameter `{}` cannot be used in an anonymized type
+           // defined in an associated type
+    E0442  // anonymized types must be used in a return type in the same impl
 }
