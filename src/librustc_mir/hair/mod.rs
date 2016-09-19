@@ -14,7 +14,7 @@
 //! unit-tested and separated from the Rust source and compiler data
 //! structures.
 
-use rustc::mir::repr::{BinOp, BorrowKind, Field, Literal, Mutability, UnOp,
+use rustc::mir::{BinOp, BorrowKind, Field, Literal, Mutability, UnOp,
     TypedConstVal};
 use rustc::middle::const_val::ConstVal;
 use rustc::hir::def_id::DefId;

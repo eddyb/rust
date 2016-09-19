@@ -15,7 +15,7 @@ use rustc_const_eval as const_eval;
 use rustc::hir::def::Def;
 use rustc::hir::pat_util::EnumerateAndAdjustIterator;
 use rustc::ty::{self, Ty};
-use rustc::mir::repr::*;
+use rustc::mir::*;
 use rustc::hir::{self, PatKind};
 use syntax::ptr::P;
 use syntax_pos::Span;
