@@ -65,7 +65,7 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
             ty::ImplContainer(_) => impl_trait_ref.self_ty(),
             ty::TraitContainer(_) => tcx.mk_self_type()
         };
-        let method_ty = tcx.lookup_item_type(method.def_id).ty;
+        let method_ty = tcx.item_type(method.def_id);
         let self_arg_ty = *method_ty.fn_sig().input(0).skip_binder();
         match ExplicitSelf::determine(untransformed_self_ty, self_arg_ty) {
             ExplicitSelf::ByValue => "self".to_string(),
@@ -114,8 +114,8 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
         }
     }
 
-    let impl_m_generics = tcx.lookup_generics(impl_m.def_id);
-    let trait_m_generics = tcx.lookup_generics(trait_m.def_id);
+    let impl_m_generics = tcx.item_generics(impl_m.def_id);
+    let trait_m_generics = tcx.item_generics(trait_m.def_id);
     let num_impl_m_type_params = impl_m_generics.types.len();
     let num_trait_m_type_params = trait_m_generics.types.len();
     if num_impl_m_type_params != num_trait_m_type_params {
@@ -175,7 +175,7 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
     }
 
     let m_fty = |method: &ty::AssociatedItem| {
-        match tcx.lookup_item_type(method.def_id).ty.sty {
+        match tcx.item_type(method.def_id).sty {
             ty::TyFnDef(_, _, f) => f,
             _ => bug!()
         }
@@ -349,8 +349,8 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
         // environment. We can't just use `impl_env.caller_bounds`,
         // however, because we want to replace all late-bound regions with
         // region variables.
-        let impl_m_predicates = tcx.lookup_predicates(impl_m.def_id);
-        let impl_predicates = tcx.lookup_predicates(impl_m_predicates.parent.unwrap());
+        let impl_m_predicates = tcx.item_predicates(impl_m.def_id);
+        let impl_predicates = tcx.item_predicates(impl_m_predicates.parent.unwrap());
         let mut hybrid_preds = impl_predicates.instantiate(tcx, impl_to_skol_substs);
 
         debug!("compare_impl_method: impl_bounds={:?}", hybrid_preds);
@@ -362,9 +362,9 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
         //
         // We then register the obligations from the impl_m and check to see
         // if all constraints hold.
-        hybrid_preds.predicates
-            .extend(tcx.lookup_predicates(trait_m.def_id)
-                       .instantiate_own(tcx, trait_to_skol_substs).predicates);
+        hybrid_preds.predicates.extend(
+            tcx.item_predicates(trait_m.def_id)
+               .instantiate_own(tcx, trait_to_skol_substs).predicates);
 
         // Construct trait parameter environment and then shift it into the skolemized viewpoint.
         // The key step here is to update the caller_bounds's predicates to be
@@ -687,8 +687,8 @@ pub fn compare_const_impl<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                trait_to_skol_substs);
 
         // Compute skolemized form of impl and trait const tys.
-        let impl_ty = tcx.lookup_item_type(impl_c.def_id).ty.subst(tcx, impl_to_skol_substs);
-        let trait_ty = tcx.lookup_item_type(trait_c.def_id).ty.subst(tcx, trait_to_skol_substs);
+        let impl_ty = tcx.item_type(impl_c.def_id).subst(tcx, impl_to_skol_substs);
+        let trait_ty = tcx.item_type(trait_c.def_id).subst(tcx, trait_to_skol_substs);
         let mut origin = TypeOrigin::Misc(impl_c_span);
 
         let err = infcx.commit_if_ok(|_| {

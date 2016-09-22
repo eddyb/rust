@@ -1390,7 +1390,7 @@ impl<'a, 'gcx, 'tcx> Rebuilder<'a, 'gcx, 'tcx> {
                     match path.def {
                         Def::Enum(did) | Def::TyAlias(did) |
                         Def::Struct(did) | Def::Union(did) => {
-                            let generics = self.tcx.lookup_generics(did);
+                            let generics = self.tcx.item_generics(did);
 
                             let expected =
                                 generics.regions.len() as u32;

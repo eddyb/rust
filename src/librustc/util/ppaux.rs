@@ -76,7 +76,7 @@ pub fn parameterized(f: &mut fmt::Formatter,
     let mut num_types = 0;
     let mut item_name = None;
     let fn_trait_kind = ty::tls::with(|tcx| {
-        let mut generics = tcx.lookup_generics(did);
+        let mut generics = tcx.item_generics(did);
         let mut path_def_id = did;
         verbose = tcx.sess.verbose();
         has_self = generics.has_self;
@@ -86,7 +86,7 @@ pub fn parameterized(f: &mut fmt::Formatter,
             // Methods.
             assert_eq!(ns, Ns::Value);
             child_types = generics.types.len();
-            generics = tcx.lookup_generics(def_id);
+            generics = tcx.item_generics(def_id);
             num_regions = generics.regions.len();
             num_types = generics.types.len();
 
@@ -836,7 +836,7 @@ impl<'tcx> fmt::Display for ty::TypeVariants<'tcx> {
             TyAdt(def, substs) => {
                 ty::tls::with(|tcx| {
                     if def.did.is_local() &&
-                          !tcx.tcache.borrow().contains_key(&def.did) {
+                          !tcx.item_types.borrow().contains_key(&def.did) {
                         write!(f, "{}<..>", tcx.item_path_str(def.did))
                     } else {
                         parameterized(f, substs, def.did, Ns::Type, &[])
@@ -849,7 +849,7 @@ impl<'tcx> fmt::Display for ty::TypeVariants<'tcx> {
                 ty::tls::with(|tcx| {
                     // Grab the "TraitA + TraitB" from `impl TraitA + TraitB`,
                     // by looking up the projections associated with the def_id.
-                    let item_predicates = tcx.lookup_predicates(def_id);
+                    let item_predicates = tcx.item_predicates(def_id);
                     let substs = tcx.lift(&substs).unwrap_or_else(|| {
                         tcx.intern_substs(&[])
                     });
