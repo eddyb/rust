@@ -646,9 +646,7 @@ fn construct_witness(ctor: &Constructor, pats: Vec<&Pat>, left_ty: Ty) -> P<Pat>
 }
 
 impl Constructor {
-    fn variant_for_adt<'tcx, 'container, 'a>(&self,
-                                             adt: &'a ty::AdtDefData<'tcx, 'container>)
-                                             -> &'a ty::VariantDefData<'tcx, 'container> {
+    fn variant_for_adt<'a>(&self, adt: &'a ty::AdtDef) -> &'a ty::VariantDef {
         match self {
             &Variant(vid) => adt.variant_with_id(vid),
             _ => adt.struct_variant()

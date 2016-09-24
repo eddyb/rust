@@ -220,7 +220,7 @@ pub enum ExprKind<'tcx> {
         fields: Vec<ExprRef<'tcx>>,
     },
     Adt {
-        adt_def: AdtDef<'tcx>,
+        adt_def: &'tcx AdtDef,
         variant_index: usize,
         substs: &'tcx Substs<'tcx>,
         fields: Vec<FieldExprRef<'tcx>>,
@@ -295,7 +295,7 @@ pub enum PatternKind<'tcx> {
 
     /// Foo(...) or Foo{...} or Foo, where `Foo` is a variant name from an adt with >1 variants
     Variant {
-        adt_def: AdtDef<'tcx>,
+        adt_def: &'tcx AdtDef,
         variant_index: usize,
         subpatterns: Vec<FieldPattern<'tcx>>,
     },

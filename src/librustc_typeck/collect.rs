@@ -540,10 +540,10 @@ fn convert_field<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                            struct_generics: &'tcx ty::Generics<'tcx>,
                            struct_predicates: &ty::GenericPredicates<'tcx>,
                            field: &hir::StructField,
-                           ty_f: ty::FieldDefMaster<'tcx>)
+                           ty_f: &'tcx ty::FieldDef)
 {
     let tt = ccx.icx(struct_predicates).to_ty(&ExplicitRscope, &field.ty);
-    ty_f.fulfill_ty(tt);
+    ccx.tcx.item_types.borrow_mut().insert(ty_f.did, tt);
 
     let def_id = ccx.tcx.map.local_def_id(field.id);
     ccx.tcx.item_types.borrow_mut().insert(def_id, tt);
@@ -655,7 +655,7 @@ fn convert_item(ccx: &CrateCtxt, it: &hir::Item) {
             let generics = generics_of_def_id(ccx, def_id);
             let predicates = predicates_of_item(ccx, it);
             convert_enum_variant_types(ccx,
-                                       tcx.lookup_adt_def_master(ccx.tcx.map.local_def_id(it.id)),
+                                       tcx.lookup_adt_def(ccx.tcx.map.local_def_id(it.id)),
                                        ty,
                                        generics,
                                        predicates,
@@ -822,7 +822,7 @@ fn convert_item(ccx: &CrateCtxt, it: &hir::Item) {
             let generics = generics_of_def_id(ccx, def_id);
             let predicates = predicates_of_item(ccx, it);
 
-            let variant = tcx.lookup_adt_def_master(def_id).struct_variant();
+            let variant = tcx.lookup_adt_def(def_id).struct_variant();
 
             for (f, ty_f) in struct_def.fields().iter().zip(variant.fields.iter()) {
                 convert_field(ccx, generics, &predicates, f, ty_f)
@@ -848,7 +848,7 @@ fn convert_item(ccx: &CrateCtxt, it: &hir::Item) {
 
 fn convert_variant_ctor<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                                   ctor_id: ast::NodeId,
-                                  variant: ty::VariantDef<'tcx>,
+                                  variant: &'tcx ty::VariantDef,
                                   ty: Ty<'tcx>,
                                   predicates: ty::GenericPredicates<'tcx>) {
     let tcx = ccx.tcx;
@@ -860,7 +860,7 @@ fn convert_variant_ctor<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
             let inputs: Vec<_> =
                 variant.fields
                 .iter()
-                .map(|field| field.unsubst_ty())
+                .map(|field| tcx.item_type(field.did))
                 .collect();
             let substs = mk_item_substs(&ccx.icx(&predicates),
                                         ccx.tcx.map.span(ctor_id), def_id);
@@ -880,7 +880,7 @@ fn convert_variant_ctor<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
 }
 
 fn convert_enum_variant_types<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
-                                        def: ty::AdtDefMaster<'tcx>,
+                                        def: &'tcx ty::AdtDef,
                                         ty: Ty<'tcx>,
                                         generics: &'tcx ty::Generics<'tcx>,
                                         predicates: ty::GenericPredicates<'tcx>,
@@ -908,7 +908,7 @@ fn convert_struct_variant<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                                     name: ast::Name,
                                     disr_val: ty::Disr,
                                     def: &hir::VariantData)
-                                    -> ty::VariantDefData<'tcx, 'tcx> {
+                                    -> ty::VariantDef {
     let mut seen_fields: FnvHashMap<ast::Name, Span> = FnvHashMap();
     let node_id = ccx.tcx.map.as_local_node_id(did).unwrap();
     let fields = def.fields().iter().map(|f| {
@@ -925,10 +925,13 @@ fn convert_struct_variant<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
             seen_fields.insert(f.name, f.span);
         }
 
-        ty::FieldDefData::new(fid, f.name,
-            ty::Visibility::from_hir(&f.vis, node_id, ccx.tcx))
+        ty::FieldDef {
+            did: fid,
+            name: f.name,
+            vis: ty::Visibility::from_hir(&f.vis, node_id, ccx.tcx)
+        }
     }).collect();
-    ty::VariantDefData {
+    ty::VariantDef {
         did: did,
         name: name,
         disr_val: disr_val,
@@ -940,29 +943,34 @@ fn convert_struct_variant<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
 fn convert_struct_def<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                                 it: &hir::Item,
                                 def: &hir::VariantData)
-                                -> ty::AdtDefMaster<'tcx>
+                                -> &'tcx ty::AdtDef
 {
     let did = ccx.tcx.map.local_def_id(it.id);
     // Use separate constructor id for unit/tuple structs and reuse did for braced structs.
     let ctor_id = if !def.is_struct() { Some(ccx.tcx.map.local_def_id(def.id())) } else { None };
     let variants = vec![convert_struct_variant(ccx, ctor_id.unwrap_or(did), it.name,
                                                ConstInt::Infer(0), def)];
-    let adt = ccx.tcx.intern_adt_def(did, AdtKind::Struct, variants);
+    let adt = ccx.tcx.alloc_adt_def(did, AdtKind::Struct, variants);
     if let Some(ctor_id) = ctor_id {
         // Make adt definition available through constructor id as well.
-        ccx.tcx.insert_adt_def(ctor_id, adt);
+        ccx.tcx.adt_defs.borrow_mut().insert(ctor_id, adt);
     }
+
+    ccx.tcx.adt_defs.borrow_mut().insert(did, adt);
     adt
 }
 
 fn convert_union_def<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                                 it: &hir::Item,
                                 def: &hir::VariantData)
-                                -> ty::AdtDefMaster<'tcx>
+                                -> &'tcx ty::AdtDef
 {
     let did = ccx.tcx.map.local_def_id(it.id);
     let variants = vec![convert_struct_variant(ccx, did, it.name, ConstInt::Infer(0), def)];
-    ccx.tcx.intern_adt_def(did, AdtKind::Union, variants)
+
+    let adt = ccx.tcx.alloc_adt_def(did, AdtKind::Union, variants);
+    ccx.tcx.adt_defs.borrow_mut().insert(did, adt);
+    adt
 }
 
     fn evaluate_disr_expr(ccx: &CrateCtxt, repr_ty: attr::IntType, e: &hir::Expr)
@@ -1016,7 +1024,7 @@ fn convert_union_def<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
 fn convert_enum_def<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                               it: &hir::Item,
                               def: &hir::EnumDef)
-                              -> ty::AdtDefMaster<'tcx>
+                              -> &'tcx ty::AdtDef
 {
     let tcx = ccx.tcx;
     let did = tcx.map.local_def_id(it.id);
@@ -1044,7 +1052,10 @@ fn convert_enum_def<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
         let did = tcx.map.local_def_id(v.node.data.id());
         convert_struct_variant(ccx, did, v.node.name, disr, &v.node.data)
     }).collect();
-    tcx.intern_adt_def(tcx.map.local_def_id(it.id), AdtKind::Enum, variants)
+
+    let adt = tcx.alloc_adt_def(did, AdtKind::Enum, variants);
+    tcx.adt_defs.borrow_mut().insert(did, adt);
+    adt
 }
 
 /// Ensures that the super-predicates of the trait with def-id

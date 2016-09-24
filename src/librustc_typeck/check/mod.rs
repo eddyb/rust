@@ -1901,7 +1901,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
     // Indifferent to privacy flags
     pub fn field_ty(&self,
                     span: Span,
-                    field: ty::FieldDef<'tcx>,
+                    field: &'tcx ty::FieldDef,
                     substs: &Substs<'tcx>)
                     -> Ty<'tcx>
     {
@@ -2992,7 +2992,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
     }
 
     // Return an hint about the closest match in field names
-    fn suggest_field_name(variant: ty::VariantDef<'tcx>,
+    fn suggest_field_name(variant: &'tcx ty::VariantDef,
                           field: &Spanned<ast::Name>,
                           skip : Vec<InternedString>)
                           -> Option<InternedString> {
@@ -3084,7 +3084,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
 
     fn report_unknown_field(&self,
                             ty: Ty<'tcx>,
-                            variant: ty::VariantDef<'tcx>,
+                            variant: &'tcx ty::VariantDef,
                             field: &hir::Field,
                             skip_fields: &[hir::Field],
                             kind_name: &str) {
@@ -3127,7 +3127,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
     fn check_expr_struct_fields(&self,
                                 adt_ty: Ty<'tcx>,
                                 span: Span,
-                                variant: ty::VariantDef<'tcx>,
+                                variant: &'tcx ty::VariantDef,
                                 ast_fields: &'gcx [hir::Field],
                                 check_completeness: bool) {
         let tcx = self.tcx;
@@ -3237,7 +3237,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                          path: &hir::Path,
                          node_id: ast::NodeId,
                          span: Span)
-                         -> Option<(ty::VariantDef<'tcx>,  Ty<'tcx>)> {
+                         -> Option<(&'tcx ty::VariantDef,  Ty<'tcx>)> {
         let variant = match path.def {
             Def::Err => {
                 self.set_tainted_by_errors();

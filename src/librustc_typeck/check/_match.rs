@@ -616,7 +616,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
     fn check_struct_pat_fields(&self,
                                adt_ty: Ty<'tcx>,
                                span: Span,
-                               variant: ty::VariantDef<'tcx>,
+                               variant: &'tcx ty::VariantDef,
                                fields: &'gcx [Spanned<hir::FieldPat>],
                                etc: bool) {
         let tcx = self.tcx;
