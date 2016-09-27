@@ -11,6 +11,7 @@
 use hir::def_id::DefId;
 use rustc_data_structures::fnv::FnvHashMap;
 use std::cell::RefCell;
+use std::fmt;
 use std::ops::Index;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -28,8 +29,8 @@ pub struct DepTrackingMap<M: DepTrackingMapConfig> {
 }
 
 pub trait DepTrackingMapConfig {
-    type Key: Eq + Hash + Clone;
-    type Value: Clone;
+    type Key: Eq + Hash + Copy + fmt::Debug;
+    type Value: Clone + fmt::Debug;
     fn to_dep_node(key: &Self::Key) -> DepNode<DefId>;
 }
 
@@ -83,7 +84,7 @@ impl<M: DepTrackingMapConfig> DepTrackingMap<M> {
 
     /// Append `elem` to the vector stored for `k`, creating a new vector if needed.
     /// This is considered a write to `k`.
-    pub fn push<E: Clone>(&mut self, k: M::Key, elem: E)
+    pub fn push<E: Clone + fmt::Debug>(&mut self, k: M::Key, elem: E)
         where M: DepTrackingMapConfig<Value=Vec<E>>
     {
         self.write(&k);
@@ -143,7 +144,12 @@ impl<M: DepTrackingMapConfig> MemoizationMap for RefCell<DepTrackingMap<M>> {
 
         let _task = graph.in_task(M::to_dep_node(&key));
         let result = op();
-        self.borrow_mut().map.insert(key, result.clone());
+
+        if let Some(prev) = self.borrow_mut().map.insert(key, result.clone()) {
+            bug!("tried to overwrite previous entry: {:?} ({:?}) => {:?}",
+                 key, M::to_dep_node(&key), prev);
+        }
+
         result
     }
 }

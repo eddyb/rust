@@ -97,9 +97,13 @@ impl<'a, 'tcx, 'v> Visitor<'v> for ConstraintContext<'a, 'tcx> {
                 }
             }
             hir::ItemTrait(..) => {
-                let trait_def = tcx.lookup_trait_def(did);
-                self.add_constraints_from_trait_ref(&trait_def.generics,
-                                                    trait_def.trait_ref,
+                let generics = tcx.item_generics(did);
+                let trait_ref = ty::TraitRef {
+                    def_id: did,
+                    substs: Substs::identity_for_item(tcx, did)
+                };
+                self.add_constraints_from_trait_ref(generics,
+                                                    trait_ref,
                                                     self.invariant);
             }
 
@@ -276,7 +280,7 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
                trait_ref,
                variance);
 
-        let trait_def = self.tcx().lookup_trait_def(trait_ref.def_id);
+        let trait_generics = self.tcx().item_generics(trait_ref.def_id);
 
         // This edge is actually implied by the call to
         // `lookup_trait_def`, but I'm trying to be future-proof. See
@@ -285,8 +289,8 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
 
         self.add_constraints_from_substs(generics,
                                          trait_ref.def_id,
-                                         &trait_def.generics.types,
-                                         &trait_def.generics.regions,
+                                         &trait_generics.types,
+                                         &trait_generics.regions,
                                          trait_ref.substs,
                                          variance);
     }
@@ -353,7 +357,7 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
 
             ty::TyProjection(ref data) => {
                 let trait_ref = &data.trait_ref;
-                let trait_def = self.tcx().lookup_trait_def(trait_ref.def_id);
+                let trait_generics = self.tcx().item_generics(trait_ref.def_id);
 
                 // This edge is actually implied by the call to
                 // `lookup_trait_def`, but I'm trying to be future-proof. See
@@ -362,8 +366,8 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
 
                 self.add_constraints_from_substs(generics,
                                                  trait_ref.def_id,
-                                                 &trait_def.generics.types,
-                                                 &trait_def.generics.regions,
+                                                 &trait_generics.types,
+                                                 &trait_generics.regions,
                                                  trait_ref.substs,
                                                  variance);
             }
