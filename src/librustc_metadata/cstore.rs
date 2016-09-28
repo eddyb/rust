@@ -34,6 +34,8 @@ pub use rustc::middle::cstore::{NativeLibraryKind, LinkagePreference};
 pub use rustc::middle::cstore::{NativeStatic, NativeFramework, NativeUnknown};
 pub use rustc::middle::cstore::{CrateSource, LinkMeta};
 
+pub use csearch::MetadataProvider;
+
 // A map from external crate numbers (as decoded from some crate file) to
 // local crate numbers (as generated during this session). Each external
 // crate may refer to types in other external crates, and each has their

@@ -221,7 +221,7 @@ pub fn run_compiler<'a>(args: &[String],
 
     let plugins = sess.opts.debugging_opts.extra_plugins.clone();
     let control = callbacks.build_controller(&sess, &matches);
-    (driver::compile_input(&sess, &cstore, cfg, &input, &odir, &ofile,
+    (driver::compile_input(&sess, cstore, cfg, &input, &odir, &ofile,
                            Some(plugins), &control),
      Some(sess))
 }
@@ -489,6 +489,7 @@ impl<'a> CompilerCalls<'a> for RustcDefaultCalls {
                 };
                 control.after_hir_lowering.callback = box move |state| {
                     pretty::print_after_hir_lowering(state.session,
+                                                     state.cstore.clone().unwrap(),
                                                      state.ast_map.unwrap(),
                                                      state.analysis.unwrap(),
                                                      state.resolutions.unwrap(),

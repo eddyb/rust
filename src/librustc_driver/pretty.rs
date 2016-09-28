@@ -26,6 +26,7 @@ use rustc::session::Session;
 use rustc::session::config::Input;
 use rustc_borrowck as borrowck;
 use rustc_borrowck::graphviz as borrowck_dot;
+use rustc_metadata::cstore::CStore;
 
 use rustc_mir::pretty::write_mir_pretty;
 use rustc_mir::graphviz::write_mir_graphviz;
@@ -45,6 +46,7 @@ use std::io::{self, Write};
 use std::iter;
 use std::option;
 use std::path::Path;
+use std::rc::Rc;
 use std::str::FromStr;
 
 use rustc::hir::map as hir_map;
@@ -199,6 +201,7 @@ impl PpSourceMode {
     }
     fn call_with_pp_support_hir<'tcx, A, B, F>(&self,
                                                sess: &'tcx Session,
+                                               cstore: Rc<CStore>,
                                                ast_map: &hir_map::Map<'tcx>,
                                                analysis: &ty::CrateAnalysis,
                                                resolutions: &Resolutions,
@@ -227,6 +230,7 @@ impl PpSourceMode {
             }
             PpmTyped => {
                 abort_on_err(driver::phase_3_run_analysis_passes(sess,
+                                                                 cstore,
                                                                  ast_map.clone(),
                                                                  analysis.clone(),
                                                                  resolutions.clone(),
@@ -814,6 +818,7 @@ pub fn print_after_parsing(sess: &Session,
 }
 
 pub fn print_after_hir_lowering<'tcx, 'a: 'tcx>(sess: &'a Session,
+                                                cstore: Rc<CStore>,
                                                 ast_map: &hir_map::Map<'tcx>,
                                                 analysis: &ty::CrateAnalysis,
                                                 resolutions: &Resolutions,
@@ -828,7 +833,7 @@ pub fn print_after_hir_lowering<'tcx, 'a: 'tcx>(sess: &'a Session,
     let _ignore = dep_graph.in_ignore();
 
     if ppm.needs_analysis() {
-        print_with_analysis(sess, ast_map, analysis, resolutions,
+        print_with_analysis(sess, cstore, ast_map, analysis, resolutions,
                             crate_name, arenas, ppm, opt_uii, ofile);
         return;
     }
@@ -859,6 +864,7 @@ pub fn print_after_hir_lowering<'tcx, 'a: 'tcx>(sess: &'a Session,
         (PpmHir(s), None) => {
             let out: &mut Write = &mut out;
             s.call_with_pp_support_hir(sess,
+                                       cstore,
                                        ast_map,
                                        analysis,
                                        resolutions,
@@ -882,6 +888,7 @@ pub fn print_after_hir_lowering<'tcx, 'a: 'tcx>(sess: &'a Session,
         (PpmHir(s), Some(uii)) => {
             let out: &mut Write = &mut out;
             s.call_with_pp_support_hir(sess,
+                                       cstore,
                                        ast_map,
                                        analysis,
                                        resolutions,
@@ -924,6 +931,7 @@ pub fn print_after_hir_lowering<'tcx, 'a: 'tcx>(sess: &'a Session,
 // with a different callback than the standard driver, so that isn't easy.
 // Instead, we call that function ourselves.
 fn print_with_analysis<'tcx, 'a: 'tcx>(sess: &'a Session,
+                                       cstore: Rc<CStore>,
                                        ast_map: &hir_map::Map<'tcx>,
                                        analysis: &ty::CrateAnalysis,
                                        resolutions: &Resolutions,
@@ -943,6 +951,7 @@ fn print_with_analysis<'tcx, 'a: 'tcx>(sess: &'a Session,
     let mut out = Vec::new();
 
     abort_on_err(driver::phase_3_run_analysis_passes(sess,
+                                                     cstore,
                                                      ast_map.clone(),
                                                      analysis.clone(),
                                                      resolutions.clone(),

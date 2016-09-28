@@ -28,7 +28,7 @@ use rustc_borrowck as borrowck;
 use rustc_incremental::{self, IncrementalHashesMap};
 use rustc_resolve::{MakeGlobMap, Resolver};
 use rustc_metadata::creader::CrateLoader;
-use rustc_metadata::cstore::CStore;
+use rustc_metadata::cstore::{CStore, MetadataProvider};
 use rustc_trans::back::{link, write};
 use rustc_trans as trans;
 use rustc_typeck as typeck;
@@ -47,6 +47,7 @@ use std::ffi::{OsString, OsStr};
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use syntax::{ast, diagnostics, visit};
 use syntax::attr;
 use syntax::ext::base::ExtCtxt;
@@ -65,7 +66,7 @@ pub struct Resolutions {
 }
 
 pub fn compile_input(sess: &Session,
-                     cstore: &CStore,
+                     cstore: Rc<CStore>,
                      cfg: ast::CrateConfig,
                      input: &Input,
                      outdir: &Option<PathBuf>,
@@ -104,7 +105,7 @@ pub fn compile_input(sess: &Session,
                                                                     outdir,
                                                                     output,
                                                                     krate,
-                                                                    &cstore);
+                                                                    cstore.clone());
             controller_entry_point!(after_parse,
                                     sess,
                                     compile_state,
@@ -127,7 +128,7 @@ pub fn compile_input(sess: &Session,
                 sess, &cstore, krate, registry, &crate_name, addl_plugins, control.make_glob_map,
                 |expanded_crate| {
                     let mut state = CompileState::state_after_expand(
-                        input, sess, outdir, output, &cstore, expanded_crate, &crate_name,
+                        input, sess, outdir, output, cstore.clone(), expanded_crate, &crate_name,
                     );
                     controller_entry_point!(after_expand, sess, state, Ok(()));
                     Ok(())
@@ -153,7 +154,7 @@ pub fn compile_input(sess: &Session,
                                                                   outdir,
                                                                   output,
                                                                   &arenas,
-                                                                  &cstore,
+                                                                  cstore.clone(),
                                                                   &hir_map,
                                                                   &analysis,
                                                                   &def_map,
@@ -176,6 +177,7 @@ pub fn compile_input(sess: &Session,
         };
 
         phase_3_run_analysis_passes(sess,
+                                    cstore,
                                     hir_map,
                                     analysis,
                                     resolutions,
@@ -341,7 +343,7 @@ pub struct CompileState<'a, 'b, 'ast: 'a, 'tcx: 'b> where 'ast: 'tcx {
     pub session: &'ast Session,
     pub krate: Option<ast::Crate>,
     pub registry: Option<Registry<'a>>,
-    pub cstore: Option<&'a CStore>,
+    pub cstore: Option<Rc<CStore>>,
     pub crate_name: Option<&'a str>,
     pub output_filenames: Option<&'a OutputFilenames>,
     pub out_dir: Option<&'a Path>,
@@ -389,7 +391,7 @@ impl<'a, 'b, 'ast, 'tcx> CompileState<'a, 'b, 'ast, 'tcx> {
                          out_dir: &'a Option<PathBuf>,
                          out_file: &'a Option<PathBuf>,
                          krate: ast::Crate,
-                         cstore: &'a CStore)
+                         cstore: Rc<CStore>)
                          -> CompileState<'a, 'b, 'ast, 'tcx> {
         CompileState {
             // Initialize the registry before moving `krate`
@@ -405,7 +407,7 @@ impl<'a, 'b, 'ast, 'tcx> CompileState<'a, 'b, 'ast, 'tcx> {
                           session: &'ast Session,
                           out_dir: &'a Option<PathBuf>,
                           out_file: &'a Option<PathBuf>,
-                          cstore: &'a CStore,
+                          cstore: Rc<CStore>,
                           expanded_crate: &'a ast::Crate,
                           crate_name: &'a str)
                           -> CompileState<'a, 'b, 'ast, 'tcx> {
@@ -423,7 +425,7 @@ impl<'a, 'b, 'ast, 'tcx> CompileState<'a, 'b, 'ast, 'tcx> {
                                 out_dir: &'a Option<PathBuf>,
                                 out_file: &'a Option<PathBuf>,
                                 arenas: &'ast ty::CtxtArenas<'ast>,
-                                cstore: &'a CStore,
+                                cstore: Rc<CStore>,
                                 hir_map: &'a hir_map::Map<'ast>,
                                 analysis: &'a ty::CrateAnalysis,
                                 def_map: &'a DefMap,
@@ -810,6 +812,7 @@ pub fn phase_2_configure_and_expand<'a, F>(sess: &Session,
 /// miscellaneous analysis passes on the crate. Return various
 /// structures carrying the results of the analysis.
 pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
+                                               cstore: Rc<CStore>,
                                                hir_map: hir_map::Map<'tcx>,
                                                mut analysis: ty::CrateAnalysis,
                                                resolutions: Resolutions,
@@ -869,7 +872,10 @@ pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
 
     let index = stability::Index::new(&hir_map);
 
+    let provider = MetadataProvider::new(cstore);
+
     TyCtxt::create_and_enter(sess,
+                             Box::new(provider),
                              arenas,
                              resolutions.trait_map,
                              named_region_map,

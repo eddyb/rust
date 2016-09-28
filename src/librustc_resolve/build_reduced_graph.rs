@@ -456,9 +456,8 @@ impl<'b> Resolver<'b> {
                 self.define(parent, name, TypeNS, (module, DUMMY_SP, vis));
 
                 // If this is a trait, add all the trait item names to the trait info.
-                let trait_item_def_ids = self.session.cstore.associated_item_def_ids(def_id);
-                for trait_item_def_id in trait_item_def_ids {
-                    let trait_item_name = self.session.cstore.def_key(trait_item_def_id)
+                for trait_item in &self.session.cstore.item_children(def_id) {
+                    let trait_item_name = self.session.cstore.def_key(trait_item.def.def_id())
                                               .disambiguated_data.data.get_opt_name()
                                               .expect("opt_item_name returned None for trait");
                     self.trait_item_map.insert((trait_item_name, def_id), false);

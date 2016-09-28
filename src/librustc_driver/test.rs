@@ -24,7 +24,7 @@ use rustc::ty::subst::{Kind, Subst};
 use rustc::traits::Reveal;
 use rustc::ty::{self, Ty, TyCtxt, TypeFoldable};
 use rustc::infer::{self, InferOk, InferResult, TypeOrigin};
-use rustc_metadata::cstore::CStore;
+use rustc_metadata::cstore::{CStore, MetadataProvider};
 use rustc::hir::map as hir_map;
 use rustc::session::{self, config};
 use std::rc::Rc;
@@ -127,7 +127,10 @@ fn test_env<F>(source_string: &str,
     let named_region_map = resolve_lifetime::krate(&sess, &ast_map);
     let region_map = region::resolve_crate(&sess, &ast_map);
     let index = stability::Index::new(&ast_map);
+
+    let provider = MetadataProvider::new(cstore);
     TyCtxt::create_and_enter(&sess,
+                             Box::new(provider),
                              &arenas,
                              resolutions.trait_map,
                              named_region_map.unwrap(),

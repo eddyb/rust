@@ -255,7 +255,7 @@ fn runtest(test: &str, cratename: &str, cfgs: Vec<String>, libs: SearchPaths,
     }
 
     let res = panic::catch_unwind(AssertUnwindSafe(|| {
-        driver::compile_input(&sess, &cstore, cfg.clone(),
+        driver::compile_input(&sess, cstore, cfg.clone(),
                               &input, &out,
                               &None, None, &control)
     }));

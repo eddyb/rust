@@ -26,6 +26,7 @@ use middle::region::{CodeExtent, ROOT_CODE_EXTENT};
 use mir::Mir;
 use traits;
 use ty;
+use ty::demand::Provider;
 use ty::subst::{Subst, Substs};
 use ty::walk::TypeWalker;
 use util::common::MemoizationMap;
@@ -37,7 +38,6 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell, Ref};
 use std::hash::{Hash, Hasher};
 use std::iter;
-use std::mem;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::vec::IntoIter;
@@ -81,6 +81,7 @@ pub use self::trait_def::{TraitDef, TraitFlags};
 
 pub mod adjustment;
 pub mod cast;
+pub mod demand;
 pub mod error;
 pub mod fast_reject;
 pub mod fold;
@@ -1854,26 +1855,18 @@ impl LvaluePreference {
     }
 }
 
-/// Helper for looking things up in the various maps that are populated during
-/// typeck::collect (e.g., `tcx.associated_items`, `tcx.types`, etc).  All of
-/// these share the pattern that if the id is local, it should have been loaded
-/// into the map by the `typeck::collect` phase.  If the def-id is external,
-/// then we have to go consult the crate loading code (and cache the result for
-/// the future).
-fn lookup_locally_or_in_crate_store<M, F>(descr: &str,
-                                          def_id: DefId,
-                                          map: &M,
-                                          load_external: F)
-                                          -> M::Value where
-    M: MemoizationMap<Key=DefId>,
-    F: FnOnce() -> M::Value,
-{
-    map.memoize(def_id, || {
-        if def_id.is_local() {
-            bug!("No def'n found for {:?} in tcx.{}", def_id, descr);
+/// Helper for looking things up in the various maps that can be lazily
+/// populated, either by looking them up in the metadata or computing
+/// them from the local crate (through rustc_typeck or rustc_mir).
+macro_rules! demand {
+    ($tcx:ident, $def_id:ident, $req:ident) => {
+        match $tcx.provider.$req($tcx.global_tcx(), $def_id) {
+            Ok(result) => result,
+            Err(err) => {
+                bug!("tcx.provider.{}({:?}) failed: {:?}", stringify!($req), $def_id, err);
+            }
         }
-        load_external()
-    })
+    }
 }
 
 impl BorrowKind {
@@ -2013,31 +2006,15 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     }
 
     pub fn custom_coerce_unsized_kind(self, did: DefId) -> adjustment::CustomCoerceUnsized {
-        self.custom_coerce_unsized_kinds.memoize(did, || {
-            let (kind, src) = if did.krate != LOCAL_CRATE {
-                (self.sess.cstore.custom_coerce_unsized_kind(did), "external")
-            } else {
-                (None, "local")
-            };
-
-            match kind {
-                Some(kind) => kind,
-                None => {
-                    bug!("custom_coerce_unsized_kind: \
-                          {} impl `{}` is missing its kind",
-                          src, self.item_path_str(did));
-                }
-            }
-        })
+        demand!(self, did, custom_coerce_unsized_kind)
     }
 
     pub fn associated_item(self, def_id: DefId) -> AssociatedItem {
-        self.associated_items.memoize(def_id, || {
-            if !def_id.is_local() {
-                return self.sess.cstore.associated_item(self.global_tcx(), def_id)
-                           .expect("missing AssociatedItem in metadata");
-            }
+        if !def_id.is_local() {
+            return demand!(self, def_id, associated_item);
+        }
 
+        self.associated_items.memoize(def_id, || {
             let id = self.map.as_local_node_id(def_id).unwrap();
             let parent_id = self.map.get_parent(id);
             let parent_def_id = self.map.local_def_id(parent_id);
@@ -2102,11 +2079,11 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     }
 
     pub fn associated_item_def_ids(self, def_id: DefId) -> Rc<Vec<DefId>> {
-        self.associated_item_def_ids.memoize(def_id, || {
-            if !def_id.is_local() {
-                return Rc::new(self.sess.cstore.associated_item_def_ids(def_id));
-            }
+        if !def_id.is_local() {
+            return demand!(self, def_id, associated_item_def_ids);
+        }
 
+        self.associated_item_def_ids.memoize(def_id, || {
             let id = self.map.as_local_node_id(def_id).unwrap();
             let item = self.map.expect_item(id);
             match item.node {
@@ -2135,9 +2112,7 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     /// Returns the trait-ref corresponding to a given impl, or None if it is
     /// an inherent impl.
     pub fn impl_trait_ref(self, id: DefId) -> Option<TraitRef<'gcx>> {
-        lookup_locally_or_in_crate_store(
-            "impl_trait_refs", id, &self.impl_trait_refs,
-            || self.sess.cstore.impl_trait_ref(self.global_tcx(), id))
+        demand!(self, id, impl_trait_ref)
     }
 
     // Returns `ty::VariantDef` if `def` refers to a struct,
@@ -2231,58 +2206,37 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     // If the given item is in an external crate, looks up its type and adds it to
     // the type cache. Returns the type parameters and type.
     pub fn item_type(self, did: DefId) -> Ty<'gcx> {
-        lookup_locally_or_in_crate_store(
-            "item_types", did, &self.item_types,
-            || self.sess.cstore.item_type(self.global_tcx(), did))
+        demand!(self, did, ty)
     }
 
     /// Given the did of a trait, returns its canonical trait ref.
     pub fn lookup_trait_def(self, did: DefId) -> &'gcx TraitDef {
-        lookup_locally_or_in_crate_store(
-            "trait_defs", did, &self.trait_defs,
-            || self.alloc_trait_def(self.sess.cstore.trait_def(self.global_tcx(), did))
-        )
+        demand!(self, did, trait_def)
     }
 
     /// Given the did of an ADT, return a reference to its definition.
     pub fn lookup_adt_def(self, did: DefId) -> &'gcx AdtDef {
-        lookup_locally_or_in_crate_store(
-            "adt_defs", did, &self.adt_defs,
-            || self.sess.cstore.adt_def(self.global_tcx(), did))
+        demand!(self, did, adt_def)
     }
 
     /// Given the did of an item, returns its generics.
     pub fn item_generics(self, did: DefId) -> &'gcx Generics<'gcx> {
-        lookup_locally_or_in_crate_store(
-            "generics", did, &self.generics,
-            || self.alloc_generics(self.sess.cstore.item_generics(self.global_tcx(), did)))
+        demand!(self, did, generics)
     }
 
     /// Given the did of an item, returns its full set of predicates.
     pub fn item_predicates(self, did: DefId) -> GenericPredicates<'gcx> {
-        lookup_locally_or_in_crate_store(
-            "predicates", did, &self.predicates,
-            || self.sess.cstore.item_predicates(self.global_tcx(), did))
+        demand!(self, did, predicates)
     }
 
     /// Given the did of a trait, returns its superpredicates.
     pub fn item_super_predicates(self, did: DefId) -> GenericPredicates<'gcx> {
-        lookup_locally_or_in_crate_store(
-            "super_predicates", did, &self.super_predicates,
-            || self.sess.cstore.item_super_predicates(self.global_tcx(), did))
+        demand!(self, did, super_predicates)
     }
 
     /// Given the did of an item, returns its MIR, borrowed immutably.
     pub fn item_mir(self, did: DefId) -> Ref<'gcx, Mir<'gcx>> {
-        lookup_locally_or_in_crate_store("mir_map", did, &self.mir_map, || {
-            let mir = self.sess.cstore.get_item_mir(self.global_tcx(), did);
-            let mir = self.alloc_mir(mir);
-
-            // Perma-borrow MIR from extern crates to prevent mutation.
-            mem::forget(mir.borrow());
-
-            mir
-        }).borrow()
+        demand!(self, did, mir).borrow()
     }
 
     /// If `type_needs_drop` returns true, then `ty` is definitely
@@ -2345,9 +2299,7 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     }
 
     pub fn item_variances(self, item_id: DefId) -> Rc<Vec<ty::Variance>> {
-        lookup_locally_or_in_crate_store(
-            "item_variance_map", item_id, &self.item_variance_map,
-            || Rc::new(self.sess.cstore.item_variances(item_id)))
+        demand!(self, item_id, variances)
     }
 
     pub fn trait_has_default_impl(self, trait_def_id: DefId) -> bool {
@@ -2422,16 +2374,7 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     }
 
     pub fn closure_kind(self, def_id: DefId) -> ty::ClosureKind {
-        // If this is a local def-id, it should be inserted into the
-        // tables by typeck; else, it will be retreived from
-        // the external crate metadata.
-        if let Some(&kind) = self.tables.borrow().closure_kinds.get(&def_id) {
-            return kind;
-        }
-
-        let kind = self.sess.cstore.closure_kind(def_id);
-        self.tables.borrow_mut().closure_kinds.insert(def_id, kind);
-        kind
+        demand!(self, def_id, closure_kind)
     }
 
     pub fn closure_type(self,
@@ -2439,16 +2382,11 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
                         substs: ClosureSubsts<'tcx>)
                         -> ty::ClosureTy<'tcx>
     {
-        // If this is a local def-id, it should be inserted into the
-        // tables by typeck; else, it will be retreived from
-        // the external crate metadata.
-        if let Some(ty) = self.tables.borrow().closure_tys.get(&def_id) {
+        if let Some(ty) = self.closure_tys.borrow().get(&def_id) {
             return ty.subst(self, substs.func_substs);
         }
 
-        let ty = self.sess.cstore.closure_ty(self.global_tcx(), def_id);
-        self.tables.borrow_mut().closure_tys.insert(def_id, ty.clone());
-        ty.subst(self, substs.func_substs)
+        demand!(self, def_id, closure_ty).subst(self, substs.func_substs)
     }
 
     /// Given the def_id of an impl, return the def_id of the trait it implements.
@@ -2460,16 +2398,17 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     /// If the given def ID describes a method belonging to an impl, return the
     /// ID of the impl that the method belongs to. Otherwise, return `None`.
     pub fn impl_of_method(self, def_id: DefId) -> Option<DefId> {
-        if def_id.krate != LOCAL_CRATE {
-            return self.sess.cstore.associated_item(self.global_tcx(), def_id)
-                       .and_then(|item| {
-                match item.container {
-                    TraitContainer(_) => None,
-                    ImplContainer(def_id) => Some(def_id),
-                }
-            });
-        }
-        match self.associated_items.borrow().get(&def_id).cloned() {
+        let item = if def_id.krate != LOCAL_CRATE {
+            if let Some(Def::Method(_)) = self.sess.cstore.describe_def(def_id) {
+                Some(self.associated_item(def_id))
+            } else {
+                None
+            }
+        } else {
+            self.associated_items.borrow().get(&def_id).cloned()
+        };
+
+        match item {
             Some(trait_item) => {
                 match trait_item.container {
                     TraitContainer(_) => None,

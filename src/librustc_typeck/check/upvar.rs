@@ -101,8 +101,7 @@ impl<'a, 'gcx, 'tcx> SeedBorrowKind<'a, 'gcx, 'tcx> {
                      capture_clause: hir::CaptureClause,
                      _body: &hir::Expr)
     {
-        let closure_def_id = self.fcx.tcx.map.local_def_id(expr.id);
-        if !self.fcx.tables.borrow().closure_kinds.contains_key(&closure_def_id) {
+        if !self.fcx.tables.borrow().closure_kinds.contains_key(&expr.id) {
             self.temp_closure_kinds.insert(expr.id, ty::ClosureKind::Fn);
             debug!("check_closure: adding closure {:?} as Fn", expr.id);
         }
@@ -203,10 +202,10 @@ impl<'a, 'gcx, 'tcx> AdjustBorrowKind<'a, 'gcx, 'tcx> {
 
         // If we are also inferred the closure kind here, update the
         // main table and process any deferred resolutions.
-        let closure_def_id = self.fcx.tcx.map.local_def_id(id);
         if let Some(&kind) = self.temp_closure_kinds.get(&id) {
             self.fcx.tables.borrow_mut().closure_kinds
-                                        .insert(closure_def_id, kind);
+                                        .insert(id, kind);
+            let closure_def_id = self.fcx.tcx.map.local_def_id(id);
             debug!("closure_kind({:?}) = {:?}", closure_def_id, kind);
 
             let mut deferred_call_resolutions =

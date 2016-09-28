@@ -184,6 +184,7 @@ pub fn run_core(search_paths: SearchPaths,
     let hir_map = hir_map::map_crate(&mut hir_forest, defs);
 
     abort_on_err(driver::phase_3_run_analysis_passes(&sess,
+                                                     cstore,
                                                      hir_map,
                                                      analysis,
                                                      resolutions,

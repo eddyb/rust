@@ -1431,7 +1431,7 @@ fn type_of_def_id<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
         // Alway bring in generics, as computing the type needs them.
         generics_of_def_id(ccx, def_id);
 
-        let ty = match ccx.tcx.map.get(node_id) {
+        match ccx.tcx.map.get(node_id) {
             NodeItem(item) => {
                 match item.node {
                     ItemStatic(ref t, ..) | ItemConst(ref t, _) => {
@@ -1492,9 +1492,7 @@ fn type_of_def_id<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
             x => {
                 bug!("unexpected sort of node in type_of_def_id(): {:?}", x);
             }
-        };
-
-        ty
+        }
     })
 }
 

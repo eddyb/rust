@@ -1672,15 +1672,17 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                         def_id: DefId)
                         -> Option<ty::ClosureKind>
     {
-        if def_id.is_local() {
-            self.tables.borrow().closure_kinds.get(&def_id).cloned()
-        } else {
-            // During typeck, ALL closures are local. But afterwards,
-            // during trans, we see closure ids from other traits.
-            // That may require loading the closure data out of the
-            // cstore.
-            Some(self.tcx.closure_kind(def_id))
+        if let InferTables::Local(tables) = self.tables {
+            if let Some(id) = self.tcx.map.as_local_node_id(def_id) {
+                return tables.borrow().closure_kinds.get(&id).cloned();
+            }
         }
+
+        // During typeck, ALL closures are local. But afterwards,
+        // during trans, we see closure ids from other traits.
+        // That may require loading the closure data out of the
+        // cstore.
+        Some(self.tcx.closure_kind(def_id))
     }
 
     pub fn closure_type(&self,
@@ -1689,13 +1691,14 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                         -> ty::ClosureTy<'tcx>
     {
         if let InferTables::Local(tables) = self.tables {
-            if let Some(ty) = tables.borrow().closure_tys.get(&def_id) {
-                return ty.subst(self.tcx, substs.func_substs);
+            if let Some(id) = self.tcx.map.as_local_node_id(def_id) {
+                if let Some(ty) = tables.borrow().closure_tys.get(&id) {
+                    return ty.subst(self.tcx, substs.func_substs);
+                }
             }
         }
 
-        let closure_ty = self.tcx.closure_type(def_id, substs);
-        closure_ty
+        self.tcx.closure_type(def_id, substs)
     }
 }
 

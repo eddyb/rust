@@ -17,17 +17,22 @@ use rustc::middle::cstore::{InlinedItem, CrateStore, CrateSource, ExternCrate};
 use rustc::middle::cstore::{NativeLibraryKind, LinkMeta, LinkagePreference};
 use rustc::hir::def::{self, Def};
 use rustc::middle::lang_items;
-use rustc::ty::{self, Ty, TyCtxt};
+use rustc::mir::Mir;
+use rustc::ty::{self, TyCtxt, Ty};
+use rustc::ty::demand::{Provider, Unsupported};
 use rustc::hir::def_id::{CrateNum, DefId, DefIndex, CRATE_DEF_INDEX};
 
 use rustc::dep_graph::DepNode;
 use rustc::hir::map as hir_map;
 use rustc::hir::map::DefKey;
-use rustc::mir::Mir;
 use rustc::util::nodemap::{NodeSet, DefIdMap};
 use rustc_back::PanicStrategy;
 
+use std::cell::RefCell;
+use std::mem;
 use std::path::PathBuf;
+use std::rc::Rc;
+
 use syntax::ast;
 use syntax::attr;
 use syntax::parse::token;
@@ -35,7 +40,100 @@ use rustc::hir::svh::Svh;
 use rustc_back::target::Target;
 use rustc::hir;
 
-impl<'tcx> CrateStore<'tcx> for cstore::CStore {
+pub struct MetadataProvider {
+    cstore: Rc<cstore::CStore>
+}
+
+impl MetadataProvider {
+    pub fn new(cstore: Rc<cstore::CStore>) -> Self {
+        MetadataProvider {
+            cstore: cstore
+        }
+    }
+}
+
+macro_rules! handlers {
+    ($def_id:ident, $cdata:ident <$lt:tt>
+     $($name:ident in $tcx:ident.$map:ident -> $ty:ty $op:block)*) => {
+        impl<$lt> Provider<$lt> for MetadataProvider {
+            $(#[inline]
+            fn $name<'a>(&self, $tcx: TyCtxt<'a, $lt, $lt>, $def_id: DefId)
+                         -> Result<$ty, Unsupported> {
+                if $def_id.is_local() {
+                    return Err(Unsupported);
+                }
+
+                $tcx.dep_graph.read(DepNode::MetaData($def_id));
+
+                let $cdata = self.cstore.get_crate_data($def_id.krate);
+                let res = $op;
+                $tcx.$map.borrow_mut().insert($def_id, Clone::clone(&res));
+                Ok(res)
+            })*
+        }
+    }
+}
+
+handlers! { def_id, cdata <'tcx>
+    ty in tcx.item_types -> Ty<'tcx> {
+        cdata.get_type(def_id.index, tcx)
+    }
+    generics in tcx.generics -> &'tcx ty::Generics<'tcx> {
+        tcx.alloc_generics(cdata.get_generics(def_id.index, tcx))
+    }
+    predicates in tcx.predicates -> ty::GenericPredicates<'tcx> {
+        cdata.get_predicates(def_id.index, tcx)
+    }
+    super_predicates in tcx.super_predicates -> ty::GenericPredicates<'tcx> {
+        cdata.get_super_predicates(def_id.index, tcx)
+    }
+    trait_def in tcx.trait_defs -> &'tcx ty::TraitDef {
+        tcx.alloc_trait_def(cdata.get_trait_def(def_id.index, tcx))
+    }
+    adt_def in tcx.adt_defs -> &'tcx ty::AdtDef {
+        cdata.get_adt_def(def_id.index, tcx)
+    }
+    variances in tcx.item_variance_map -> Rc<Vec<ty::Variance>> {
+        Rc::new(cdata.get_item_variances(def_id.index))
+    }
+    associated_item_def_ids in tcx.associated_item_def_ids -> Rc<Vec<DefId>> {
+        let mut result = vec![];
+        cdata.each_child_of_item(def_id.index, |child| result.push(child.def.def_id()));
+        Rc::new(result)
+    }
+    associated_item in tcx.associated_items -> ty::AssociatedItem {
+        cdata.get_associated_item(def_id.index)
+    }
+    impl_trait_ref in tcx.impl_trait_refs -> Option<ty::TraitRef<'tcx>> {
+        cdata.get_impl_trait(def_id.index, tcx)
+    }
+    custom_coerce_unsized_kind in tcx.custom_coerce_unsized_kinds
+            -> ty::adjustment::CustomCoerceUnsized {
+        cdata.get_custom_coerce_unsized_kind(def_id.index).unwrap_or_else(|| {
+            bug!("custom_coerce_unsized_kind: `{:?}` is missing its kind", def_id);
+        })
+    }
+    mir in tcx.mir_map -> &'tcx RefCell<Mir<'tcx>> {
+        let mir = cdata.maybe_get_item_mir(tcx, def_id.index).unwrap_or_else(|| {
+            bug!("get_item_mir: missing MIR for `{:?}`", def_id)
+        });
+
+        let mir = tcx.alloc_mir(mir);
+
+        // Perma-borrow MIR from extern crates to prevent mutation.
+        mem::forget(mir.borrow());
+
+        mir
+    }
+    closure_kind in tcx.closure_kinds -> ty::ClosureKind {
+        cdata.closure_kind(def_id.index)
+    }
+    closure_ty in tcx.closure_tys -> ty::ClosureTy<'tcx> {
+        cdata.closure_ty(def_id.index, tcx)
+    }
+}
+
+impl CrateStore for cstore::CStore {
     fn describe_def(&self, def: DefId) -> Option<Def> {
         self.dep_graph.read(DepNode::MetaData(def));
         self.get_crate_data(def.krate).get_def(def.index)
@@ -56,68 +154,10 @@ impl<'tcx> CrateStore<'tcx> for cstore::CStore {
         self.get_crate_data(def.krate).get_visibility(def.index)
     }
 
-    fn closure_kind(&self, def_id: DefId) -> ty::ClosureKind
-    {
-        assert!(!def_id.is_local());
-        self.dep_graph.read(DepNode::MetaData(def_id));
-        self.get_crate_data(def_id.krate).closure_kind(def_id.index)
-    }
-
-    fn closure_ty<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def_id: DefId) -> ty::ClosureTy<'tcx> {
-        assert!(!def_id.is_local());
-        self.dep_graph.read(DepNode::MetaData(def_id));
-        self.get_crate_data(def_id.krate).closure_ty(def_id.index, tcx)
-    }
-
-    fn item_variances(&self, def: DefId) -> Vec<ty::Variance> {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_item_variances(def.index)
-    }
-
-    fn item_type<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId)
-                     -> Ty<'tcx>
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_type(def.index, tcx)
-    }
-
-    fn item_predicates<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId)
-                           -> ty::GenericPredicates<'tcx>
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_predicates(def.index, tcx)
-    }
-
-    fn item_super_predicates<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId)
-                                 -> ty::GenericPredicates<'tcx>
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_super_predicates(def.index, tcx)
-    }
-
-    fn item_generics<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId)
-                         -> ty::Generics<'tcx>
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_generics(def.index, tcx)
-    }
-
     fn item_attrs(&self, def_id: DefId) -> Vec<ast::Attribute>
     {
         self.dep_graph.read(DepNode::MetaData(def_id));
         self.get_crate_data(def_id.krate).get_item_attrs(def_id.index)
-    }
-
-    fn trait_def<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId) -> ty::TraitDef
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_trait_def(def.index, tcx)
-    }
-
-    fn adt_def<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId) -> &'tcx ty::AdtDef
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_adt_def(def.index, tcx)
     }
 
     fn fn_arg_names(&self, did: DefId) -> Vec<ast::Name>
@@ -144,32 +184,10 @@ impl<'tcx> CrateStore<'tcx> for cstore::CStore {
         result
     }
 
-    fn associated_item_def_ids(&self, def_id: DefId) -> Vec<DefId> {
-        self.dep_graph.read(DepNode::MetaData(def_id));
-        let mut result = vec![];
-        self.get_crate_data(def_id.krate)
-            .each_child_of_item(def_id.index, |child| result.push(child.def.def_id()));
-        result
-    }
-
     fn impl_polarity(&self, def: DefId) -> hir::ImplPolarity
     {
         self.dep_graph.read(DepNode::MetaData(def));
         self.get_crate_data(def.krate).get_impl_polarity(def.index)
-    }
-
-    fn impl_trait_ref<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId)
-                          -> Option<ty::TraitRef<'tcx>>
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_impl_trait(def.index, tcx)
-    }
-
-    fn custom_coerce_unsized_kind(&self, def: DefId)
-                                  -> Option<ty::adjustment::CustomCoerceUnsized>
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_custom_coerce_unsized_kind(def.index)
     }
 
     fn impl_parent(&self, impl_def: DefId) -> Option<DefId> {
@@ -180,13 +198,6 @@ impl<'tcx> CrateStore<'tcx> for cstore::CStore {
     fn trait_of_item(&self, def_id: DefId) -> Option<DefId> {
         self.dep_graph.read(DepNode::MetaData(def_id));
         self.get_crate_data(def_id.krate).get_trait_of_item(def_id.index)
-    }
-
-    fn associated_item<'a>(&self, _tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId)
-                           -> Option<ty::AssociatedItem>
-    {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).get_associated_item(def.index)
     }
 
     fn is_const_fn(&self, did: DefId) -> bool
@@ -351,10 +362,10 @@ impl<'tcx> CrateStore<'tcx> for cstore::CStore {
         result
     }
 
-    fn maybe_get_item_ast<'a>(&'tcx self,
-                              tcx: TyCtxt<'a, 'tcx, 'tcx>,
-                              def_id: DefId)
-                              -> Option<(&'tcx InlinedItem, ast::NodeId)>
+    fn maybe_get_item_ast<'a, 'tcx>(&self,
+                                    tcx: TyCtxt<'a, 'tcx, 'tcx>,
+                                    def_id: DefId)
+                                    -> Option<(&'tcx InlinedItem, ast::NodeId)>
     {
         self.dep_graph.read(DepNode::MetaData(def_id));
 
@@ -442,7 +453,7 @@ impl<'tcx> CrateStore<'tcx> for cstore::CStore {
         return self.maybe_get_item_ast(tcx, def_id);
     }
 
-    fn local_node_for_inlined_defid(&'tcx self, def_id: DefId) -> Option<ast::NodeId> {
+    fn local_node_for_inlined_defid(&self, def_id: DefId) -> Option<ast::NodeId> {
         assert!(!def_id.is_local());
         match self.inlined_item_cache.borrow().get(&def_id) {
             Some(&Some(ref cached_inlined_item)) => {
@@ -457,15 +468,8 @@ impl<'tcx> CrateStore<'tcx> for cstore::CStore {
         }
     }
 
-    fn defid_for_inlined_node(&'tcx self, node_id: ast::NodeId) -> Option<DefId> {
+    fn defid_for_inlined_node(&self, node_id: ast::NodeId) -> Option<DefId> {
         self.defid_for_inlined_node.borrow().get(&node_id).map(|x| *x)
-    }
-
-    fn get_item_mir<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def: DefId) -> Mir<'tcx> {
-        self.dep_graph.read(DepNode::MetaData(def));
-        self.get_crate_data(def.krate).maybe_get_item_mir(tcx, def.index).unwrap_or_else(|| {
-            bug!("get_item_mir: missing MIR for {}", tcx.item_path_str(def))
-        })
     }
 
     fn is_item_mir_available(&self, def: DefId) -> bool {
@@ -515,10 +519,10 @@ impl<'tcx> CrateStore<'tcx> for cstore::CStore {
         self.do_extern_mod_stmt_cnum(emod_id)
     }
 
-    fn encode_metadata<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>,
-                           reexports: &def::ExportMap,
-                           link_meta: &LinkMeta,
-                           reachable: &NodeSet) -> Vec<u8>
+    fn encode_metadata<'a, 'tcx>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>,
+                                 reexports: &def::ExportMap,
+                                 link_meta: &LinkMeta,
+                                 reachable: &NodeSet) -> Vec<u8>
     {
         encoder::encode_metadata(tcx, self, reexports, link_meta, reachable)
     }
