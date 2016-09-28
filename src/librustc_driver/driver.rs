@@ -21,6 +21,7 @@ use rustc::lint;
 use rustc::middle::{self, dependency_format, stability, reachable};
 use rustc::middle::privacy::AccessLevels;
 use rustc::ty::{self, TyCtxt};
+use rustc::ty::demand::Provider;
 use rustc::util::common::time;
 use rustc::util::nodemap::NodeSet;
 use rustc_back::sha2::{Sha256, Digest};
@@ -872,7 +873,8 @@ pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
 
     let index = stability::Index::new(&hir_map);
 
-    let provider = MetadataProvider::new(cstore);
+    let provider = MetadataProvider::new(cstore)
+        .chain(mir::mir_map::MirProvider);
 
     TyCtxt::create_and_enter(sess,
                              Box::new(provider),
@@ -938,7 +940,7 @@ pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
 
         time(time_passes,
              "MIR dump",
-             || mir::mir_map::build_mir_for_crate(tcx));
+             || mir::mir_map::demand_mir_for_crate(tcx));
 
         time(time_passes, "MIR passes", || {
             let mut passes = sess.mir_passes.borrow_mut();
