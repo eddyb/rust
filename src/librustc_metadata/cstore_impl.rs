@@ -81,11 +81,11 @@ handlers! { def_id, cdata <'tcx>
     generics in tcx.generics -> &'tcx ty::Generics<'tcx> {
         tcx.alloc_generics(cdata.get_generics(def_id.index, tcx))
     }
-    predicates in tcx.predicates -> ty::GenericPredicates<'tcx> {
-        cdata.get_predicates(def_id.index, tcx)
+    predicates in tcx.predicates -> Rc<ty::GenericPredicates<'tcx>> {
+        Rc::new(cdata.get_predicates(def_id.index, tcx))
     }
-    super_predicates in tcx.super_predicates -> ty::GenericPredicates<'tcx> {
-        cdata.get_super_predicates(def_id.index, tcx)
+    super_predicates in tcx.super_predicates -> Rc<ty::GenericPredicates<'tcx>> {
+        Rc::new(cdata.get_super_predicates(def_id.index, tcx))
     }
     trait_def in tcx.trait_defs -> &'tcx ty::TraitDef {
         tcx.alloc_trait_def(cdata.get_trait_def(def_id.index, tcx))

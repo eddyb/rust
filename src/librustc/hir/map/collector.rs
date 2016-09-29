@@ -226,4 +226,11 @@ impl<'ast> Visitor<'ast> for NodeCollector<'ast> {
     fn visit_lifetime(&mut self, lifetime: &'ast Lifetime) {
         self.insert(lifetime.id, NodeLifetime(lifetime));
     }
+
+    fn visit_struct_field(&mut self, field: &'ast StructField) {
+        self.insert(field.id, NodeField(field));
+        self.with_parent(field.id, |this| {
+            intravisit::walk_struct_field(this, field);
+        });
+    }
 }

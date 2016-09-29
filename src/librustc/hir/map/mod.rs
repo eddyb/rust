@@ -46,6 +46,7 @@ pub enum Node<'ast> {
     NodeTraitItem(&'ast TraitItem),
     NodeImplItem(&'ast ImplItem),
     NodeVariant(&'ast Variant),
+    NodeField(&'ast StructField),
     NodeExpr(&'ast Expr),
     NodeStmt(&'ast Stmt),
     NodeTy(&'ast Ty),
@@ -73,6 +74,7 @@ pub enum MapEntry<'ast> {
     EntryTraitItem(NodeId, &'ast TraitItem),
     EntryImplItem(NodeId, &'ast ImplItem),
     EntryVariant(NodeId, &'ast Variant),
+    EntryField(NodeId, &'ast StructField),
     EntryExpr(NodeId, &'ast Expr),
     EntryStmt(NodeId, &'ast Stmt),
     EntryTy(NodeId, &'ast Ty),
@@ -102,6 +104,7 @@ impl<'ast> MapEntry<'ast> {
             NodeTraitItem(n) => EntryTraitItem(p, n),
             NodeImplItem(n) => EntryImplItem(p, n),
             NodeVariant(n) => EntryVariant(p, n),
+            NodeField(n) => EntryField(p, n),
             NodeExpr(n) => EntryExpr(p, n),
             NodeStmt(n) => EntryStmt(p, n),
             NodeTy(n) => EntryTy(p, n),
@@ -121,6 +124,7 @@ impl<'ast> MapEntry<'ast> {
             EntryTraitItem(id, _) => id,
             EntryImplItem(id, _) => id,
             EntryVariant(id, _) => id,
+            EntryField(id, _) => id,
             EntryExpr(id, _) => id,
             EntryStmt(id, _) => id,
             EntryTy(id, _) => id,
@@ -144,6 +148,7 @@ impl<'ast> MapEntry<'ast> {
             EntryTraitItem(_, n) => NodeTraitItem(n),
             EntryImplItem(_, n) => NodeImplItem(n),
             EntryVariant(_, n) => NodeVariant(n),
+            EntryField(_, n) => NodeField(n),
             EntryExpr(_, n) => NodeExpr(n),
             EntryStmt(_, n) => NodeStmt(n),
             EntryTy(_, n) => NodeTy(n),
@@ -258,6 +263,7 @@ impl<'ast> Map<'ast> {
                     EntryTraitItem(p, _) |
                     EntryImplItem(p, _) |
                     EntryVariant(p, _) |
+                    EntryField(p, _) |
                     EntryExpr(p, _) |
                     EntryStmt(p, _) |
                     EntryTy(p, _) |
@@ -299,6 +305,7 @@ impl<'ast> Map<'ast> {
                     EntryTraitItem(p, _) |
                     EntryImplItem(p, _) |
                     EntryVariant(p, _) |
+                    EntryField(p, _) |
                     EntryExpr(p, _) |
                     EntryStmt(p, _) |
                     EntryTy(p, _) |
@@ -637,6 +644,7 @@ impl<'ast> Map<'ast> {
             NodeImplItem(ii) => ii.name,
             NodeTraitItem(ti) => ti.name,
             NodeVariant(v) => v.node.name,
+            NodeField(f) => f.name,
             NodeLifetime(lt) => lt.name,
             NodeTyParam(tp) => tp.name,
             NodeLocal(&Pat { node: PatKind::Binding(_,_,l,_), .. }) => l.node,
@@ -655,6 +663,7 @@ impl<'ast> Map<'ast> {
             Some(NodeTraitItem(ref ti)) => Some(&ti.attrs[..]),
             Some(NodeImplItem(ref ii)) => Some(&ii.attrs[..]),
             Some(NodeVariant(ref v)) => Some(&v.node.attrs[..]),
+            Some(NodeField(ref f)) => Some(&f.attrs[..]),
             Some(NodeExpr(ref e)) => Some(&*e.attrs),
             Some(NodeStmt(ref s)) => Some(s.node.attrs()),
             // unit/tuple structs take the attributes straight from
@@ -691,6 +700,7 @@ impl<'ast> Map<'ast> {
             Some(NodeTraitItem(trait_method)) => trait_method.span,
             Some(NodeImplItem(ref impl_item)) => impl_item.span,
             Some(NodeVariant(variant)) => variant.span,
+            Some(NodeField(field)) => field.span,
             Some(NodeExpr(expr)) => expr.span,
             Some(NodeStmt(stmt)) => stmt.span,
             Some(NodeTy(ty)) => ty.span,
@@ -811,6 +821,7 @@ impl<'a, 'ast> Iterator for NodesMatchingSuffix<'a, 'ast> {
                 Some(EntryTraitItem(_, n))  => n.name(),
                 Some(EntryImplItem(_, n))   => n.name(),
                 Some(EntryVariant(_, n))    => n.name(),
+                Some(EntryField(_, n))      => n.name(),
                 _ => continue,
             };
             if self.matches_names(self.map.get_parent(idx), name) {
@@ -829,6 +840,7 @@ impl<T:Named> Named for Spanned<T> { fn name(&self) -> Name { self.node.name() }
 impl Named for Item { fn name(&self) -> Name { self.name } }
 impl Named for ForeignItem { fn name(&self) -> Name { self.name } }
 impl Named for Variant_ { fn name(&self) -> Name { self.name } }
+impl Named for StructField { fn name(&self) -> Name { self.name } }
 impl Named for TraitItem { fn name(&self) -> Name { self.name } }
 impl Named for ImplItem { fn name(&self) -> Name { self.name } }
 
@@ -918,6 +930,7 @@ impl<'a> NodePrinter for pprust::State<'a> {
             NodeBlock(a)       => self.print_block(&a),
             NodeLifetime(a)    => self.print_lifetime(&a),
             NodeTyParam(_)     => bug!("cannot print TyParam"),
+            NodeField(_)       => bug!("cannot print StructField"),
             // these cases do not carry enough information in the
             // ast_map to reconstruct their full structure for pretty
             // printing.
@@ -995,6 +1008,11 @@ fn node_id_to_string(map: &Map, id: NodeId, include_id: bool) -> String {
         Some(NodeVariant(ref variant)) => {
             format!("variant {} in {}{}",
                     variant.node.name,
+                    path_str(), id_str)
+        }
+        Some(NodeField(ref field)) => {
+            format!("field {} in {}{}",
+                    field.name,
                     path_str(), id_str)
         }
         Some(NodeExpr(ref expr)) => {

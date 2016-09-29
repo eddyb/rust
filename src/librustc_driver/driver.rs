@@ -874,6 +874,7 @@ pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
     let index = stability::Index::new(&hir_map);
 
     let provider = MetadataProvider::new(cstore)
+        .chain(typeck::demand::TypeckProvider::default())
         .chain(mir::mir_map::MirProvider);
 
     TyCtxt::create_and_enter(sess,

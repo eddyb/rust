@@ -12,17 +12,6 @@
 //! representation.  The main routine here is `ast_ty_to_ty()`: each use
 //! is parameterized by an instance of `AstConv` and a `RegionScope`.
 //!
-//! The parameterization of `ast_ty_to_ty()` is because it behaves
-//! somewhat differently during the collect and check phases,
-//! particularly with respect to looking up the types of top-level
-//! items.  In the collect phase, the crate context is used as the
-//! `AstConv` instance; in this phase, the `get_item_type()`
-//! function triggers a recursive call to `type_of_item()`
-//! (note that `ast_ty_to_ty()` will detect recursive types and report
-//! an error).  In the check phase, when the FnCtxt is used as the
-//! `AstConv`, `get_item_type()` just looks up the item type in
-//! `tcx.types` (using `TyCtxt::item_type`).
-//!
 //! The `RegionScope` trait controls what happens when the user does
 //! not specify a region in some location where a region is required
 //! (e.g., if the user writes `&Foo` as a type rather than `&'a Foo`).
@@ -53,6 +42,7 @@ use hir::{self, SelfKind};
 use hir::def::Def;
 use hir::def_id::DefId;
 use hir::print as pprust;
+use middle::lang_items::SizedTraitLangItem;
 use middle::resolve_lifetime as rl;
 use rustc::lint;
 use rustc::ty::subst::{Kind, Subst, Substs};
@@ -63,12 +53,14 @@ use rustc_back::slice;
 use require_c_abi_if_variadic;
 use rscope::{self, UnelidableRscope, RegionScope, ElidableRscope,
              ObjectLifetimeDefaultRscope, ShiftedRscope, BindingRscope,
-             ElisionFailureInfo, ElidedLifetime};
+             ElisionFailureInfo, ElidedLifetime, ExplicitRscope};
 use rscope::{AnonTypeScope, MaybeWithAnonTypes};
 use util::common::{ErrorReported, FN_OUTPUT_NAME};
 use util::nodemap::{NodeMap, FnvHashSet};
 
 use std::cell::RefCell;
+use std::rc::Rc;
+
 use syntax::{abi, ast};
 use syntax::feature_gate::{GateIssue, emit_feature_err};
 use syntax::parse::token::{self, keywords};
@@ -78,26 +70,9 @@ use errors::DiagnosticBuilder;
 pub trait AstConv<'gcx, 'tcx> {
     fn tcx<'a>(&'a self) -> TyCtxt<'a, 'gcx, 'tcx>;
 
-    /// A cache used for the result of `ast_ty_to_ty_cache`
-    fn ast_ty_to_ty_cache(&self) -> &RefCell<NodeMap<Ty<'tcx>>>;
-
-    /// Returns the generic type and lifetime parameters for an item.
-    fn get_generics(&self, span: Span, id: DefId)
-                    -> Result<&'tcx ty::Generics<'tcx>, ErrorReported>;
-
-    /// Identify the type for an item, like a type alias, fn, or struct.
-    fn get_item_type(&self, span: Span, id: DefId) -> Result<Ty<'tcx>, ErrorReported>;
-
-    /// Returns the `TraitDef` for a given trait. This allows you to
-    /// figure out the set of type parameters defined on the trait.
-    fn get_trait_def(&self, span: Span, id: DefId)
-                     -> Result<&'tcx ty::TraitDef, ErrorReported>;
-
-    /// Ensure that the super-predicates for the trait with the given
-    /// id are available and also for the transitive set of
-    /// super-predicates.
-    fn ensure_super_predicates(&self, span: Span, id: DefId)
-                               -> Result<(), ErrorReported>;
+    // A cache used for the result of `ast_ty_to_ty_cache`
+    fn ty_cache_lookup(&self, id: ast::NodeId) -> Option<Ty<'tcx>>;
+    fn ty_cache_insert(&self, id: ast::NodeId, ty: Ty<'tcx>);
 
     /// Returns the set of bounds in scope for the type parameter with
     /// the given id.
@@ -398,14 +373,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         // If the type is parameterized by this region, then replace this
         // region with the current anon region binding (in other words,
         // whatever & would get replaced with).
-        let decl_generics = match self.get_generics(span, def_id) {
-            Ok(generics) => generics,
-            Err(ErrorReported) => {
-                // No convenient way to recover from a cycle here. Just bail. Sorry!
-                self.tcx().sess.abort_if_errors();
-                bug!("ErrorReported returned, but no errors reports?")
-            }
-        };
+        let decl_generics = tcx.item_generics(def_id);
         let expected_num_region_params = decl_generics.regions.len();
         let supplied_num_region_params = lifetimes.len();
         let regions = if expected_num_region_params == supplied_num_region_params {
@@ -761,14 +729,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         debug!("create_substs_for_ast_trait_ref(trait_segment={:?})",
                trait_segment);
 
-        let trait_def = match self.get_trait_def(span, trait_def_id) {
-            Ok(trait_def) => trait_def,
-            Err(ErrorReported) => {
-                // No convenient way to recover from a cycle here. Just bail. Sorry!
-                self.tcx().sess.abort_if_errors();
-                bug!("ErrorReported returned, but no errors reports?")
-            }
-        };
+        let trait_def = self.tcx().lookup_trait_def(trait_def_id);
 
         match trait_segment.parameters {
             hir::AngleBracketedParameters(_) => {
@@ -882,8 +843,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
         // Otherwise, we have to walk through the supertraits to find
         // those that do.
-        self.ensure_super_predicates(binding.span, trait_ref.def_id())?;
-
         let candidates: Vec<ty::PolyTraitRef> =
             traits::supertraits(tcx, trait_ref.clone())
             .filter(|r| self.trait_defines_associated_type_named(r.def_id(), binding.item_name))
@@ -913,25 +872,18 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         -> Ty<'tcx>
     {
         let tcx = self.tcx();
-        let decl_ty = match self.get_item_type(span, did) {
-            Ok(ty) => ty,
-            Err(ErrorReported) => {
-                return tcx.types.err;
-            }
-        };
-
         let substs = self.ast_path_substs_for_ty(rscope,
                                                  span,
                                                  did,
                                                  item_segment);
 
         // FIXME(#12938): This is a hack until we have full support for DST.
-        if Some(did) == self.tcx().lang_items.owned_box() {
+        if Some(did) == tcx.lang_items.owned_box() {
             assert_eq!(substs.types().count(), 1);
-            return self.tcx().mk_box(substs.type_at(0));
+            return tcx.mk_box(substs.type_at(0));
         }
 
-        decl_ty.subst(self.tcx(), substs)
+        tcx.item_type(did).subst(self.tcx(), substs)
     }
 
     fn ast_ty_to_object_trait_ref(&self,
@@ -1097,11 +1049,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
         debug!("region_bound: {:?}", region_bound);
 
-        // ensure the super predicates and stop if we encountered an error
-        if self.ensure_super_predicates(span, principal.def_id()).is_err() {
-            return tcx.types.err;
-        }
-
         // check that there are no gross object safety violations,
         // most importantly, that the supertraits don't contain Self,
         // to avoid ICE-s.
@@ -1180,11 +1127,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                 return Err(ErrorReported);
             }
         };
-
-        // Ensure the super predicates and stop if we encountered an error.
-        if bounds.iter().any(|b| self.ensure_super_predicates(span, b.def_id()).is_err()) {
-            return Err(ErrorReported);
-        }
 
         // Check that there is exactly one way to find an associated type with the
         // correct name.
@@ -1289,10 +1231,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                 } else {
                     trait_ref
                 };
-
-                if self.ensure_super_predicates(span, trait_ref.def_id).is_err() {
-                    return (tcx.types.err, Def::Err);
-                }
 
                 let candidates: Vec<ty::PolyTraitRef> =
                     traits::supertraits(tcx, ty::Binder(trait_ref))
@@ -1519,8 +1457,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
         let tcx = self.tcx();
 
-        let cache = self.ast_ty_to_ty_cache();
-        if let Some(ty) = cache.borrow().get(&ast_ty.id) {
+        if let Some(ty) = self.ty_cache_lookup(ast_ty.id) {
             return ty;
         }
 
@@ -1605,25 +1542,23 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                 self.conv_object_ty_poly_trait_ref(rscope, ast_ty.span, bounds)
             }
             hir::TyImplTrait(ref bounds) => {
-                use collect::{compute_bounds, SizedByDefault};
-
                 // Create the anonymized type.
                 let def_id = tcx.map.local_def_id(ast_ty.id);
                 if let Some(anon_scope) = rscope.anon_type_scope() {
-                    let substs = anon_scope.fresh_substs(self, ast_ty.span);
+                    let substs = anon_scope.fresh_substs(tcx);
                     let ty = tcx.mk_anon(tcx.map.local_def_id(ast_ty.id), substs);
 
                     // Collect the bounds, i.e. the `A+B+'c` in `impl A+B+'c`.
-                    let bounds = compute_bounds(self, ty, bounds,
-                                                SizedByDefault::Yes,
-                                                Some(anon_scope),
-                                                ast_ty.span);
+                    let bounds = self.compute_bounds(ty, bounds,
+                                                     SizedByDefault::Yes,
+                                                     Some(anon_scope),
+                                                     ast_ty.span);
                     let predicates = bounds.predicates(tcx, ty);
                     let predicates = tcx.lift_to_global(&predicates).unwrap();
-                    tcx.predicates.borrow_mut().insert(def_id, ty::GenericPredicates {
+                    tcx.predicates.borrow_mut().insert(def_id, Rc::new(ty::GenericPredicates {
                         parent: None,
                         predicates: predicates
-                    });
+                    }));
 
                     ty
                 } else {
@@ -1688,7 +1623,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
             }
         };
 
-        cache.borrow_mut().insert(ast_ty.id, result_ty);
+        self.ty_cache_insert(ast_ty.id, result_ty);
 
         result_ty
     }
@@ -1945,11 +1880,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
             return Some(ast_region_to_region(tcx, r));
         }
 
-        if let Err(ErrorReported) =
-                self.ensure_super_predicates(span, principal_trait_ref.def_id()) {
-            return Some(tcx.mk_region(ty::ReStatic));
-        }
-
         // No explicit region bound specified. Therefore, examine trait
         // bounds and see if we can derive region bounds from those.
         let derived_region_bounds =
@@ -1976,6 +1906,99 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                       "ambiguous lifetime bound, explicit lifetime bound required");
         }
         return Some(r);
+    }
+
+    /// Add the Sized bound, unless the type parameter is marked as `?Sized`.
+    fn add_unsized_bound(&self,
+                         bounds: &mut ty::BuiltinBounds,
+                         ast_bounds: &[hir::TyParamBound],
+                         span: Span) {
+        let tcx = self.tcx();
+
+        // Try to find an unbound in bounds.
+        let mut unbound = None;
+        for ab in ast_bounds {
+            if let &hir::TraitTyParamBound(ref ptr, hir::TraitBoundModifier::Maybe) = ab  {
+                if unbound.is_none() {
+                    assert!(ptr.bound_lifetimes.is_empty());
+                    unbound = Some(ptr.trait_ref.clone());
+                } else {
+                    span_err!(tcx.sess, span, E0203,
+                            "type parameter has more than one relaxed default \
+                                                    bound, only one is supported");
+                }
+            }
+        }
+
+        let kind_id = tcx.lang_items.require(SizedTraitLangItem);
+        match unbound {
+            Some(ref tpb) => {
+                // FIXME(#8559) currently requires the unbound to be built-in.
+                let trait_def_id = tcx.expect_def(tpb.ref_id).def_id();
+                match kind_id {
+                    Ok(kind_id) if trait_def_id != kind_id => {
+                        tcx.sess.span_warn(span,
+                                        "default bound relaxed for a type parameter, but \
+                                        this does nothing because the given bound is not \
+                                        a default. Only `?Sized` is supported");
+                        tcx.try_add_builtin_trait(kind_id, bounds);
+                    }
+                    _ => {}
+                }
+            }
+            _ if kind_id.is_ok() => {
+                tcx.try_add_builtin_trait(kind_id.unwrap(), bounds);
+            }
+            // No lang item for Sized, so we can't add it as a bound.
+            None => {}
+        }
+    }
+
+    /// Translate the AST's notion of ty param bounds
+    /// (which are an enum consisting of a newtyped Ty
+    /// or a region) to ty's notion of ty param bounds,
+    /// which can either be user-defined traits, or the
+    /// built-in trait (formerly known as kind): Send.
+    pub fn compute_bounds(&self,
+                          param_ty: ty::Ty<'tcx>,
+                          ast_bounds: &[hir::TyParamBound],
+                          sized_by_default: SizedByDefault,
+                          anon_scope: Option<AnonTypeScope>,
+                          span: Span)
+                          -> Bounds<'tcx> {
+        let tcx = self.tcx();
+        let PartitionedBounds {
+            mut builtin_bounds,
+            trait_bounds,
+            region_bounds
+        } = partition_bounds(tcx, span, &ast_bounds);
+
+        if let SizedByDefault::Yes = sized_by_default {
+            self.add_unsized_bound(&mut builtin_bounds, ast_bounds, span);
+        }
+
+        let mut projection_bounds = vec![];
+
+        let rscope = MaybeWithAnonTypes::new(ExplicitRscope, anon_scope);
+        let mut trait_bounds: Vec<_> = trait_bounds.iter().map(|&bound| {
+            self.instantiate_poly_trait_ref(&rscope,
+                                            bound,
+                                            param_ty,
+                                            &mut projection_bounds)
+        }).collect();
+
+        let region_bounds = region_bounds.into_iter().map(|r| {
+            ast_region_to_region(tcx, r)
+        }).collect();
+
+        trait_bounds.sort_by(|a,b| a.def_id().cmp(&b.def_id()));
+
+        Bounds {
+            region_bounds: region_bounds,
+            builtin_bounds: builtin_bounds,
+            trait_bounds: trait_bounds,
+            projection_bounds: projection_bounds,
+        }
     }
 }
 
@@ -2094,6 +2117,8 @@ fn report_lifetime_number_error(tcx: TyCtxt, span: Span, number: usize, expected
         .span_label(span, &label)
         .emit();
 }
+
+pub enum SizedByDefault { Yes, No, }
 
 // A helper struct for conveniently grouping a set of bounds which we pass to
 // and return from functions in multiple places.

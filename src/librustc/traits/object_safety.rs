@@ -134,7 +134,7 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         let predicates = self.item_super_predicates(trait_def_id);
         predicates
             .predicates
-            .into_iter()
+            .iter()
             .map(|predicate| predicate.subst_supertrait(self, &trait_ref))
             .any(|predicate| {
                 match predicate {

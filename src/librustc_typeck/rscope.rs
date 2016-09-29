@@ -9,10 +9,8 @@
 // except according to those terms.
 
 use rustc::hir::def_id::DefId;
-use rustc::ty;
+use rustc::ty::{self, TyCtxt};
 use rustc::ty::subst::Substs;
-
-use astconv::AstConv;
 
 use std::cell::Cell;
 use syntax_pos::Span;
@@ -77,18 +75,15 @@ pub struct AnonTypeScope {
     enclosing_item: DefId
 }
 
-impl<'gcx: 'tcx, 'tcx> AnonTypeScope {
+impl<'a, 'gcx, 'tcx> AnonTypeScope {
     pub fn new(enclosing_item: DefId) -> AnonTypeScope {
         AnonTypeScope {
             enclosing_item: enclosing_item
         }
     }
 
-    pub fn fresh_substs(&self, astconv: &AstConv<'gcx, 'tcx>, span: Span)
-                        -> &'tcx Substs<'tcx> {
-        use collect::mk_item_substs;
-
-        mk_item_substs(astconv, span, self.enclosing_item)
+    pub fn fresh_substs(&self, tcx: TyCtxt<'a, 'gcx, 'tcx>) -> &'tcx Substs<'tcx> {
+        Substs::identity_for_item(tcx, self.enclosing_item)
     }
 }
 

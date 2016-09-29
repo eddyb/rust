@@ -1295,30 +1295,12 @@ pub fn check_enum_variants<'a,'tcx>(ccx: &CrateCtxt<'a,'tcx>,
 impl<'a, 'gcx, 'tcx> AstConv<'gcx, 'tcx> for FnCtxt<'a, 'gcx, 'tcx> {
     fn tcx<'b>(&'b self) -> TyCtxt<'b, 'gcx, 'tcx> { self.tcx }
 
-    fn ast_ty_to_ty_cache(&self) -> &RefCell<NodeMap<Ty<'tcx>>> {
-        &self.ast_ty_to_ty_cache
+    fn ty_cache_lookup(&self, id: ast::NodeId) -> Option<Ty<'tcx>> {
+        self.ast_ty_to_ty_cache.borrow().get(&id).cloned()
     }
 
-    fn get_generics(&self, _: Span, id: DefId)
-                    -> Result<&'tcx ty::Generics<'tcx>, ErrorReported>
-    {
-        Ok(self.tcx().item_generics(id))
-    }
-
-    fn get_item_type(&self, _: Span, id: DefId) -> Result<Ty<'tcx>, ErrorReported>
-    {
-        Ok(self.tcx().item_type(id))
-    }
-
-    fn get_trait_def(&self, _: Span, id: DefId)
-                     -> Result<&'tcx ty::TraitDef, ErrorReported>
-    {
-        Ok(self.tcx().lookup_trait_def(id))
-    }
-
-    fn ensure_super_predicates(&self, _: Span, _: DefId) -> Result<(), ErrorReported> {
-        // all super predicates are ensured during collect pass
-        Ok(())
+    fn ty_cache_insert(&self, id: ast::NodeId, ty: Ty<'tcx>) {
+        self.ast_ty_to_ty_cache.borrow_mut().insert(id, ty);
     }
 
     fn get_free_substs(&self) -> Option<&Substs<'tcx>> {

@@ -29,7 +29,6 @@ use ty;
 use ty::demand::Provider;
 use ty::subst::{Subst, Substs};
 use ty::walk::TypeWalker;
-use util::common::MemoizationMap;
 use util::nodemap::NodeSet;
 use util::nodemap::FnvHashMap;
 
@@ -167,12 +166,15 @@ impl<'a, 'gcx, 'tcx> ImplHeader<'tcx> {
         let tcx = selcx.tcx();
         let impl_substs = selcx.infcx().fresh_substs_for_item(DUMMY_SP, impl_def_id);
 
-        let header = ImplHeader {
+        let mut header = ImplHeader {
             impl_def_id: impl_def_id,
             self_ty: tcx.item_type(impl_def_id),
             trait_ref: tcx.impl_trait_ref(impl_def_id),
-            predicates: tcx.item_predicates(impl_def_id).predicates
+            predicates: vec![]
         }.subst(tcx, impl_substs);
+
+        header.predicates = tcx.item_predicates(impl_def_id)
+                               .instantiate(tcx, impl_substs).predicates;
 
         let traits::Normalized { value: mut header, obligations } =
             traits::normalize(selcx, traits::ObligationCause::dummy(), &header);
@@ -1484,7 +1486,7 @@ impl<'a, 'gcx, 'tcx> AdtDef {
     }
 
     #[inline]
-    pub fn predicates(&self, tcx: TyCtxt<'a, 'gcx, 'tcx>) -> GenericPredicates<'gcx> {
+    pub fn predicates(&self, tcx: TyCtxt<'a, 'gcx, 'tcx>) -> Rc<GenericPredicates<'gcx>> {
         tcx.item_predicates(self.did)
     }
 
@@ -1701,8 +1703,8 @@ impl<'a, 'gcx, 'tcx> AdtDef {
                     def_id: sized_trait,
                     substs: tcx.mk_substs_trait(ty, &[])
                 }).to_predicate();
-                let predicates = tcx.item_predicates(self.did).predicates;
-                if predicates.into_iter().any(|p| p == sized_predicate) {
+                let predicates = tcx.item_predicates(self.did);
+                if predicates.predicates.iter().any(|p| *p == sized_predicate) {
                     vec![]
                 } else {
                     vec![ty]
@@ -2010,96 +2012,11 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     }
 
     pub fn associated_item(self, def_id: DefId) -> AssociatedItem {
-        if !def_id.is_local() {
-            return demand!(self, def_id, associated_item);
-        }
-
-        self.associated_items.memoize(def_id, || {
-            let id = self.map.as_local_node_id(def_id).unwrap();
-            let parent_id = self.map.get_parent(id);
-            let parent_def_id = self.map.local_def_id(parent_id);
-            match self.map.get(id) {
-                ast_map::NodeTraitItem(trait_item) => {
-                    let (kind, has_self, has_value) = match trait_item.node {
-                        hir::MethodTraitItem(ref sig, ref body) => {
-                            (AssociatedKind::Method, sig.decl.get_self().is_some(),
-                             body.is_some())
-                        }
-                        hir::ConstTraitItem(_, ref value) => {
-                            (AssociatedKind::Const, false, value.is_some())
-                        }
-                        hir::TypeTraitItem(_, ref ty) => {
-                            (AssociatedKind::Type, false, ty.is_some())
-                        }
-                    };
-
-                    AssociatedItem {
-                        name: trait_item.name,
-                        kind: kind,
-                        vis: Visibility::from_hir(&hir::Inherited, id, self),
-                        defaultness: hir::Defaultness::Default,
-                        has_value: has_value,
-                        def_id: def_id,
-                        container: TraitContainer(parent_def_id),
-                        method_has_self_argument: has_self
-                    }
-                }
-                ast_map::NodeImplItem(impl_item) => {
-                    let (kind, has_self) = match impl_item.node {
-                        hir::ImplItemKind::Method(ref sig, _) => {
-                            (AssociatedKind::Method, sig.decl.get_self().is_some())
-                        }
-                        hir::ImplItemKind::Const(..) => (AssociatedKind::Const, false),
-                        hir::ImplItemKind::Type(..) => (AssociatedKind::Type, false)
-                    };
-
-                    // Trait impl items are always public.
-                    let public = hir::Public;
-                    let parent_item = self.map.expect_item(parent_id);
-                    let vis = if let hir::ItemImpl(.., Some(_), _, _) = parent_item.node {
-                        &public
-                    } else {
-                        &impl_item.vis
-                    };
-
-                    AssociatedItem {
-                        name: impl_item.name,
-                        kind: kind,
-                        vis: Visibility::from_hir(vis, id, self),
-                        defaultness: impl_item.defaultness,
-                        has_value: true,
-                        def_id: def_id,
-                        container: ImplContainer(parent_def_id),
-                        method_has_self_argument: has_self
-                    }
-                }
-                item => bug!("associated_item: {:?} not an associated item", item)
-            }
-        })
+        demand!(self, def_id, associated_item)
     }
 
     pub fn associated_item_def_ids(self, def_id: DefId) -> Rc<Vec<DefId>> {
-        if !def_id.is_local() {
-            return demand!(self, def_id, associated_item_def_ids);
-        }
-
-        self.associated_item_def_ids.memoize(def_id, || {
-            let id = self.map.as_local_node_id(def_id).unwrap();
-            let item = self.map.expect_item(id);
-            match item.node {
-                hir::ItemTrait(.., ref trait_items) => {
-                    Rc::new(trait_items.iter().map(|trait_item| {
-                        self.map.local_def_id(trait_item.id)
-                    }).collect())
-                }
-                hir::ItemImpl(.., ref impl_items) => {
-                    Rc::new(impl_items.iter().map(|impl_item| {
-                        self.map.local_def_id(impl_item.id)
-                    }).collect())
-                }
-                _ => span_bug!(item.span, "associated_item_def_ids: not impl or trait")
-            }
-        })
+        demand!(self, def_id, associated_item_def_ids)
     }
 
     #[inline] // FIXME(#35870) Avoid closures being unexported due to impl Trait.
@@ -2225,12 +2142,12 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     }
 
     /// Given the did of an item, returns its full set of predicates.
-    pub fn item_predicates(self, did: DefId) -> GenericPredicates<'gcx> {
+    pub fn item_predicates(self, did: DefId) -> Rc<GenericPredicates<'gcx>> {
         demand!(self, did, predicates)
     }
 
     /// Given the did of a trait, returns its superpredicates.
-    pub fn item_super_predicates(self, did: DefId) -> GenericPredicates<'gcx> {
+    pub fn item_super_predicates(self, did: DefId) -> Rc<GenericPredicates<'gcx>> {
         demand!(self, did, super_predicates)
     }
 

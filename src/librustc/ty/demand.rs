@@ -91,8 +91,8 @@ macro_rules! requests {
 requests! { <'tcx>
     ty in tcx.item_types -> Ty<'tcx>;
     generics in tcx.generics -> &'tcx ty::Generics<'tcx>;
-    predicates in tcx.predicates -> ty::GenericPredicates<'tcx>;
-    super_predicates in tcx.super_predicates -> ty::GenericPredicates<'tcx>;
+    predicates in tcx.predicates -> Rc<ty::GenericPredicates<'tcx>>;
+    super_predicates in tcx.super_predicates -> Rc<ty::GenericPredicates<'tcx>>;
     trait_def in tcx.trait_defs -> &'tcx ty::TraitDef;
     adt_def in tcx.adt_defs -> &'tcx ty::AdtDef;
     variances in tcx.item_variance_map -> Rc<Vec<ty::Variance>>;
