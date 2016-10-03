@@ -106,7 +106,7 @@ pub use rustc::util;
 
 use dep_graph::DepNode;
 use hir::map as hir_map;
-use rustc::infer::TypeOrigin;
+use rustc::infer::{InferOk, TypeOrigin};
 use rustc::ty::subst::Substs;
 use rustc::ty::{self, Ty, TyCtxt, TypeFoldable};
 use rustc::traits::{self, Reveal};
@@ -198,11 +198,16 @@ fn require_same_types<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
                                 t2: Ty<'tcx>)
                                 -> bool {
     ccx.tcx.infer_ctxt(None, None, Reveal::NotSpecializable).enter(|infcx| {
-        if let Err(err) = infcx.eq_types(false, origin.clone(), t1, t2) {
-            infcx.report_mismatched_types(origin, t1, t2, err);
-            false
-        } else {
-            true
+        match infcx.eq_types(false, origin.clone(), t1, t2) {
+            Ok(InferOk { obligations, .. }) => {
+                // FIXME(#32730) propagate obligations
+                assert!(obligations.is_empty());
+                true
+            }
+            Err(err) => {
+                infcx.report_mismatched_types(origin, t1, t2, err);
+                false
+            }
         }
     })
 }
