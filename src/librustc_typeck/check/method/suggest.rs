@@ -11,9 +11,7 @@
 //! Give useful errors and suggestions to users when an item can't be
 //! found or is otherwise invalid.
 
-use CrateCtxt;
-
-use check::FnCtxt;
+use check::{CrateCtxt, FnCtxt};
 use rustc::hir::map as hir_map;
 use rustc::ty::{self, Ty, ToPolyTraitRef, ToPredicate, TypeFoldable};
 use hir::def::Def;

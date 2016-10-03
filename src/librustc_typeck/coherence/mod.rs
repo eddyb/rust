@@ -29,7 +29,6 @@ use rustc::ty::{TyUint, TyClosure, TyBox, TyFnDef, TyFnPtr};
 use rustc::ty::{TyProjection, TyAnon};
 use rustc::ty::util::CopyImplementationError;
 use middle::free_region::FreeRegionMap;
-use CrateCtxt;
 use rustc::infer::{self, InferCtxt, TypeOrigin};
 use syntax_pos::Span;
 use rustc::dep_graph::DepNode;
@@ -43,7 +42,7 @@ mod overlap;
 mod unsafety;
 
 struct CoherenceChecker<'a, 'gcx: 'a + 'tcx, 'tcx: 'a> {
-    crate_context: &'a CrateCtxt<'a, 'gcx>,
+    tcx: TyCtxt<'a, 'gcx, 'gcx>,
     inference_context: InferCtxt<'a, 'gcx, 'tcx>,
 }
 
@@ -87,8 +86,8 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
         // Check implementations and traits. This populates the tables
         // containing the inherent methods and extension methods. It also
         // builds up the trait inheritance table.
-        self.crate_context.tcx.visit_all_items_in_krate(DepNode::CoherenceCheckImpl,
-                                                        &mut CoherenceCheckVisitor { cc: self });
+        self.tcx.visit_all_items_in_krate(DepNode::CoherenceCheckImpl,
+                                          &mut CoherenceCheckVisitor { cc: self });
 
         // Populate the table of destructors. It might seem a bit strange to
         // do this here, but it's actually the most convenient place, since
@@ -104,14 +103,14 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
     }
 
     fn check_implementation(&self, item: &Item) {
-        let tcx = self.crate_context.tcx;
+        let tcx = self.tcx;
         let impl_did = tcx.map.local_def_id(item.id);
         let self_type = tcx.item_type(impl_did);
 
         // If there are no traits, then this implementation must have a
         // base type.
 
-        if let Some(trait_ref) = self.crate_context.tcx.impl_trait_ref(impl_did) {
+        if let Some(trait_ref) = self.tcx.impl_trait_ref(impl_did) {
             debug!("(checking implementation) adding impl for trait '{:?}', item '{}'",
                    trait_ref,
                    item.name);
@@ -122,7 +121,7 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
                 return;
             }
 
-            enforce_trait_manually_implementable(self.crate_context.tcx,
+            enforce_trait_manually_implementable(self.tcx,
                                                  item.span,
                                                  trait_ref.def_id);
             self.add_trait_impl(trait_ref, impl_did);
@@ -143,7 +142,7 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
     }
 
     fn add_inherent_impl(&self, base_def_id: DefId, impl_def_id: DefId) {
-        let tcx = self.crate_context.tcx;
+        let tcx = self.tcx;
         tcx.inherent_impls.borrow_mut().push(base_def_id, impl_def_id);
     }
 
@@ -151,15 +150,15 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
         debug!("add_trait_impl: impl_trait_ref={:?} impl_def_id={:?}",
                impl_trait_ref,
                impl_def_id);
-        let trait_def = self.crate_context.tcx.lookup_trait_def(impl_trait_ref.def_id);
-        trait_def.record_local_impl(self.crate_context.tcx, impl_def_id, impl_trait_ref);
+        let trait_def = self.tcx.lookup_trait_def(impl_trait_ref.def_id);
+        trait_def.record_local_impl(self.tcx, impl_def_id, impl_trait_ref);
     }
 
     // Destructors
     //
 
     fn populate_destructors(&self) {
-        let tcx = self.crate_context.tcx;
+        let tcx = self.tcx;
         let drop_trait = match tcx.lang_items.drop_trait() {
             Some(id) => id,
             None => return,
@@ -213,7 +212,7 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
 
     /// Ensures that implementations of the built-in trait `Copy` are legal.
     fn check_implementations_of_copy(&self) {
-        let tcx = self.crate_context.tcx;
+        let tcx = self.tcx;
         let copy_trait = match tcx.lang_items.copy_trait() {
             Some(id) => id,
             None => return,
@@ -300,7 +299,7 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
 
     /// Process implementations of the built-in trait `CoerceUnsized`.
     fn check_implementations_of_coerce_unsized(&self) {
-        let tcx = self.crate_context.tcx;
+        let tcx = self.tcx;
         let coerce_unsized_trait = match tcx.lang_items.coerce_unsized_trait() {
             Some(id) => id,
             None => return,
@@ -327,7 +326,7 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
             };
 
             let source = tcx.item_type(impl_did);
-            let trait_ref = self.crate_context.tcx.impl_trait_ref(impl_did).unwrap();
+            let trait_ref = self.tcx.impl_trait_ref(impl_did).unwrap();
             let target = trait_ref.substs.type_at(1);
             debug!("check_implementations_of_coerce_unsized: {:?} -> {:?} (bound)",
                    source,
@@ -515,16 +514,15 @@ fn enforce_trait_manually_implementable(tcx: TyCtxt, sp: Span, trait_def_id: Def
     err.emit();
 }
 
-pub fn check_coherence(ccx: &CrateCtxt) {
-    let _task = ccx.tcx.dep_graph.in_task(DepNode::Coherence);
-    ccx.tcx.infer_ctxt(None, None, Reveal::ExactMatch).enter(|infcx| {
+pub fn check_coherence<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>) {
+    let _task = tcx.dep_graph.in_task(DepNode::Coherence);
+    tcx.infer_ctxt(None, None, Reveal::ExactMatch).enter(|infcx| {
         CoherenceChecker {
-                crate_context: ccx,
-                inference_context: infcx,
-            }
-            .check();
+            tcx: tcx,
+            inference_context: infcx,
+        }.check();
     });
-    unsafety::check(ccx.tcx);
-    orphan::check(ccx.tcx);
-    overlap::check(ccx.tcx);
+    unsafety::check(tcx);
+    orphan::check(tcx);
+    overlap::check(tcx);
 }

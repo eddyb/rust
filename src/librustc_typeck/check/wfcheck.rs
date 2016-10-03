@@ -9,9 +9,8 @@
 // except according to those terms.
 
 use astconv::ExplicitSelf;
-use check::FnCtxt;
+use check::{CrateCtxt, FnCtxt};
 use constrained_type_params::{identify_constrained_type_params, Parameter};
-use CrateCtxt;
 
 use hir::def_id::DefId;
 use middle::region::{CodeExtent};

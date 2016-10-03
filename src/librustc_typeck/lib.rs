@@ -109,7 +109,7 @@ use hir::map as hir_map;
 use rustc::infer::{InferOk, TypeOrigin};
 use rustc::ty::subst::Substs;
 use rustc::ty::{self, Ty, TyCtxt};
-use rustc::traits::{self, Reveal};
+use rustc::traits::Reveal;
 use session::{config, CompileResult};
 use util::common::time;
 
@@ -117,15 +117,13 @@ use syntax::ast;
 use syntax::abi::Abi;
 use syntax_pos::Span;
 
-use std::cell::RefCell;
-use util::nodemap::NodeMap;
-
 // NB: This module needs to be declared first so diagnostics are
 // registered before they are used.
 pub mod diagnostics;
 
-pub mod check;
+mod check;
 pub mod check_unused;
+pub mod demand;
 mod rscope;
 mod astconv;
 pub mod collect;
@@ -136,27 +134,6 @@ pub mod variance;
 pub struct TypeAndSubsts<'tcx> {
     pub substs: &'tcx Substs<'tcx>,
     pub ty: Ty<'tcx>,
-}
-
-pub struct CrateCtxt<'a, 'tcx: 'a> {
-    ast_ty_to_ty_cache: RefCell<NodeMap<Ty<'tcx>>>,
-
-    /// A vector of every trait accessible in the whole crate
-    /// (i.e. including those from subcrates). This is used only for
-    /// error reporting, and so is lazily initialised and generally
-    /// shouldn't taint the common path (hence the RefCell).
-    pub all_traits: RefCell<Option<check::method::AllTraitsVec>>,
-
-    /// This stack is used to identify cycles in the user's source.
-    /// Note that these cycles can cross multiple items.
-    pub stack: RefCell<Vec<collect::AstConvRequest>>,
-
-    pub tcx: TyCtxt<'a, 'tcx, 'tcx>,
-
-    /// Obligations which will have to be checked at the end of
-    /// type-checking, after all functions have been inferred.
-    /// The key is the NodeId of the item the obligations were from.
-    pub deferred_obligations: RefCell<NodeMap<Vec<traits::DeferredObligation<'tcx>>>>,
 }
 
 fn require_c_abi_if_variadic(tcx: TyCtxt,
@@ -171,12 +148,12 @@ fn require_c_abi_if_variadic(tcx: TyCtxt,
     }
 }
 
-fn require_same_types<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
+fn require_same_types<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                                 origin: TypeOrigin,
                                 t1: Ty<'tcx>,
                                 t2: Ty<'tcx>)
                                 -> bool {
-    ccx.tcx.infer_ctxt(None, None, Reveal::NotSpecializable).enter(|infcx| {
+    tcx.infer_ctxt(None, None, Reveal::NotSpecializable).enter(|infcx| {
         match infcx.eq_types(false, origin.clone(), t1, t2) {
             Ok(InferOk { obligations, .. }) => {
                 // FIXME(#32730) propagate obligations
@@ -191,10 +168,9 @@ fn require_same_types<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
     })
 }
 
-fn check_main_fn_ty(ccx: &CrateCtxt,
-                    main_id: ast::NodeId,
-                    main_span: Span) {
-    let tcx = ccx.tcx;
+fn check_main_fn_ty<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
+                              main_id: ast::NodeId,
+                              main_span: Span) {
     let main_def_id = tcx.map.local_def_id(main_id);
     let main_t = tcx.item_type(main_def_id);
     match main_t.sty {
@@ -204,7 +180,7 @@ fn check_main_fn_ty(ccx: &CrateCtxt,
                     match it.node {
                         hir::ItemFn(.., ref generics, _) => {
                             if generics.is_parameterized() {
-                                struct_span_err!(ccx.tcx.sess, generics.span, E0131,
+                                struct_span_err!(tcx.sess, generics.span, E0131,
                                          "main function is not allowed to have type parameters")
                                     .span_label(generics.span,
                                                 &format!("main cannot have type parameters"))
@@ -230,7 +206,7 @@ fn check_main_fn_ty(ccx: &CrateCtxt,
             }));
 
             require_same_types(
-                ccx,
+                tcx,
                 TypeOrigin::MainFunctionType(main_span),
                 main_t,
                 se_ty);
@@ -243,11 +219,10 @@ fn check_main_fn_ty(ccx: &CrateCtxt,
     }
 }
 
-fn check_start_fn_ty(ccx: &CrateCtxt,
-                     start_id: ast::NodeId,
-                     start_span: Span) {
-    let tcx = ccx.tcx;
-    let start_def_id = ccx.tcx.map.local_def_id(start_id);
+fn check_start_fn_ty<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
+                               start_id: ast::NodeId,
+                               start_span: Span) {
+    let start_def_id = tcx.map.local_def_id(start_id);
     let start_t = tcx.item_type(start_def_id);
     match start_t.sty {
         ty::TyFnDef(..) => {
@@ -285,7 +260,7 @@ fn check_start_fn_ty(ccx: &CrateCtxt,
             }));
 
             require_same_types(
-                ccx,
+                tcx,
                 TypeOrigin::StartFunctionType(start_span),
                 start_t,
                 se_ty);
@@ -298,13 +273,12 @@ fn check_start_fn_ty(ccx: &CrateCtxt,
     }
 }
 
-fn check_for_entry_fn(ccx: &CrateCtxt) {
-    let tcx = ccx.tcx;
+fn check_for_entry_fn<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>) {
     let _task = tcx.dep_graph.in_task(DepNode::CheckEntryFn);
     if let Some((id, sp)) = *tcx.sess.entry_fn.borrow() {
         match tcx.sess.entry_type.get() {
-            Some(config::EntryMain) => check_main_fn_ty(ccx, id, sp),
-            Some(config::EntryStart) => check_start_fn_ty(ccx, id, sp),
+            Some(config::EntryMain) => check_main_fn_ty(tcx, id, sp),
+            Some(config::EntryStart) => check_start_fn_ty(tcx, id, sp),
             Some(config::EntryNone) => {}
             None => bug!("entry function without a type")
         }
@@ -314,13 +288,6 @@ fn check_for_entry_fn(ccx: &CrateCtxt) {
 pub fn check_crate<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>)
                              -> CompileResult {
     let time_passes = tcx.sess.time_passes();
-    let ccx = CrateCtxt {
-        ast_ty_to_ty_cache: RefCell::new(NodeMap()),
-        all_traits: RefCell::new(None),
-        stack: RefCell::new(Vec::new()),
-        tcx: tcx,
-        deferred_obligations: RefCell::new(NodeMap()),
-    };
 
     // this ensures that later parts of type checking can assume that items
     // have valid types and not error
@@ -335,19 +302,12 @@ pub fn check_crate<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>)
 
     tcx.sess.track_errors(|| {
       time(time_passes, "coherence checking", ||
-          coherence::check_coherence(&ccx));
+          coherence::check_coherence(tcx));
     })?;
 
-    time(time_passes, "wf checking", || check::check_wf_new(&ccx))?;
-
-    time(time_passes, "item-types checking", || check::check_item_types(&ccx))?;
-
-    time(time_passes, "item-bodies checking", || check::check_item_bodies(&ccx))?;
-
-    time(time_passes, "drop-impl checking", || check::check_drop_impls(&ccx))?;
-
+    check::check_crate(tcx)?;
     check_unused::check_crate(tcx);
-    check_for_entry_fn(&ccx);
+    check_for_entry_fn(tcx);
 
     let err_count = tcx.sess.err_count();
     if err_count == 0 {

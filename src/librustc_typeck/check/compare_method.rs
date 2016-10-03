@@ -12,7 +12,7 @@ use middle::free_region::FreeRegionMap;
 use rustc::hir;
 use rustc::hir::def_id::DefId;
 use rustc::infer::{self, InferOk, TypeOrigin};
-use rustc::ty;
+use rustc::ty::{self, TyCtxt};
 use rustc::traits::{self, Reveal};
 use rustc::ty::error::{ExpectedFound, TypeError};
 use rustc::ty::subst::{Subst, Substs};
@@ -21,7 +21,6 @@ use rustc::hir::{ImplItemKind, TraitItem_, Ty_};
 use syntax::ast;
 use syntax_pos::Span;
 
-use CrateCtxt;
 use super::assoc;
 use astconv::ExplicitSelf;
 
@@ -36,7 +35,7 @@ use astconv::ExplicitSelf;
 /// - trait_m: the method in the trait
 /// - impl_trait_ref: the TraitRef corresponding to the trait implementation
 
-pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
+pub fn compare_impl_method<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                                      impl_m: &ty::AssociatedItem,
                                      impl_m_span: Span,
                                      impl_m_body_id: ast::NodeId,
@@ -47,8 +46,6 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
 
     debug!("compare_impl_method: impl_trait_ref (liberated) = {:?}",
            impl_trait_ref);
-
-    let tcx = ccx.tcx;
 
     let trait_to_impl_substs = &impl_trait_ref.substs;
 
@@ -331,7 +328,7 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
 
     // Check region bounds. FIXME(@jroesch) refactor this away when removing
     // ParamBounds.
-    if !check_region_bounds_on_impl_method(ccx,
+    if !check_region_bounds_on_impl_method(tcx,
                                            impl_m_span,
                                            impl_m.name,
                                            trait_m_generics,
@@ -511,7 +508,7 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
         infcx.resolve_regions_and_report_errors(&free_regions, impl_m_body_id);
     });
 
-    fn check_region_bounds_on_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
+    fn check_region_bounds_on_impl_method<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                                                     span: Span,
                                                     name: ast::Name,
                                                     trait_generics: &ty::Generics<'tcx>,
@@ -543,12 +540,9 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
         // are zero. Since I don't quite know how to phrase things at
         // the moment, give a kind of vague error message.
         if trait_params.len() != impl_params.len() {
-            struct_span_err!(ccx.tcx.sess,
-                             span,
-                             E0195,
-                             "lifetime parameters or bounds on method `{}` do not match the \
-                              trait declaration",
-                             name)
+            struct_span_err!(tcx.sess, span, E0195,
+                "lifetime parameters or bounds on method `{}` do \
+                 not match the trait declaration", name)
                 .span_label(span, &format!("lifetimes do not match trait"))
                 .emit();
             return false;
@@ -652,14 +646,13 @@ pub fn compare_impl_method<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
     }
 }
 
-pub fn compare_const_impl<'a, 'tcx>(ccx: &CrateCtxt<'a, 'tcx>,
+pub fn compare_const_impl<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                                     impl_c: &ty::AssociatedItem,
                                     impl_c_span: Span,
                                     trait_c: &ty::AssociatedItem,
                                     impl_trait_ref: &ty::TraitRef<'tcx>) {
     debug!("compare_const_impl(impl_trait_ref={:?})", impl_trait_ref);
 
-    let tcx = ccx.tcx;
     tcx.infer_ctxt(None, None, Reveal::NotSpecializable).enter(|infcx| {
         let mut fulfillment_cx = traits::FulfillmentContext::new();
 
