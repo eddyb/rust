@@ -538,6 +538,7 @@ impl<'a, 'gcx, 'tcx, H: Hasher> TypeVisitor<'tcx> for TypeIdHasher<'a, 'gcx, 'tc
             TySlice(_) => {}
 
             TyError |
+            TyIncomplete(..) |
             TyInfer(_) => bug!("TypeIdHasher: unexpected type {}", ty)
         }
 
@@ -621,7 +622,7 @@ impl<'a, 'tcx> ty::TyS<'tcx> {
             }) => Some(true),
 
             TyArray(..) | TySlice(..) | TyTrait(..) | TyTuple(..) |
-            TyClosure(..) | TyAdt(..) | TyAnon(..) |
+            TyClosure(..) | TyAdt(..) | TyAnon(..) | TyIncomplete(..) |
             TyProjection(..) | TyParam(..) | TyInfer(..) | TyError => None
         }.unwrap_or_else(|| {
             !self.impls_bound(tcx, param_env, ty::BoundCopy, &param_env.is_copy_cache, span)
@@ -664,7 +665,7 @@ impl<'a, 'tcx> ty::TyS<'tcx> {
             TyStr | TyTrait(..) | TySlice(_) => Some(false),
 
             TyAdt(..) | TyProjection(..) | TyParam(..) |
-            TyInfer(..) | TyAnon(..) | TyError => None
+            TyInfer(..) | TyAnon(..) | TyError | TyIncomplete(..) => None
         }.unwrap_or_else(|| {
             self.impls_bound(tcx, param_env, ty::BoundSized, &param_env.is_sized_cache, span)
         });

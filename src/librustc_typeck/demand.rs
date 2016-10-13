@@ -14,41 +14,74 @@ use rscope::*;
 use rustc::hir;
 use rustc::hir::def::Def;
 use rustc::hir::def_id::DefId;
+use rustc::hir::intravisit::{self, Visitor};
 use rustc::lint;
-use rustc::ty::{self, ToPolyTraitRef, Ty, TyCtxt, ToPredicate};
+use rustc::ty::{self, ToPolyTraitRef, Ty, TyCtxt, ToPredicate, TypeFoldable};
 use rustc::ty::demand::{Provider, Unsupported};
+use rustc::ty::fold::TypeVisitor;
 use rustc::ty::subst::Substs;
 use rustc::ty::util::IntTypeExt;
-use rustc::util::common::{ErrorReported, MemoizationMap};
+use rustc::util::common::MemoizationMap;
 use rustc::util::nodemap::{NodeMap, FnvHashMap, FnvHashSet};
 
 use rustc::middle::const_val::ConstVal;
+use rustc::middle::resolve_lifetime as rl;
 use rustc_const_eval::EvalHint::UncheckedExprHint;
 use rustc_const_eval::{eval_const_expr_partial, report_const_eval_err};
 use rustc_const_math::ConstInt;
+use rustc_data_structures::bitvec::BitVector;
 
 use syntax::{abi, ast, attr};
 use syntax::codemap::Spanned;
 use syntax::parse::token::keywords;
 use syntax_pos::Span;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::hash_map::Entry;
+use std::iter;
 use std::rc::Rc;
 
 #[derive(Default)]
 pub struct TypeckProvider<'tcx> {
+    /// Cache for `AstConv::ast_ty_to_ty`. Also serves
+    /// to catch reentrance and produce `TyIncomplete`.
     ty_cache: RefCell<NodeMap<TyCacheEntry<'tcx>>>,
 
-    stack: RefCell<Vec<(Request, ast::NodeId)>>
+    /// Stack of requests made to `TypeckProvider`.
+    /// Used to catch and report some cycles.
+    stack: RefCell<RequestStack>,
+
+    /// Information for each generated `TyIncomplete`,
+    /// used to report cycles in case they leak into
+    /// the final result of some request.
+    incomplete_types: RefCell<NodeMap<IncompleteInfo<'tcx>>>,
+
+    /// IDs for `TyIncomplete`, grouped by the containing
+    /// request, so we can reclaim memory for those that
+    /// didn't end up in some result and won't be reported.
+    pending_incomplete: RefCell<FnvHashMap<(Request, ast::NodeId),
+                                           Vec<ast::NodeId>>>
 }
 
+#[derive(Copy, Clone)]
 enum TyCacheEntry<'tcx> {
     Done(Ty<'tcx>),
-    Cycle
+    Incomplete
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+struct IncompleteInfo<'tcx> {
+    /// Cached `TyIncomplete`.
+    ty: Ty<'tcx>,
+
+    /// The deepest cycle in the request stack,
+    /// at the point where the `TyIncomplete`
+    /// was first created for this type node.
+    cycle: RequestStack
+}
+
+type RequestStack = Vec<(Request, ast::NodeId)>;
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum Request {
     /// Should never recurse - if it does, just ICE.
     Leaf,
@@ -71,6 +104,31 @@ impl Request {
     }
 }
 
+fn report_cycle(tcx: TyCtxt,
+                span: Span,
+                cycle: &[(Request, ast::NodeId)]) {
+    let mut err = struct_span_err!(tcx.sess, span, E0391,
+        "unsupported cyclic reference between types/traits detected");
+    err.span_label(span, &format!("cyclic reference"));
+
+    let (request, id) = cycle[0];
+    err.note(&format!("the cycle begins when {} `{}`...",
+                      request.describe(),
+                      tcx.item_path_str(tcx.map.local_def_id(id))));
+
+    for &(request, id) in &cycle[1..] {
+        err.note(&format!("...which then requires {} `{}`...",
+                          request.describe(),
+                          tcx.item_path_str(tcx.map.local_def_id(id))));
+    }
+
+    err.note(&format!("...which then again requires {} `{}`, completing the cycle.",
+                      request.describe(),
+                      tcx.item_path_str(tcx.map.local_def_id(id))));
+
+    err.emit();
+}
+
 impl<'tcx> TypeckProvider<'tcx> {
     /// Checks for a cycle through the same request/node pair,
     /// and returns `false` in case a cycle error was found.
@@ -79,50 +137,111 @@ impl<'tcx> TypeckProvider<'tcx> {
         match stack.iter().enumerate().rev().find(|&(_, r)| *r == (request, id)) {
             None => { }
             Some((i, _)) => {
-                let cycle = &stack[i+1..];
-                self.report_cycle(tcx, tcx.map.span(id), (request, id), cycle);
+                report_cycle(tcx, tcx.map.span(id), &stack[i..]);
                 return false;
             }
         }
         stack.push((request, id));
         true
     }
-
-    fn report_cycle(&self, tcx: TyCtxt,
-                    span: Span,
-                    (request, id): (Request, ast::NodeId),
-                    cycle: &[(Request, ast::NodeId)]) {
-        let mut err = struct_span_err!(tcx.sess, span, E0391,
-            "unsupported cyclic reference between types/traits detected");
-        err.span_label(span, &format!("cyclic reference"));
-
-        err.note(&format!("the cycle begins when {} `{}`...",
-                          request.describe(),
-                          tcx.item_path_str(tcx.map.local_def_id(id))));
-
-        for &(request, id) in cycle {
-            err.note(&format!("...which then requires {} `{}`...",
-                              request.describe(),
-                              tcx.item_path_str(tcx.map.local_def_id(id))));
-        }
-
-        err.note(&format!("...which then again requires {} `{}`, completing the cycle.",
-                          request.describe(),
-                          tcx.item_path_str(tcx.map.local_def_id(id))));
-
-        err.emit();
-    }
 }
 
 struct ItemCtxt<'a, 'tcx: 'a> {
     tcx: TyCtxt<'a, 'tcx, 'tcx>,
     provider: &'a TypeckProvider<'tcx>,
-    def_id: DefId
+    def_id: DefId,
+    last_incomplete: Cell<Option<ast::NodeId>>
+}
+
+struct ReportIncompleteAsCycle<'a, 'tcx: 'a> {
+    tcx: TyCtxt<'a, 'tcx, 'tcx>,
+    incomplete_types: &'a mut NodeMap<IncompleteInfo<'tcx>>
+}
+
+impl<'a, 'tcx> TypeVisitor<'tcx> for ReportIncompleteAsCycle<'a, 'tcx> {
+    fn visit_ty(&mut self, ty: Ty<'tcx>) -> bool {
+        if let ty::TyIncomplete(id, _) = ty.sty {
+            // Avoid reporting the same type twice.
+            if let Some(incomplete) = self.incomplete_types.remove(&id) {
+                let span = self.tcx.map.span(id);
+                report_cycle(self.tcx, span, &incomplete.cycle);
+            }
+        }
+
+        ty.super_visit_with(self)
+    }
 }
 
 impl<'a, 'tcx> ItemCtxt<'a, 'tcx> {
     fn to_ty<RS:RegionScope>(&self, rs: &RS, ast_ty: &hir::Ty) -> Ty<'tcx> {
         AstConv::ast_ty_to_ty(self, rs, ast_ty)
+    }
+
+    /// Report any `TyIncomplete` that are left around, as cycles,
+    /// and throw away the information for ones that were resolved,
+    /// if this is the only instance of this request, otherwise
+    /// clear the `TyCacheEntry::Incomplete` type cache entries
+    /// in case the types can later be completed.
+    /// Returns `true` if the result of the request can be cached.
+    fn sanitize<'b, T: 'b, I>(self, values: I) -> bool
+    where I: Iterator<Item=&'b T>,
+          T: TypeFoldable<'tcx> {
+        let mut pending_incomplete = self.provider.pending_incomplete.borrow_mut();
+        let current = {
+            let stack = self.provider.stack.borrow();
+            let current = *stack.last().unwrap();
+            if stack[..stack.len() - 1].contains(&current) {
+                // Clear the type cache of all the incomplete entries.
+                // FIXME(eddyb) Figure out how to do this without
+                // resulting in infinite recursion in some edge
+                // cases. Possibly only clear those that were
+                // introduced in this stack frame, not just this
+                // specific request. Could do this by stack depth.
+                /*if let Some(ids) = pending_incomplete.get(&current) {
+                    let mut cache = self.provider.ty_cache.borrow_mut();
+                    for &id in ids {
+                        if let Entry::Occupied(entry) = cache.entry(id) {
+                            if let TyCacheEntry::Incomplete = *entry.get() {
+                                entry.remove();
+                            }
+                        }
+                    }
+                }*/
+
+                // This is a nested request, can't cache it
+                // without risking unnecessary failures.
+                return false;
+            }
+
+            current
+        };
+
+        let mut incomplete_types = self.provider.incomplete_types.borrow_mut();
+        {
+            let mut reporter = ReportIncompleteAsCycle {
+                tcx: self.tcx,
+                incomplete_types: &mut incomplete_types
+            };
+
+            // Only visit the types if there's something to report on.
+            for value in values {
+                if value.references_incomplete() {
+                    value.visit_with(&mut reporter);
+                }
+            }
+        }
+
+        // Destroy all the `TyIncomplete` information associated with this
+        // request - the ones that don't show up would just waste memory,
+        // and if they haven't surfaced already, in this request, or some
+        // other one using a previous, less complete result, they can't.
+        if let Some(ids) = pending_incomplete.remove(&current) {
+            for id in ids {
+                incomplete_types.remove(&id);
+            }
+        }
+
+        true
     }
 }
 
@@ -132,81 +251,201 @@ impl<'a, 'tcx> Drop for ItemCtxt<'a, 'tcx> {
     }
 }
 
+struct ParamUseFinder<'a, 'tcx: 'a> {
+    tcx: TyCtxt<'a, 'tcx, 'tcx>,
+    num_types: usize,
+    types: BitVector,
+    num_regions: usize,
+    regions: BitVector,
+}
+
+impl<'v, 'a, 'tcx> Visitor<'v> for ParamUseFinder<'a, 'tcx> {
+    fn visit_ty(&mut self, ty: &hir::Ty) {
+        let def = self.tcx.def_map.borrow().get(&ty.id).map(|r| r.base_def);
+        if let Some(Def::TyParam(def_id)) = def {
+            if let Some(node_id) = self.tcx.map.as_local_node_id(def_id) {
+                if let Some(p) = self.tcx.ty_param_defs.borrow().get(&node_id) {
+                    self.types.insert(p.index as usize);
+                }
+            }
+        }
+
+        // Every `impl Trait` captures all parameters in scope.
+        if let hir::TyImplTrait(..) = ty.node {
+            for i in 0..self.num_types {
+                self.types.insert(i);
+            }
+            for i in 0..self.num_regions {
+                self.regions.insert(i);
+            }
+        }
+
+        intravisit::walk_ty(self, ty);
+    }
+
+    fn visit_lifetime(&mut self, lifetime: &hir::Lifetime) {
+        let def = self.tcx.named_region_map.defs.get(&lifetime.id).cloned();
+        if let Some(rl::DefEarlyBoundRegion(index, _)) = def {
+            self.regions.insert(index as usize);
+        }
+
+        intravisit::walk_lifetime(self, lifetime);
+    }
+}
+
 impl<'a, 'tcx> AstConv<'tcx, 'tcx> for ItemCtxt<'a, 'tcx> {
     fn tcx<'b>(&'b self) -> TyCtxt<'b, 'tcx, 'tcx> { self.tcx }
 
-    fn ty_cache_lookup(&self, id: ast::NodeId) -> Option<Ty<'tcx>> {
-        match self.provider.ty_cache.borrow_mut().entry(id) {
-            Entry::Occupied(mut entry) => {
-                match *entry.get() {
-                    TyCacheEntry::Done(ty) => Some(ty),
-                    TyCacheEntry::Cycle => {
-                        // Try to report some kind of cycle.
-                        let mut stack = self.provider.stack.borrow_mut();
-                        let item_id = self.tcx.map.as_local_node_id(self.def_id).unwrap();
-                        let span = self.tcx.map.span(id);
-
-                        // Ignore the last entry, should be the current item.
-                        let stack = &stack[..stack.len() - 1];
-                        match stack.iter().enumerate().rev().find(|&(_, r)| r.1 == item_id) {
-                            None => {
-                                span_bug!(span, "item {:?} not found for cycle", self.def_id);
-                            }
-                            Some((i, _)) => {
-                                self.provider.report_cycle(self.tcx, span,
-                                                           (Request::Type, item_id),
-                                                           &stack[i+1..]);
-                            }
-                        }
-
-                        let ty = self.tcx.types.err;
-                        *entry.get_mut() = TyCacheEntry::Done(ty);
-                        Some(ty)
-                    }
+    fn ty_cache_lookup(&self, hir_ty: &hir::Ty) -> Option<Ty<'tcx>> {
+        let id = hir_ty.id;
+        let mut cache = self.provider.ty_cache.borrow_mut();
+        match cache.get(&id).cloned() {
+            Some(TyCacheEntry::Done(ty)) => return Some(ty),
+            Some(TyCacheEntry::Incomplete) => {
+                // Try to get a cached version of this `TyIncomplete`.
+                if let Some(incomplete) = self.provider.incomplete_types.borrow().get(&id) {
+                    return Some(incomplete.ty);
                 }
+
+                // Get the deepest request cycle stack.
+                let (current, cycle) = {
+                    let stack = self.provider.stack.borrow();
+                    let current = *stack.last().unwrap();
+                    let stack = &stack[..stack.len() - 1];
+                    match stack.iter().enumerate().rev().find(|&(_, r)| *r == current) {
+                        None => {
+                            span_bug!(self.tcx.map.span(id),
+                                      "item {:?} not found for cycle", self.def_id);
+                        }
+                        Some((i, _)) => (current, stack[i..].to_vec())
+                    }
+                };
+
+                // The only way this type could be reached again
+                // through generics is for defaults, and those
+                // aren't used by substitutions, so we should
+                // be able to have a dummy in there for that.
+                cache.insert(id, TyCacheEntry::Done(self.tcx.types.err));
+
+                // Take out the borrow for the duration of the call.
+                drop(cache);
+                let generics = self.tcx.item_generics(self.def_id);
+
+                // Collect the type and lifetime parameters used
+                // inside the type - we don't want to use parameters
+                // that don't show up and trigger unrelated errors.
+                let num_types = generics.parent_types as usize + generics.types.len();
+                let num_regions = generics.parent_regions as usize + generics.regions.len();
+                let mut param_uses = ParamUseFinder {
+                    tcx: self.tcx,
+                    num_types: num_types,
+                    types: BitVector::new(num_types),
+                    num_regions: num_regions,
+                    regions: BitVector::new(num_regions),
+                };
+                param_uses.visit_ty(hir_ty);
+
+                // Construct the identity substitutions, using 'static for
+                // unused lifetime parameters and ! for unused type parameters.
+                let substs = Substs::for_item(self.tcx, self.def_id, |def, _| {
+                    if param_uses.regions.contains(def.index as usize) {
+                        let early_bound = def.to_early_bound_region_data();
+                        self.tcx.mk_region(ty::ReEarlyBound(early_bound))
+                    } else {
+                        self.tcx.mk_region(ty::ReStatic)
+                    }
+                }, |def, _| {
+                    if param_uses.types.contains(def.index as usize) {
+                        self.tcx.mk_param_from_def(def)
+                    } else {
+                        self.tcx.types.never
+                    }
+                });
+
+                let ty = self.tcx.mk_ty(ty::TyIncomplete(id, substs));
+
+                // Record that this item has a stack for this type.
+                self.provider.pending_incomplete.borrow_mut()
+                    .entry(current).or_insert(vec![]).push(id);
+
+                // Cache the information associated with this type.
+                self.provider.incomplete_types.borrow_mut().insert(id, IncompleteInfo {
+                    ty: ty,
+                    cycle: cycle
+                });
+
+                // Return the cache entry back to the "incomplete" state,
+                // in which it will remain until the request finishes.
+                self.provider.ty_cache.borrow_mut().insert(id, TyCacheEntry::Incomplete);
+
+                return Some(ty);
             }
-            Entry::Vacant(entry) => {
-                entry.insert(TyCacheEntry::Cycle);
-                None
+            None => {
+                cache.insert(id, TyCacheEntry::Incomplete);
             }
         }
+
+        // This is the deepest point in the recursion.
+        // We don't want to create `TyIncomplete` for
+        // any ancestor, if we can avoid it, so we'll
+        // try to exonorate ancestors as we go down.
+
+        // `last_incomplete`, if present, will either
+        // be the immediate parent (the only other
+        // `Incomplete` cache entry), or a descendant
+        // of a sibling, which is already complete.
+        if let Some(last) = self.last_incomplete.get() {
+            if let Entry::Occupied(entry) = cache.entry(last) {
+                if let TyCacheEntry::Incomplete = *entry.get() {
+                    entry.remove();
+                }
+            }
+        }
+
+        // Now this is the only type in this request
+        // that can become a `TyIncomplete`, let the
+        // next know whom to exonorate in its turn.
+        self.last_incomplete.set(Some(id));
+
+        None
     }
 
-    fn ty_cache_insert(&self, id: ast::NodeId, ty: Ty<'tcx>) {
-        self.provider.ty_cache.borrow_mut().insert(id, TyCacheEntry::Done(ty));
+    fn ty_cache_insert(&self, hir_ty: &hir::Ty, ty: Ty<'tcx>) {
+        // Don't cache incomplete types.
+        if !ty.references_incomplete() {
+            self.provider.ty_cache.borrow_mut().insert(hir_ty.id, TyCacheEntry::Done(ty));
+        }
     }
 
     fn get_free_substs(&self) -> Option<&Substs<'tcx>> {
         None
     }
 
-    fn get_type_parameter_bounds(&self,
-                                 _: Span,
-                                 node_id: ast::NodeId)
-                                 -> Result<Vec<ty::PolyTraitRef<'tcx>>, ErrorReported>
-    {
-        let def = self.tcx.type_parameter_def(node_id);
-        let predicates = self.tcx.item_predicates(self.def_id);
-        // FIXME(eddyb) Handle more than two levels here.
-        let parent_predicates = predicates.parent.map(|def_id| {
-            let parent_predicates = self.tcx.item_predicates(def_id);
-            assert_eq!(parent_predicates.parent, None);
-            parent_predicates
-        });
-        let parent_predicates = parent_predicates.as_ref()
-            .map_or(&[][..], |p| &p.predicates[..]);
-        Ok(predicates.predicates.iter().chain(parent_predicates).filter_map(|predicate| {
-            match *predicate {
-                ty::Predicate::Trait(ref data) => {
-                    if data.0.self_ty().is_param(def.index) {
-                        Some(data.to_poly_trait_ref())
-                    } else {
-                        None
+    fn get_type_bounds(&self, ty: Ty<'tcx>) -> Vec<ty::PolyTraitRef<'tcx>> {
+        // Traverse the parents to find all applying predicates.
+        let mut result = vec![];
+        let mut def_id = self.def_id;
+        loop {
+            let predicates = self.tcx.item_predicates(def_id);
+            result.extend(predicates.predicates.iter().filter_map(|predicate| {
+                match *predicate {
+                    ty::Predicate::Trait(ref data) => {
+                        if data.0.self_ty() == ty {
+                            Some(data.to_poly_trait_ref())
+                        } else {
+                            None
+                        }
                     }
+                    _ => None
                 }
-                _ => None
+            }));
+
+            if let Some(parent) = predicates.parent {
+                def_id = parent;
+            } else {
+                return result;
             }
-        }).collect())
+        }
     }
 
     fn ty_infer(&self, span: Span) -> Ty<'tcx> {
@@ -448,8 +687,6 @@ fn evaluate_discr_expr<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     }
 }
 
-
-
 /// Enter an `ItemCtxt` for a specific `DefId` and `Request`.
 /// This returns `Unsupported` for non-local `DefId`s and checks
 /// for cycles - which can be ignored with `ignore` or handled
@@ -463,7 +700,8 @@ macro_rules! enter {
             (id, ItemCtxt {
                 tcx: $tcx,
                 provider: $this,
-                def_id: $def_id
+                def_id: $def_id,
+                last_incomplete: Cell::new(None)
             })
         } else {
             return Err(Unsupported);
@@ -478,7 +716,8 @@ macro_rules! enter {
             (id, ItemCtxt {
                 tcx: $tcx,
                 provider: $this,
-                def_id: $def_id
+                def_id: $def_id,
+                last_incomplete: Cell::new(None)
             })
         } else {
             return Err(Unsupported);
@@ -685,15 +924,15 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
                     -> Result<&'tcx ty::Generics<'tcx>, Unsupported> {
         use rustc::hir::*;
         use rustc::hir::map::*;
-        let mut ignore_defaults = false;
-        let (id, icx) = enter!(self, tcx, def_id, Generics => ignore_defaults = true);
+        let (id, icx) = enter!(self, tcx, def_id, Generics => ignore);
 
         let node = tcx.map.get(id);
         let parent_def_id = match node {
             NodeImplItem(_) |
             NodeTraitItem(_) |
             NodeVariant(_) |
-            NodeStructCtor(_) => {
+            NodeStructCtor(_) |
+            NodeField(_) => {
                 let parent_id = tcx.map.get_parent(id);
                 Some(tcx.map.local_def_id(parent_id))
             }
@@ -801,15 +1040,12 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
 
         // Now create the real type parameters.
         let type_start = own_start + regions.len() as u32;
-        let types = ast_generics.ty_params.iter().enumerate().map(|(i, param)| {
+        let types = ast_generics.ty_params.iter().enumerate();
+        let types: Vec<_> = opt_self.into_iter().chain(types.map(|(i, param)| {
             let i = type_start + i as u32;
             tcx.ty_param_defs.memoize(param.id, || {
-                let default = if ignore_defaults {
-                    None
-                } else {
-                    param.default.as_ref()
-                };
-                let default = default.map(|def| icx.to_ty(&ExplicitRscope, def));
+                let default = param.default.as_ref()
+                    .map(|def| icx.to_ty(&ExplicitRscope, def));
 
                 let object_lifetime_default =
                     compute_object_lifetime_default(tcx, param.id,
@@ -842,8 +1078,7 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
                     pure_wrt_drop: param.pure_wrt_drop,
                 }
             })
-        });
-        let types: Vec<_> = opt_self.into_iter().chain(types).collect();
+        })).collect();
 
         // Debugging aid.
         if tcx.has_attr(def_id, "rustc_object_lifetime_default") {
@@ -865,7 +1100,10 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
             types: types,
             has_self: has_self || parent_has_self
         });
-        tcx.generics.borrow_mut().insert(def_id, generics);
+
+        if icx.sanitize(generics.types.iter().filter_map(|def| def.default.as_ref())) {
+            tcx.generics.borrow_mut().insert(def_id, generics);
+        }
         Ok(generics)
     }
 
@@ -1122,7 +1360,10 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
             parent: generics.parent,
             predicates: predicates
         });
-        tcx.predicates.borrow_mut().insert(def_id, predicates.clone());
+
+        if icx.sanitize(predicates.predicates.iter()) {
+            tcx.predicates.borrow_mut().insert(def_id, predicates.clone());
+        }
         Ok(predicates)
     }
 
@@ -1240,7 +1481,9 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
             _ => return Err(Unsupported)
         };
 
-        tcx.item_types.borrow_mut().insert(def_id, ty);
+        if icx.sanitize(iter::once(&ty)) {
+            tcx.item_types.borrow_mut().insert(def_id, ty);
+        }
         Ok(ty)
     }
 
@@ -1269,7 +1512,9 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
             _ => return Err(Unsupported)
         };
 
-        tcx.impl_trait_refs.borrow_mut().insert(def_id, trait_ref);
+        if icx.sanitize(iter::once(&trait_ref)) {
+            tcx.impl_trait_refs.borrow_mut().insert(def_id, trait_ref);
+        }
         Ok(trait_ref)
     }
 }

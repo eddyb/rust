@@ -432,6 +432,8 @@ impl<'a, 'gcx, 'tcx> WfPredicates<'a, 'gcx, 'tcx> {
                         assert!(self.compute(ty));
                     }
                 }
+
+                ty::TyIncomplete(..) => span_bug!(self.span, "wf: {} unhandled", ty)
             }
         }
 

@@ -76,6 +76,11 @@ impl FlagComputation {
                 self.add_flags(TypeFlags::HAS_TY_ERR)
             }
 
+            &ty::TyIncomplete(_, substs) => {
+                self.add_flags(TypeFlags::HAS_INCOMPLETE);
+                self.add_substs(substs);
+            }
+
             &ty::TyParam(ref p) => {
                 self.add_flags(TypeFlags::HAS_LOCAL_NAMES);
                 if p.is_self() {

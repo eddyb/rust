@@ -253,7 +253,8 @@ fn ty_is_local_constructor(tcx: TyCtxt, ty: Ty, infer_is_local: InferIsLocal)-> 
         ty::TyNever |
         ty::TyTuple(..) |
         ty::TyParam(..) |
-        ty::TyProjection(..) => {
+        ty::TyProjection(..) |
+        ty::TyIncomplete(..) => {
             false
         }
 

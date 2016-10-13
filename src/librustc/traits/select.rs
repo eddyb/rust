@@ -1153,6 +1153,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
         // quickly check if the self-type is a projection at all.
         match obligation.predicate.0.trait_ref.self_ty().sty {
             ty::TyProjection(_) | ty::TyAnon(..) => {}
+            ty::TyIncomplete(..) |
             ty::TyInfer(ty::TyVar(_)) => {
                 span_bug!(obligation.cause.span,
                     "Self=_ should have been handled by assemble_candidates");
@@ -1327,6 +1328,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
         let self_ty = *obligation.self_ty().skip_binder();
         let (closure_def_id, substs) = match self_ty.sty {
             ty::TyClosure(id, substs) => (id, substs),
+            ty::TyIncomplete(..) |
             ty::TyInfer(ty::TyVar(_)) => {
                 debug!("assemble_unboxed_closure_candidates: ambiguous self-type");
                 candidates.ambiguous = true;
@@ -1370,6 +1372,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
         // ok to skip binder because what we are inspecting doesn't involve bound regions
         let self_ty = *obligation.self_ty().skip_binder();
         match self_ty.sty {
+            ty::TyIncomplete(..) |
             ty::TyInfer(ty::TyVar(_)) => {
                 debug!("assemble_fn_pointer_candidates: ambiguous self-type");
                 candidates.ambiguous = true; // could wind up being a fn() type
@@ -1479,6 +1482,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
                     // for an example of a test case that exercises
                     // this path.
                 }
+                ty::TyIncomplete(..) |
                 ty::TyInfer(ty::TyVar(_)) => {
                     // the defaulted impl might apply, we don't know
                     candidates.ambiguous = true;
@@ -1533,6 +1537,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
 
                     data.principal.with_self_ty(this.tcx(), self_ty)
                 }
+                ty::TyIncomplete(..) |
                 ty::TyInfer(ty::TyVar(_)) => {
                     debug!("assemble_candidates_from_object_ty: ambiguous");
                     candidates.ambiguous = true; // could wind up being an object type
@@ -1625,7 +1630,9 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
             // variables can still implement Unsize<Trait> and nested
             // obligations will have the final say (likely deferred).
             (&ty::TyInfer(ty::TyVar(_)), _) |
-            (_, &ty::TyInfer(ty::TyVar(_))) => {
+            (_, &ty::TyInfer(ty::TyVar(_))) |
+            (&ty::TyIncomplete(..), _) |
+            (_, &ty::TyIncomplete(..)) => {
                 debug!("assemble_candidates_for_unsizing: ambiguous");
                 candidates.ambiguous = true;
                 false
@@ -1788,6 +1795,8 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
             }
 
             ty::TyProjection(_) | ty::TyParam(_) | ty::TyAnon(..) => None,
+
+            ty::TyIncomplete(..) |
             ty::TyInfer(ty::TyVar(_)) => Ambiguous,
 
             ty::TyInfer(ty::FreshTy(_))
@@ -1838,6 +1847,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
                 None
             }
 
+            ty::TyIncomplete(..) |
             ty::TyInfer(ty::TyVar(_)) => {
                 // Unbound type variable. Might or might not have
                 // applicable impls and so forth, depending on what
@@ -1886,6 +1896,7 @@ impl<'cx, 'gcx, 'tcx> SelectionContext<'cx, 'gcx, 'tcx> {
             ty::TyParam(..) |
             ty::TyProjection(..) |
             ty::TyAnon(..) |
+            ty::TyIncomplete(..) |
             ty::TyInfer(ty::TyVar(_)) |
             ty::TyInfer(ty::FreshTy(_)) |
             ty::TyInfer(ty::FreshIntTy(_)) |

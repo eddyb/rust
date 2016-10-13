@@ -500,7 +500,7 @@ fn iterate_over_potentially_unsafe_regions_in_type<'a, 'b, 'gcx, 'tcx>(
             Ok(())
         }
 
-        ty::TyInfer(..) | ty::TyError => {
+        ty::TyInfer(..) | ty::TyIncomplete(..) | ty::TyError => {
             tcx.sess.delay_span_bug(cx.span, "unresolved type in regionck");
             Ok(())
         }

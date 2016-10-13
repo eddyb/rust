@@ -32,6 +32,6 @@ fn g<T: Tr<A = S>>() {
 
 fn main() {
     match S {
-        S::A {} => {} //~ ERROR ambiguous associated type
+        S::A {} => {} //~ ERROR associated type `A` not found for `S`
     }
 }

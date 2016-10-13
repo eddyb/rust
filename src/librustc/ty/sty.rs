@@ -173,6 +173,14 @@ pub enum TypeVariants<'tcx> {
     /// A type variable used during type-checking.
     TyInfer(InferTy),
 
+    /// A placeholder for a type which couldn't be resolved; it *must*
+    /// be assumed to be any possible type and may be replaced in
+    /// the various maps with a completely resolved version, without
+    /// triggering *any* user errors, wherever possible.
+    /// The node ID corresponds to a syntactical type node,
+    /// with the `Substs` being for the generics in scope.
+    TyIncomplete(ast::NodeId, &'tcx Substs<'tcx>),
+
     /// A placeholder for a type which could not be computed; this is
     /// propagated to avoid useless error messages.
     TyError,
@@ -1133,7 +1141,7 @@ impl<'a, 'gcx, 'tcx> TyS<'tcx> {
 
     pub fn has_concrete_skeleton(&self) -> bool {
         match self.sty {
-            TyParam(_) | TyInfer(_) | TyError => false,
+            TyParam(_) | TyInfer(_) | TyIncomplete(..) | TyError => false,
             _ => true,
         }
     }
@@ -1230,7 +1238,9 @@ impl<'a, 'gcx, 'tcx> TyS<'tcx> {
                 v.extend(obj.principal.skip_binder().substs.regions());
                 v
             }
-            TyAdt(_, substs) | TyAnon(_, substs) => {
+            TyAdt(_, substs) |
+            TyAnon(_, substs) |
+            TyIncomplete(_, substs) => {
                 substs.regions().collect()
             }
             TyClosure(_, ref substs) => {

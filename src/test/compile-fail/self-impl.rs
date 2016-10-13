@@ -31,13 +31,11 @@ impl SuperFoo for Bar {
 impl Bar {
     fn f() {
         let _: <Self>::Baz = true;
-        //~^ ERROR ambiguous associated type
-        //~| NOTE ambiguous associated type
-        //~| NOTE specify the type using the syntax `<Bar as Trait>::Baz`
+        //~^ ERROR associated type `Baz` not found for `Bar`
+        //~| NOTE associated type `Baz` not found
         let _: Self::Baz = true;
-        //~^ ERROR ambiguous associated type
-        //~| NOTE ambiguous associated type
-        //~| NOTE specify the type using the syntax `<Bar as Trait>::Baz`
+        //~^ ERROR associated type `Baz` not found for `Bar`
+        //~| NOTE associated type `Baz` not found
     }
 }
 

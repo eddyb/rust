@@ -8,12 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-trait Trait {
-    type A;
-    type B;
+#![feature(associated_type_defaults)]
+
+trait Foo { type T; }
+trait Bar {
+    type Foo: Foo;
+    type FooT = <<Self as Bar>::Foo>::T;
 }
 
-fn foo<T: Trait<A = T::B>>() { }
-//~^ ERROR: unsupported cyclic reference between types/traits detected
-
-fn main() { }
+fn main() {}

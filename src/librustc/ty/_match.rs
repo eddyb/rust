@@ -67,6 +67,16 @@ impl<'a, 'gcx, 'tcx> TypeRelation<'a, 'gcx, 'tcx> for Match<'a, 'gcx, 'tcx> {
         if a == b { return Ok(a); }
 
         match (&a.sty, &b.sty) {
+            (&ty::TyIncomplete(a_id, _),
+             &ty::TyIncomplete(b_id, _))
+                if a_id == b_id =>
+            {
+                relate::super_relate_tys(self, a, b)
+            }
+
+            (&ty::TyIncomplete(..), _) => Ok(b),
+            (_, &ty::TyIncomplete(..)) => Ok(a),
+
             (_, &ty::TyInfer(ty::FreshTy(_))) |
             (_, &ty::TyInfer(ty::FreshIntTy(_))) |
             (_, &ty::TyInfer(ty::FreshFloatTy(_))) => {

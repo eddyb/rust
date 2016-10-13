@@ -235,6 +235,7 @@ impl<'a, 'gcx, 'lcx, 'tcx> ty::TyS<'tcx> {
             }
             ty::TyAnon(..) => "anonymized type".to_string(),
             ty::TyError => "type error".to_string(),
+            ty::TyIncomplete(..) => "incomplete type".to_string()
         }
     }
 }

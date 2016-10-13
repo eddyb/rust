@@ -13,7 +13,6 @@ trait t1 : t2 {
 }
 
 trait t2 : t1 {
-//~^ ERROR: unsupported cyclic reference between types/traits detected
 }
 
 fn main() { }

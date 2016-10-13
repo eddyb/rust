@@ -387,6 +387,9 @@ bitflags! {
         // Currently we can't normalize projections w/ bound regions.
         const HAS_NORMALIZABLE_PROJECTION = 1 << 12,
 
+        // Are there any TyIncomplete nested in this type?
+        const HAS_INCOMPLETE     = 1 << 13,
+
         const NEEDS_SUBST        = TypeFlags::HAS_PARAMS.bits |
                                    TypeFlags::HAS_SELF.bits |
                                    TypeFlags::HAS_RE_EARLY_BOUND.bits,
@@ -405,7 +408,8 @@ bitflags! {
                                   TypeFlags::HAS_PROJECTION.bits |
                                   TypeFlags::HAS_TY_CLOSURE.bits |
                                   TypeFlags::HAS_LOCAL_NAMES.bits |
-                                  TypeFlags::KEEP_IN_LOCAL_TCX.bits,
+                                  TypeFlags::KEEP_IN_LOCAL_TCX.bits |
+                                  TypeFlags::HAS_INCOMPLETE.bits,
 
         // Caches for type_is_sized, type_moves_by_default
         const SIZEDNESS_CACHED  = 1 << 16,
@@ -1656,7 +1660,7 @@ impl<'a, 'gcx, 'tcx> AdtDef {
                 vec![]
             }
 
-            TyStr | TyTrait(..) | TySlice(_) | TyError => {
+            TyStr | TyTrait(..) | TySlice(_) | TyIncomplete(..) | TyError => {
                 // these are never sized - return the target type
                 vec![ty]
             }

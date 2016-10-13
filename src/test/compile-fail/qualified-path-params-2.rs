@@ -28,8 +28,7 @@ impl S {
 type A = <S as Tr>::A::f<u8>;
 //~^ ERROR type parameters are not allowed on this type
 //~| NOTE type parameter not allowed
-//~| ERROR ambiguous associated type
-//~| NOTE ambiguous associated type
-//~| NOTE specify the type using the syntax `<<S as Tr>::A as Trait>::f`
+//~| ERROR associated type `f` not found for `<S as Tr>::A`
+//~| NOTE associated type `f` not found
 
 fn main() {}

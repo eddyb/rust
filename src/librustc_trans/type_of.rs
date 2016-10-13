@@ -94,7 +94,7 @@ pub fn sizing_type_of<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>, t: Ty<'tcx>) -> Typ
         }
 
         ty::TyProjection(..) | ty::TyInfer(..) | ty::TyParam(..) |
-        ty::TyAnon(..) | ty::TyError => {
+        ty::TyAnon(..) | ty::TyError | ty::TyIncomplete(..) => {
             bug!("fictitious type {:?} in sizing_type_of()", t)
         }
         ty::TySlice(_) | ty::TyTrait(..) | ty::TyStr => bug!()
@@ -292,6 +292,7 @@ pub fn in_memory_type_of<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>, t: Ty<'tcx>) -> 
       }
 
       ty::TyInfer(..) |
+      ty::TyIncomplete(..) |
       ty::TyProjection(..) |
       ty::TyParam(..) |
       ty::TyAnon(..) |

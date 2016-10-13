@@ -14,6 +14,7 @@ pub trait Subscriber {
 
 pub trait Processor: Subscriber<Input = Self::Input> {
     //~^ ERROR unsupported cyclic reference between types/traits detected [E0391]
+    //~| ERROR unsupported cyclic reference between types/traits detected [E0391]
     type Input;
 }
 

@@ -93,7 +93,9 @@ fn push_subtypes<'tcx>(stack: &mut Vec<Ty<'tcx>>, parent_ty: Ty<'tcx>) {
                 pred.0.ty
             }).rev());
         }
-        ty::TyAdt(_, substs) | ty::TyAnon(_, substs) => {
+        ty::TyAdt(_, substs) |
+        ty::TyAnon(_, substs) |
+        ty::TyIncomplete(_, substs) => {
             stack.extend(substs.types().rev());
         }
         ty::TyClosure(_, ref substs) => {

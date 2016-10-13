@@ -486,6 +486,7 @@ pub fn push_unique_type_name<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         }
         ty::TyError |
         ty::TyInfer(_) |
+        ty::TyIncomplete(..) |
         ty::TyProjection(..) |
         ty::TyParam(_) |
         ty::TyAnon(..) => {

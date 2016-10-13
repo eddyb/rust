@@ -1194,7 +1194,7 @@ impl<'a, 'gcx, 'tcx> Layout {
             ty::TyParam(_) => {
                 return Err(LayoutError::Unknown(ty));
             }
-            ty::TyInfer(_) | ty::TyError => {
+            ty::TyInfer(_) | ty::TyIncomplete(..) | ty::TyError => {
                 bug!("Layout::compute: unexpected type `{}`", ty)
             }
         };

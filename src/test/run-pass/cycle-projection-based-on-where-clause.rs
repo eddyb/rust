@@ -13,9 +13,8 @@
 // out what trait defines `Item`, but we can't know the bounds on `T`
 // without knowing how to handle `T::Item`.
 //
-// Note that in the future cases like this could perhaps become legal,
-// if we got more fine-grained about our cycle detection or changed
-// how we handle `T::Item` resolution.
+// Note that this became legal, as we got more fine-grained
+// about our cycle detection throughout types & predicates.
 
 use std::ops::Add;
 
@@ -25,7 +24,6 @@ trait Trait { type Item; }
 struct A<T>
     where T : Trait,
           T : Add<T::Item>
-    //~^ ERROR unsupported cyclic reference between types/traits detected
 {
     data: T
 }

@@ -143,6 +143,7 @@ pub fn push_debuginfo_type_name<'a, 'tcx>(cx: &CrateContext<'a, 'tcx>,
         }
         ty::TyError |
         ty::TyInfer(_) |
+        ty::TyIncomplete(..) |
         ty::TyProjection(..) |
         ty::TyAnon(..) |
         ty::TyParam(_) => {

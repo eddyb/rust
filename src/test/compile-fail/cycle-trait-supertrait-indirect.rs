@@ -12,7 +12,6 @@
 // a direct participant in the cycle.
 
 trait A: B {
-    //~^ ERROR unsupported cyclic reference
 }
 
 trait B: C {
@@ -20,6 +19,5 @@ trait B: C {
 }
 
 trait C: B { }
-    //~^ ERROR unsupported cyclic reference
 
 fn main() { }

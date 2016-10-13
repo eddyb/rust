@@ -378,6 +378,21 @@ pub fn super_relate_tys<'a, 'gcx, 'tcx, R>(relation: &mut R,
     let b_sty = &b.sty;
     debug!("super_tys: a_sty={:?} b_sty={:?}", a_sty, b_sty);
     match (a_sty, b_sty) {
+        (&ty::TyIncomplete(a_id, a_substs),
+         &ty::TyIncomplete(b_id, b_substs))
+            if a_id == b_id =>
+        {
+            let substs = relate_substs(relation, None, a_substs, b_substs)?;
+            Ok(tcx.mk_ty(ty::TyIncomplete(a_id, substs)))
+        }
+
+        (&ty::TyIncomplete(..), _) |
+        (_, &ty::TyIncomplete(..)) =>
+        {
+            // The caller should handle these cases!
+            bug!("incomplete types encountered in super_relate_tys")
+        }
+
         (&ty::TyInfer(_), _) |
         (_, &ty::TyInfer(_)) =>
         {

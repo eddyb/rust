@@ -8,12 +8,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![feature(associated_type_defaults)]
-
-trait Foo { type T; }
-trait Bar {
-    type Foo: Foo;
-    type FooT = <<Self as Bar>::Foo>::T; //~ ERROR ambiguous associated type
+trait Trait {
+    type A;
+    type B;
 }
 
-fn main() {}
+fn foo<T: Trait<A = T::B>>() { }
+
+fn main() { }

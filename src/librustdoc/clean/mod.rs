@@ -1927,8 +1927,9 @@ impl<'tcx> Clean<Type> for ty::Ty<'tcx> {
 
             ty::TyClosure(..) => Tuple(vec![]), // FIXME(pcwalton)
 
-            ty::TyInfer(..) => panic!("TyInfer"),
-            ty::TyError => panic!("TyError"),
+            ty::TyInfer(..) |
+            ty::TyIncomplete(..) |
+            ty::TyError => panic!("{}", self),
         }
     }
 }

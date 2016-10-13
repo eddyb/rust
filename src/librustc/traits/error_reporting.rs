@@ -168,7 +168,7 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                     AdtKind::Union => Some(16),
                     AdtKind::Enum => Some(17),
                 },
-                ty::TyInfer(..) | ty::TyError => None
+                ty::TyInfer(..) | ty::TyIncomplete(..) | ty::TyError => None
             }
         }
 

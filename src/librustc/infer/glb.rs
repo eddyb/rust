@@ -8,8 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::combine::CombineFields;
-use super::InferCtxt;
+use super::combine::{CombineFields, Combine};
 use super::lattice::{self, LatticeDir};
 use super::Subtype;
 
@@ -27,6 +26,14 @@ impl<'combine, 'infcx, 'gcx, 'tcx> Glb<'combine, 'infcx, 'gcx, 'tcx> {
         -> Glb<'combine, 'infcx, 'gcx, 'tcx>
     {
         Glb { fields: fields, a_is_expected: a_is_expected }
+    }
+}
+
+impl<'combine, 'infcx, 'gcx, 'tcx> Combine<'infcx, 'gcx, 'tcx>
+    for Glb<'combine, 'infcx, 'gcx, 'tcx>
+{
+    fn fields(&mut self) -> &mut CombineFields<'infcx, 'gcx, 'tcx> {
+        self.fields
     }
 }
 
@@ -79,10 +86,6 @@ impl<'combine, 'infcx, 'gcx, 'tcx> TypeRelation<'infcx, 'gcx, 'tcx>
 impl<'combine, 'infcx, 'gcx, 'tcx> LatticeDir<'infcx, 'gcx, 'tcx>
     for Glb<'combine, 'infcx, 'gcx, 'tcx>
 {
-    fn infcx(&self) -> &'infcx InferCtxt<'infcx, 'gcx, 'tcx> {
-        self.fields.infcx
-    }
-
     fn relate_bound(&mut self, v: Ty<'tcx>, a: Ty<'tcx>, b: Ty<'tcx>) -> RelateResult<'tcx, ()> {
         let mut sub = self.fields.sub(self.a_is_expected);
         sub.relate(&v, &a)?;

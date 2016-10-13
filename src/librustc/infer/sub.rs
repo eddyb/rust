@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use super::combine::CombineFields;
+use super::combine::{CombineFields, Combine};
 use super::SubregionOrigin;
 use super::type_variable::{SubtypeOf, SupertypeOf};
 
@@ -35,6 +35,14 @@ impl<'combine, 'infcx, 'gcx, 'tcx> Sub<'combine, 'infcx, 'gcx, 'tcx> {
         let result = f(self);
         self.a_is_expected = !self.a_is_expected;
         result
+    }
+}
+
+impl<'combine, 'infcx, 'gcx, 'tcx> Combine<'infcx, 'gcx, 'tcx>
+    for Sub<'combine, 'infcx, 'gcx, 'tcx>
+{
+    fn fields(&mut self) -> &mut CombineFields<'infcx, 'gcx, 'tcx> {
+        self.fields
     }
 }
 
@@ -101,7 +109,7 @@ impl<'combine, 'infcx, 'gcx, 'tcx> TypeRelation<'infcx, 'gcx, 'tcx>
             }
 
             _ => {
-                self.fields.infcx.super_combine_tys(self, a, b)?;
+                self.super_combine_tys(a, b)?;
                 Ok(a)
             }
         }

@@ -100,6 +100,6 @@ pub fn simplify_type<'a, 'gcx, 'tcx>(tcx: TyCtxt<'a, 'gcx, 'tcx>,
         ty::TyAnon(def_id, _) => {
             Some(AnonSimplifiedType(def_id))
         }
-        ty::TyInfer(_) | ty::TyError => None,
+        ty::TyInfer(_) | ty::TyError | ty::TyIncomplete(..) => None,
     }
 }

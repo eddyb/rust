@@ -42,11 +42,11 @@ use super::{MiscVariable, TypeTrace};
 use super::type_variable::{RelationDir, BiTo, EqTo, SubtypeOf, SupertypeOf};
 
 use ty::{IntType, UintType};
-use ty::{self, Ty, TyCtxt};
+use ty::{self, Ty, TyCtxt, ToPredicate};
 use ty::error::TypeError;
 use ty::fold::TypeFoldable;
 use ty::relate::{RelateResult, TypeRelation};
-use traits::PredicateObligations;
+use traits::{Obligation, ObligationCause, PredicateObligations};
 
 use syntax::ast;
 use syntax::util::small_vector::SmallVector;
@@ -60,20 +60,44 @@ pub struct CombineFields<'infcx, 'gcx: 'infcx+'tcx, 'tcx: 'infcx> {
     pub obligations: PredicateObligations<'tcx>,
 }
 
-impl<'infcx, 'gcx, 'tcx> InferCtxt<'infcx, 'gcx, 'tcx> {
-    pub fn super_combine_tys<R>(&self,
-                                relation: &mut R,
-                                a: Ty<'tcx>,
-                                b: Ty<'tcx>)
-                                -> RelateResult<'tcx, Ty<'tcx>>
-        where R: TypeRelation<'infcx, 'gcx, 'tcx>
-    {
-        let a_is_expected = relation.a_is_expected();
+pub trait Combine<'f, 'gcx: 'f+'tcx, 'tcx: 'f> : TypeRelation<'f, 'gcx, 'tcx> {
+    fn fields(&mut self) -> &mut CombineFields<'f, 'gcx, 'tcx>;
+
+    fn super_combine_tys(&mut self,
+                         a: Ty<'tcx>,
+                         b: Ty<'tcx>)
+                         -> RelateResult<'tcx, Ty<'tcx>> {
+        let a_is_expected = self.a_is_expected();
 
         match (&a.sty, &b.sty) {
+            (&ty::TyIncomplete(a_id, _),
+             &ty::TyIncomplete(b_id, _))
+                if a_id == b_id =>
+            {
+                ty::relate::super_relate_tys(self, a, b)
+            }
+
+            // To avoid losing track of the relation between
+            // an incomplete type and a concrete one, or two
+            // different incomplete types, we create an equate
+            // predicate (that can't ever be fulfilled).
+            (&ty::TyIncomplete(..), _) |
+            (_, &ty::TyIncomplete(..)) => {
+                let eq = ty::Binder(ty::EquatePredicate(a, b));
+                let cause = ObligationCause::dummy();
+                let obligation = Obligation::new(cause, eq.to_predicate());
+                self.fields().obligations.push(obligation);
+
+                if let ty::TyIncomplete(..) = a.sty {
+                    Ok(b)
+                } else {
+                    Ok(a)
+                }
+            }
+
             // Relate integral variables to other types
             (&ty::TyInfer(ty::IntVar(a_id)), &ty::TyInfer(ty::IntVar(b_id))) => {
-                self.int_unification_table
+                self.fields().infcx.int_unification_table
                     .borrow_mut()
                     .unify_var_var(a_id, b_id)
                     .map_err(|e| int_unification_error(a_is_expected, e))?;
@@ -94,10 +118,10 @@ impl<'infcx, 'gcx, 'tcx> InferCtxt<'infcx, 'gcx, 'tcx> {
 
             // Relate floating-point variables to other types
             (&ty::TyInfer(ty::FloatVar(a_id)), &ty::TyInfer(ty::FloatVar(b_id))) => {
-                self.float_unification_table
+                self.fields().infcx.float_unification_table
                     .borrow_mut()
                     .unify_var_var(a_id, b_id)
-                    .map_err(|e| float_unification_error(relation.a_is_expected(), e))?;
+                    .map_err(|e| float_unification_error(a_is_expected, e))?;
                 Ok(a)
             }
             (&ty::TyInfer(ty::FloatVar(v_id)), &ty::TyFloat(v)) => {
@@ -110,43 +134,43 @@ impl<'infcx, 'gcx, 'tcx> InferCtxt<'infcx, 'gcx, 'tcx> {
             // All other cases of inference are errors
             (&ty::TyInfer(_), _) |
             (_, &ty::TyInfer(_)) => {
-                Err(TypeError::Sorts(ty::relate::expected_found(relation, &a, &b)))
+                Err(TypeError::Sorts(ty::relate::expected_found(self, &a, &b)))
             }
 
 
             _ => {
-                ty::relate::super_relate_tys(relation, a, b)
+                ty::relate::super_relate_tys(self, a, b)
             }
         }
     }
 
-    fn unify_integral_variable(&self,
+    fn unify_integral_variable(&mut self,
                                vid_is_expected: bool,
                                vid: ty::IntVid,
                                val: ty::IntVarValue)
                                -> RelateResult<'tcx, Ty<'tcx>>
     {
-        self.int_unification_table
+        self.fields().infcx.int_unification_table
             .borrow_mut()
             .unify_var_value(vid, val)
             .map_err(|e| int_unification_error(vid_is_expected, e))?;
         match val {
-            IntType(v) => Ok(self.tcx.mk_mach_int(v)),
-            UintType(v) => Ok(self.tcx.mk_mach_uint(v)),
+            IntType(v) => Ok(self.tcx().mk_mach_int(v)),
+            UintType(v) => Ok(self.tcx().mk_mach_uint(v)),
         }
     }
 
-    fn unify_float_variable(&self,
+    fn unify_float_variable(&mut self,
                             vid_is_expected: bool,
                             vid: ty::FloatVid,
                             val: ast::FloatTy)
                             -> RelateResult<'tcx, Ty<'tcx>>
     {
-        self.float_unification_table
+        self.fields().infcx.float_unification_table
             .borrow_mut()
             .unify_var_value(vid, val)
             .map_err(|e| float_unification_error(vid_is_expected, e))?;
-        Ok(self.tcx.mk_mach_float(val))
+        Ok(self.tcx().mk_mach_float(val))
     }
 }
 

@@ -26,7 +26,7 @@ use rustc::ty::{TyParam, TyRawPtr};
 use rustc::ty::{TyRef, TyAdt, TyTrait, TyNever, TyTuple};
 use rustc::ty::{TyStr, TyArray, TySlice, TyFloat, TyInfer, TyInt};
 use rustc::ty::{TyUint, TyClosure, TyBox, TyFnDef, TyFnPtr};
-use rustc::ty::{TyProjection, TyAnon};
+use rustc::ty::{TyProjection, TyAnon, TyIncomplete};
 use rustc::ty::util::CopyImplementationError;
 use middle::free_region::FreeRegionMap;
 use rustc::infer::{self, InferCtxt, TypeOrigin};
@@ -70,7 +70,7 @@ impl<'a, 'gcx, 'tcx> CoherenceChecker<'a, 'gcx, 'tcx> {
 
             TyBool | TyChar | TyInt(..) | TyUint(..) | TyFloat(..) | TyStr | TyArray(..) |
             TySlice(..) | TyFnDef(..) | TyFnPtr(_) | TyTuple(..) | TyParam(..) | TyError |
-            TyNever | TyRawPtr(_) | TyRef(..) | TyProjection(..) => None,
+            TyNever | TyRawPtr(_) | TyRef(..) | TyProjection(..) | TyIncomplete(..) => None,
 
             TyInfer(..) | TyClosure(..) | TyAnon(..) => {
                 // `ty` comes from a user declaration so we should only expect types

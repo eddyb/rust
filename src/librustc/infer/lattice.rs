@@ -29,15 +29,13 @@
 //! over a `LatticeValue`, which is a value defined with respect to
 //! a lattice.
 
-use super::InferCtxt;
+use super::combine::Combine;
 
 use ty::TyVar;
 use ty::{self, Ty};
-use ty::relate::{RelateResult, TypeRelation};
+use ty::relate::RelateResult;
 
-pub trait LatticeDir<'f, 'gcx: 'f+'tcx, 'tcx: 'f> : TypeRelation<'f, 'gcx, 'tcx> {
-    fn infcx(&self) -> &'f InferCtxt<'f, 'gcx, 'tcx>;
-
+pub trait LatticeDir<'f, 'gcx: 'f+'tcx, 'tcx: 'f> : Combine<'f, 'gcx, 'tcx> {
     // Relates the type `v` to `a` and `b` such that `v` represents
     // the LUB/GLB of `a` and `b` as appropriate.
     fn relate_bound(&mut self, v: Ty<'tcx>, a: Ty<'tcx>, b: Ty<'tcx>) -> RelateResult<'tcx, ()>;
@@ -58,7 +56,7 @@ pub fn super_lattice_tys<'a, 'gcx, 'tcx, L>(this: &mut L,
         return Ok(a);
     }
 
-    let infcx = this.infcx();
+    let infcx = this.fields().infcx;
     let a = infcx.type_variables.borrow_mut().replace_if_possible(a);
     let b = infcx.type_variables.borrow_mut().replace_if_possible(b);
     match (&a.sty, &b.sty) {
@@ -76,8 +74,6 @@ pub fn super_lattice_tys<'a, 'gcx, 'tcx, L>(this: &mut L,
             Ok(v)
         }
 
-        _ => {
-            infcx.super_combine_tys(this, a, b)
-        }
+        _ => this.super_combine_tys(a, b)
     }
 }

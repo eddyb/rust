@@ -15,7 +15,7 @@ use ty::{TyBool, TyChar, TyAdt};
 use ty::{TyError, TyStr, TyArray, TySlice, TyFloat, TyFnDef, TyFnPtr};
 use ty::{TyParam, TyRawPtr, TyRef, TyNever, TyTuple};
 use ty::TyClosure;
-use ty::{TyBox, TyTrait, TyInt, TyUint, TyInfer};
+use ty::{TyBox, TyTrait, TyInt, TyUint, TyInfer, TyIncomplete};
 use ty::{self, Ty, TyCtxt, TypeFoldable};
 use ty::fold::{TypeFolder, TypeVisitor};
 
@@ -832,6 +832,11 @@ impl<'tcx> fmt::Display for ty::TypeVariants<'tcx> {
                 write!(f, "{}", bare_fn.sig.0)
             }
             TyInfer(infer_ty) => write!(f, "{}", infer_ty),
+            TyIncomplete(node_id, _) => {
+                ty::tls::with(|tcx| {
+                    write!(f, "{{incomplete `{}`}}", tcx.map.node_to_string(node_id))
+                })
+            }
             TyError => write!(f, "[type error]"),
             TyParam(ref param_ty) => write!(f, "{}", param_ty),
             TyAdt(def, substs) => {

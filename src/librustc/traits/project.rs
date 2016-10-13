@@ -799,6 +799,7 @@ fn assemble_candidates_from_trait_def<'cx, 'gcx, 'tcx>(
             (data.trait_ref.def_id, data.trait_ref.substs)
         }
         ty::TyAnon(def_id, substs) => (def_id, substs),
+        ty::TyIncomplete(..) |
         ty::TyInfer(ty::TyVar(_)) => {
             // If the self-type is an inference variable, then it MAY wind up
             // being a projected type, so induce an ambiguity.

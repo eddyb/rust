@@ -1108,8 +1108,8 @@ impl<'a, 'tcx> TyCtxt<'a, 'tcx, 'tcx> {
     pub fn print_debug_stats(self) {
         sty_debug_print!(
             self,
-            TyAdt, TyBox, TyArray, TySlice, TyRawPtr, TyRef, TyFnDef, TyFnPtr,
-            TyTrait, TyClosure, TyTuple, TyParam, TyInfer, TyProjection, TyAnon);
+            TyAdt, TyBox, TyArray, TySlice, TyRawPtr, TyRef, TyFnDef, TyFnPtr, TyTrait,
+            TyClosure, TyTuple, TyParam, TyInfer, TyProjection, TyAnon, TyIncomplete);
 
         println!("Substs interner: #{}", self.interners.substs.borrow().len());
         println!("BareFnTy interner: #{}", self.interners.bare_fn.borrow().len());

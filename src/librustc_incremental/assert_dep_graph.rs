@@ -170,6 +170,20 @@ impl<'a, 'tcx> IfThisChanged<'a, 'tcx> {
 impl<'a, 'tcx> Visitor<'tcx> for IfThisChanged<'a, 'tcx> {
     fn visit_item(&mut self, item: &'tcx hir::Item) {
         self.process_attrs(item.id, &item.attrs);
+
+        match item.node {
+            hir::ItemTrait(.., ref trait_items) => {
+                for ti in trait_items {
+                    self.process_attrs(ti.id, &ti.attrs);
+                }
+            }
+            hir::ItemImpl(.., ref impl_items) => {
+                for ii in impl_items {
+                    self.process_attrs(ii.id, &ii.attrs);
+                }
+            }
+            _ => {}
+        }
     }
 }
 

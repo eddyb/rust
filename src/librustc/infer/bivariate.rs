@@ -25,7 +25,7 @@
 //! In particular, it might be enough to say (A,B) are bivariant for
 //! all (A,B).
 
-use super::combine::CombineFields;
+use super::combine::{CombineFields, Combine};
 use super::type_variable::{BiTo};
 
 use ty::{self, Ty, TyCtxt};
@@ -42,6 +42,14 @@ impl<'combine, 'infcx, 'gcx, 'tcx> Bivariate<'combine, 'infcx, 'gcx, 'tcx> {
         -> Bivariate<'combine, 'infcx, 'gcx, 'tcx>
     {
         Bivariate { fields: fields, a_is_expected: a_is_expected }
+    }
+}
+
+impl<'combine, 'infcx, 'gcx, 'tcx> Combine<'infcx, 'gcx, 'tcx>
+    for Bivariate<'combine, 'infcx, 'gcx, 'tcx>
+{
+    fn fields(&mut self) -> &mut CombineFields<'infcx, 'gcx, 'tcx> {
+        self.fields
     }
 }
 
@@ -101,7 +109,7 @@ impl<'combine, 'infcx, 'gcx, 'tcx> TypeRelation<'infcx, 'gcx, 'tcx>
             }
 
             _ => {
-                self.fields.infcx.super_combine_tys(self, a, b)
+                self.super_combine_tys(a, b)
             }
         }
     }

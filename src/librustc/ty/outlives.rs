@@ -184,7 +184,8 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
             ty::TyFnDef(..) |       // OutlivesFunction (*)
             ty::TyFnPtr(_) |        // OutlivesFunction (*)
             ty::TyTrait(..) |       // OutlivesObject, OutlivesFragment (*)
-            ty::TyError => {
+            ty::TyError |
+            ty::TyIncomplete(..) => {
                 // (*) Bare functions and traits are both binders. In the
                 // RFC, this means we would add the bound regions to the
                 // "bound regions list".  In our representation, no such

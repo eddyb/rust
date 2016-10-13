@@ -1323,43 +1323,31 @@ fn check_enum_variants<'a,'tcx>(ccx: &CrateCtxt<'a,'tcx>,
 impl<'a, 'gcx, 'tcx> AstConv<'gcx, 'tcx> for FnCtxt<'a, 'gcx, 'tcx> {
     fn tcx<'b>(&'b self) -> TyCtxt<'b, 'gcx, 'tcx> { self.tcx }
 
-    fn ty_cache_lookup(&self, id: ast::NodeId) -> Option<Ty<'tcx>> {
-        self.ast_ty_to_ty_cache.borrow().get(&id).cloned()
+    fn ty_cache_lookup(&self, hir_ty: &hir::Ty) -> Option<Ty<'tcx>> {
+        self.ast_ty_to_ty_cache.borrow().get(&hir_ty.id).cloned()
     }
 
-    fn ty_cache_insert(&self, id: ast::NodeId, ty: Ty<'tcx>) {
-        self.ast_ty_to_ty_cache.borrow_mut().insert(id, ty);
+    fn ty_cache_insert(&self, hir_ty: &hir::Ty, ty: Ty<'tcx>) {
+        self.ast_ty_to_ty_cache.borrow_mut().insert(hir_ty.id, ty);
     }
 
     fn get_free_substs(&self) -> Option<&Substs<'tcx>> {
         Some(&self.parameter_environment.free_substs)
     }
 
-    fn get_type_parameter_bounds(&self,
-                                 _: Span,
-                                 node_id: ast::NodeId)
-                                 -> Result<Vec<ty::PolyTraitRef<'tcx>>, ErrorReported>
-    {
-        let def = self.tcx.type_parameter_def(node_id);
-        let r = self.parameter_environment
-                                  .caller_bounds
-                                  .iter()
-                                  .filter_map(|predicate| {
-                                      match *predicate {
-                                          ty::Predicate::Trait(ref data) => {
-                                              if data.0.self_ty().is_param(def.index) {
-                                                  Some(data.to_poly_trait_ref())
-                                              } else {
-                                                  None
-                                              }
-                                          }
-                                          _ => {
-                                              None
-                                          }
-                                      }
-                                  })
-                                  .collect();
-        Ok(r)
+    fn get_type_bounds(&self, ty: Ty<'tcx>) -> Vec<ty::PolyTraitRef<'tcx>> {
+        self.parameter_environment.caller_bounds.iter().filter_map(|predicate| {
+            match *predicate {
+                ty::Predicate::Trait(ref data) => {
+                    if data.0.self_ty() == ty {
+                        Some(data.to_poly_trait_ref())
+                    } else {
+                        None
+                    }
+                }
+                _ => None
+            }
+        }).collect()
     }
 
     fn ty_infer(&self, _span: Span) -> Ty<'tcx> {

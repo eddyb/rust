@@ -246,7 +246,8 @@ impl<'a, 'tcx> ty::TyS<'tcx> {
                 }
 
                 ty::TyInfer(_) |
-                ty::TyError => {
+                ty::TyError |
+                ty::TyIncomplete(..) => {
                     bug!("asked to compute contents of error type");
                 }
             };
