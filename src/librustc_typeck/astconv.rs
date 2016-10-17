@@ -152,14 +152,6 @@ pub trait AstConv<'gcx, 'tcx> {
     fn set_tainted_by_errors(&self);
 }
 
-#[derive(PartialEq, Eq)]
-pub enum PathParamMode {
-    // Any path in a type context.
-    Explicit,
-    // The `module::Type` in `module::Type::method` in an expression.
-    Optional
-}
-
 struct ConvertedBinding<'tcx> {
     item_name: ast::Name,
     ty: Ty<'tcx>,
@@ -346,7 +338,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     pub fn ast_path_substs_for_ty(&self,
         rscope: &RegionScope,
         span: Span,
-        param_mode: PathParamMode,
         def_id: DefId,
         item_segment: &hir::PathSegment)
         -> &'tcx Substs<'tcx>
@@ -372,7 +363,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let (substs, assoc_bindings) =
             self.create_substs_for_ast_path(rscope,
                                             span,
-                                            param_mode,
                                             def_id,
                                             &item_segment.parameters,
                                             None);
@@ -390,7 +380,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     fn create_substs_for_ast_path(&self,
         rscope: &RegionScope,
         span: Span,
-        param_mode: PathParamMode,
         def_id: DefId,
         parameters: &hir::PathParameters,
         self_ty: Option<Ty<'tcx>>)
@@ -402,15 +391,11 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                parameters={:?})",
                def_id, self_ty, parameters);
 
-        let (lifetimes, num_types_provided) = match *parameters {
+        let (lifetimes, num_types_provided, infer_types) = match *parameters {
             hir::AngleBracketedParameters(ref data) => {
-                if param_mode == PathParamMode::Optional && data.types.is_empty() {
-                    (&data.lifetimes[..], None)
-                } else {
-                    (&data.lifetimes[..], Some(data.types.len()))
-                }
+                (&data.lifetimes[..], data.types.len(), data.infer_types)
             }
-            hir::ParenthesizedParameters(_) => (&[][..], Some(1))
+            hir::ParenthesizedParameters(_) => (&[][..], 1, false)
         };
 
         // If the type is parameterized by this region, then replace this
@@ -448,9 +433,9 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         assert_eq!(decl_generics.has_self, self_ty.is_some());
 
         // Check the number of type parameters supplied by the user.
-        if let Some(num_provided) = num_types_provided {
-            let ty_param_defs = &decl_generics.types[self_ty.is_some() as usize..];
-            check_type_argument_count(tcx, span, num_provided, ty_param_defs);
+        let ty_param_defs = &decl_generics.types[self_ty.is_some() as usize..];
+        if !infer_types || num_types_provided > ty_param_defs.len() {
+            check_type_argument_count(tcx, span, num_types_provided, ty_param_defs);
         }
 
         let is_object = self_ty.map_or(false, |ty| ty.sty == TRAIT_OBJECT_DUMMY_SELF);
@@ -479,7 +464,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
             }
 
             let i = i - self_ty.is_some() as usize - decl_generics.regions.len();
-            if num_types_provided.map_or(false, |n| i < n) {
+            if i < num_types_provided {
                 // A provided type parameter.
                 match *parameters {
                     hir::AngleBracketedParameters(ref data) => {
@@ -493,7 +478,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                         ty
                     }
                 }
-            } else if num_types_provided.is_none() {
+            } else if infer_types {
                 // No type parameters were provided, we can infer all.
                 let ty_var = if !default_needs_object_self(def) {
                     self.ty_infer_for_def(def, substs, span)
@@ -669,7 +654,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let trait_def_id = self.trait_def_id(trait_ref);
         self.ast_path_to_poly_trait_ref(rscope,
                                         trait_ref.path.span,
-                                        PathParamMode::Explicit,
                                         trait_def_id,
                                         self_ty,
                                         trait_ref.ref_id,
@@ -692,7 +676,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let trait_def_id = self.trait_def_id(trait_ref);
         self.ast_path_to_mono_trait_ref(rscope,
                                         trait_ref.path.span,
-                                        PathParamMode::Explicit,
                                         trait_def_id,
                                         self_ty,
                                         trait_ref.path.segments.last().unwrap())
@@ -715,7 +698,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     fn ast_path_to_poly_trait_ref(&self,
         rscope: &RegionScope,
         span: Span,
-        param_mode: PathParamMode,
         trait_def_id: DefId,
         self_ty: Ty<'tcx>,
         path_id: ast::NodeId,
@@ -734,7 +716,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let (substs, assoc_bindings) =
             self.create_substs_for_ast_trait_ref(shifted_rscope,
                                                  span,
-                                                 param_mode,
                                                  trait_def_id,
                                                  self_ty,
                                                  trait_segment);
@@ -757,7 +738,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     fn ast_path_to_mono_trait_ref(&self,
                                   rscope: &RegionScope,
                                   span: Span,
-                                  param_mode: PathParamMode,
                                   trait_def_id: DefId,
                                   self_ty: Ty<'tcx>,
                                   trait_segment: &hir::PathSegment)
@@ -766,7 +746,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let (substs, assoc_bindings) =
             self.create_substs_for_ast_trait_ref(rscope,
                                                  span,
-                                                 param_mode,
                                                  trait_def_id,
                                                  self_ty,
                                                  trait_segment);
@@ -777,7 +756,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     fn create_substs_for_ast_trait_ref(&self,
                                        rscope: &RegionScope,
                                        span: Span,
-                                       param_mode: PathParamMode,
                                        trait_def_id: DefId,
                                        self_ty: Ty<'tcx>,
                                        trait_segment: &hir::PathSegment)
@@ -822,7 +800,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
         self.create_substs_for_ast_path(rscope,
                                         span,
-                                        param_mode,
                                         trait_def_id,
                                         &trait_segment.parameters,
                                         Some(self_ty))
@@ -934,7 +911,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     fn ast_path_to_ty(&self,
         rscope: &RegionScope,
         span: Span,
-        param_mode: PathParamMode,
         did: DefId,
         item_segment: &hir::PathSegment)
         -> Ty<'tcx>
@@ -949,7 +925,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
         let substs = self.ast_path_substs_for_ty(rscope,
                                                  span,
-                                                 param_mode,
                                                  did,
                                                  item_segment);
 
@@ -988,7 +963,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                     Def::Trait(trait_def_id) if resolution.depth == 0 => {
                         self.trait_path_to_object_type(rscope,
                                                        path.span,
-                                                       PathParamMode::Explicit,
                                                        trait_def_id,
                                                        ty.id,
                                                        path.segments.last().unwrap(),
@@ -1060,7 +1034,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     fn trait_path_to_object_type(&self,
                                  rscope: &RegionScope,
                                  path_span: Span,
-                                 param_mode: PathParamMode,
                                  trait_def_id: DefId,
                                  trait_path_ref_id: ast::NodeId,
                                  trait_segment: &hir::PathSegment,
@@ -1073,7 +1046,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let dummy_self = tcx.mk_ty(TRAIT_OBJECT_DUMMY_SELF);
         let principal = self.ast_path_to_poly_trait_ref(rscope,
                                                         path_span,
-                                                        param_mode,
                                                         trait_def_id,
                                                         dummy_self,
                                                         trait_path_ref_id,
@@ -1386,7 +1358,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     fn qpath_to_ty(&self,
                    rscope: &RegionScope,
                    span: Span,
-                   param_mode: PathParamMode,
                    opt_self_ty: Option<Ty<'tcx>>,
                    trait_def_id: DefId,
                    trait_segment: &hir::PathSegment,
@@ -1412,7 +1383,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
         let trait_ref = self.ast_path_to_mono_trait_ref(rscope,
                                                         span,
-                                                        param_mode,
                                                         trait_def_id,
                                                         self_ty,
                                                         trait_segment);
@@ -1457,7 +1427,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     fn base_def_to_ty(&self,
                       rscope: &RegionScope,
                       span: Span,
-                      param_mode: PathParamMode,
                       def: Def,
                       opt_self_ty: Option<Ty<'tcx>>,
                       base_path_ref_id: ast::NodeId,
@@ -1477,7 +1446,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
                 self.trait_path_to_object_type(rscope,
                                                span,
-                                               param_mode,
                                                trait_def_id,
                                                base_path_ref_id,
                                                base_segments.last().unwrap(),
@@ -1486,11 +1454,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
             }
             Def::Enum(did) | Def::TyAlias(did) | Def::Struct(did) | Def::Union(did) => {
                 tcx.prohibit_type_params(base_segments.split_last().unwrap().1);
-                self.ast_path_to_ty(rscope,
-                                    span,
-                                    param_mode,
-                                    did,
-                                    base_segments.last().unwrap())
+                self.ast_path_to_ty(rscope, span, did, base_segments.last().unwrap())
             }
             Def::TyParam(did) => {
                 tcx.prohibit_type_params(base_segments);
@@ -1534,7 +1498,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                 let trait_did = tcx.parent_def_id(def_id).unwrap();
                 self.qpath_to_ty(rscope,
                                  span,
-                                 param_mode,
                                  opt_self_ty,
                                  trait_did,
                                  &base_segments[base_segments.len()-2],
@@ -1576,7 +1539,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     pub fn finish_resolving_def_to_ty(&self,
                                       rscope: &RegionScope,
                                       span: Span,
-                                      param_mode: PathParamMode,
                                       base_def: Def,
                                       opt_self_ty: Option<Ty<'tcx>>,
                                       base_path_ref_id: ast::NodeId,
@@ -1592,7 +1554,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                assoc_segments);
         let base_ty = self.base_def_to_ty(rscope,
                                           span,
-                                          param_mode,
                                           base_def,
                                           opt_self_ty,
                                           base_path_ref_id,
@@ -1746,7 +1707,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                 });
                 let (ty, def) = self.finish_resolving_def_to_ty(rscope,
                                                                 ast_ty.span,
-                                                                PathParamMode::Explicit,
                                                                 path_res.base_def,
                                                                 opt_self_ty,
                                                                 ast_ty.id,
@@ -2003,7 +1963,6 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let trait_def_id = self.trait_def_id(trait_ref);
         self.trait_path_to_object_type(rscope,
                                        trait_ref.path.span,
-                                       PathParamMode::Explicit,
                                        trait_def_id,
                                        trait_ref.ref_id,
                                        trait_ref.path.segments.last().unwrap(),

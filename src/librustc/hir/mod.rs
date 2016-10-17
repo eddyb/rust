@@ -166,6 +166,7 @@ impl PathParameters {
         AngleBracketedParameters(AngleBracketedParameterData {
             lifetimes: HirVec::new(),
             types: HirVec::new(),
+            infer_types: true,
             bindings: HirVec::new(),
         })
     }
@@ -240,6 +241,11 @@ pub struct AngleBracketedParameterData {
     pub lifetimes: HirVec<Lifetime>,
     /// The type parameters for this path segment, if present.
     pub types: HirVec<P<Ty>>,
+    /// Whether to infer remaining type parameters, if any.
+    /// This only applies to expression and pattern paths, and
+    /// out of those only the segments with no type parameters
+    /// to begin with, e.g. `Vec::new` is `<Vec<..>>::new::<..>`.
+    pub infer_types: bool,
     /// Bindings (equality constraints) on associated types, if present.
     /// E.g., `Foo<A=Bar>`.
     pub bindings: HirVec<TypeBinding>,
