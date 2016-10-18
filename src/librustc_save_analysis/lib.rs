@@ -43,7 +43,7 @@ pub mod span_utils;
 
 use rustc::hir;
 use rustc::hir::map::{Node, NodeItem};
-use rustc::hir::def::Def;
+use rustc::hir::def::{Def, DefMap};
 use rustc::hir::def_id::DefId;
 use rustc::session::config::CrateType::CrateTypeExecutable;
 use rustc::ty::{self, TyCtxt};
@@ -84,6 +84,7 @@ pub mod recorder {
 
 pub struct SaveContext<'l, 'tcx: 'l> {
     tcx: TyCtxt<'l, 'tcx, 'tcx>,
+    def_map: &'l DefMap,
     span_utils: SpanUtils<'tcx>,
 }
 
@@ -92,16 +93,20 @@ macro_rules! option_try(
 );
 
 impl<'l, 'tcx: 'l> SaveContext<'l, 'tcx> {
-    pub fn new(tcx: TyCtxt<'l, 'tcx, 'tcx>) -> SaveContext<'l, 'tcx> {
+    pub fn new(tcx: TyCtxt<'l, 'tcx, 'tcx>,
+               def_map: &'l DefMap)
+               -> SaveContext<'l, 'tcx> {
         let span_utils = SpanUtils::new(&tcx.sess);
-        SaveContext::from_span_utils(tcx, span_utils)
+        SaveContext::from_span_utils(tcx, def_map, span_utils)
     }
 
     pub fn from_span_utils(tcx: TyCtxt<'l, 'tcx, 'tcx>,
+                           def_map: &'l DefMap,
                            span_utils: SpanUtils<'tcx>)
                            -> SaveContext<'l, 'tcx> {
         SaveContext {
             tcx: tcx,
+            def_map: def_map,
             span_utils: span_utils,
         }
     }
@@ -495,8 +500,21 @@ impl<'l, 'tcx: 'l> SaveContext<'l, 'tcx> {
         }
     }
 
+    pub fn get_path_def(&self, id: NodeId) -> Def {
+        self.def_map.get(&id).map(|resolution| {
+            if resolution.depth != 0 {
+                bug!("path not fully resolved: {:?}", resolution);
+            }
+            resolution.base_def
+        }).or_else(|| {
+            self.tcx.tables().project_defs.get(&id).cloned()
+        }).unwrap_or_else(|| {
+            bug!("no definition found for path {}", id);
+        })
+    }
+
     pub fn get_path_data(&self, id: NodeId, path: &ast::Path) -> Option<Data> {
-        let def = self.tcx.expect_def(id);
+        let def = self.get_path_def(id);
         let sub_span = self.span_utils.span_for_last_ident(path.span);
         filter!(self.span_utils, sub_span, path.span, None);
         match def {
@@ -639,7 +657,7 @@ impl<'l, 'tcx: 'l> SaveContext<'l, 'tcx> {
     }
 
     fn lookup_ref_id(&self, ref_id: NodeId) -> Option<DefId> {
-        match self.tcx.expect_def(ref_id) {
+        match self.get_path_def(ref_id) {
             Def::PrimTy(_) | Def::SelfTy(..) => None,
             def => Some(def.def_id()),
         }
@@ -758,6 +776,7 @@ impl Format {
 }
 
 pub fn process_crate<'l, 'tcx>(tcx: TyCtxt<'l, 'tcx, 'tcx>,
+                               def_map: &'l DefMap,
                                krate: &ast::Crate,
                                analysis: &'l ty::CrateAnalysis<'l>,
                                cratename: &str,
@@ -807,7 +826,7 @@ pub fn process_crate<'l, 'tcx>(tcx: TyCtxt<'l, 'tcx, 'tcx>,
     root_path.pop();
     let output = &mut output_file;
 
-    let save_ctxt = SaveContext::new(tcx);
+    let save_ctxt = SaveContext::new(tcx, def_map);
 
     macro_rules! dump {
         ($new_dumper: expr) => {{

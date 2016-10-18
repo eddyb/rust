@@ -19,9 +19,8 @@ use rustc::hir::map as ast_map;
 use rustc::hir::map::blocks::FnLikeNode;
 use rustc::middle::cstore::InlinedItem;
 use rustc::traits;
-use rustc::hir::def::{Def, CtorKind, PathResolution};
+use rustc::hir::def::{Def, CtorKind};
 use rustc::hir::def_id::DefId;
-use rustc::hir::pat_util::def_to_path;
 use rustc::ty::{self, Ty, TyCtxt};
 use rustc::ty::util::IntTypeExt;
 use rustc::ty::subst::Substs;
@@ -42,7 +41,6 @@ use syntax_pos::{self, Span};
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::hash_map::Entry::Vacant;
 
 use rustc_const_math::*;
 use rustc_errors::DiagnosticBuilder;
@@ -282,24 +280,33 @@ pub fn const_expr_to_pat<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                                 .collect::<Result<_, _>>()?, None),
 
         hir::ExprCall(ref callee, ref args) => {
-            let def = tcx.expect_def(callee.id);
-            if let Vacant(entry) = tcx.def_map.borrow_mut().entry(expr.id) {
-               entry.insert(PathResolution::new(def));
-            }
-            let path = match def {
-                Def::StructCtor(def_id, CtorKind::Fn) |
-                Def::VariantCtor(def_id, CtorKind::Fn) => def_to_path(tcx, def_id),
-                Def::Fn(..) | Def::Method(..) => return Ok(P(hir::Pat {
-                    id: expr.id,
-                    node: PatKind::Lit(P(expr.clone())),
-                    span: span,
-                })),
+            let (def, path) = match callee.node {
+                hir::ExprPath(_, ref path) => {
+                    match path.def {
+                        Def::StructCtor(_, CtorKind::Fn) |
+                        Def::VariantCtor(_, CtorKind::Fn) => {
+                            (path.def, Some(path.clone()))
+                        }
+                        _ => (path.def, None)
+                    }
+                }
+                hir::ExprProject(..) => {
+                    (tcx.tables().project_defs[&callee.id], None)
+                }
                 _ => bug!()
             };
-            let pats = args.iter()
-                           .map(|expr| const_expr_to_pat(tcx, &**expr, pat_id, span))
-                           .collect::<Result<_, _>>()?;
-            PatKind::TupleStruct(path, pats, None)
+            match (def, path) {
+                (Def::Fn(..), None) | (Def::Method(..), None) => {
+                    PatKind::Lit(P(expr.clone()))
+                }
+                (_, Some(path)) => {
+                    let pats = args.iter()
+                                   .map(|expr| const_expr_to_pat(tcx, &**expr, pat_id, span))
+                                   .collect::<Result<_, _>>()?;
+                    PatKind::TupleStruct(path, pats, None)
+                }
+                _ => bug!()
+            }
         }
 
         hir::ExprStruct(ref path, ref fields, None) => {
@@ -325,7 +332,12 @@ pub fn const_expr_to_pat<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         }
 
         hir::ExprPath(..) | hir::ExprProject(..) => {
-            match tcx.expect_def(expr.id) {
+            let def = match expr.node {
+                hir::ExprPath(_, ref path) => path.def,
+                hir::ExprProject(..) => tcx.tables().project_defs[&expr.id],
+                _ => bug!()
+            };
+            match def {
                 Def::StructCtor(_, CtorKind::Const) |
                 Def::VariantCtor(_, CtorKind::Const) => {
                     match expr.node {
@@ -792,9 +804,15 @@ pub fn eval_const_expr_partial<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
       hir::ExprPath(..) | hir::ExprProject(..) => {
           // This function can be used before type checking when not all paths are fully resolved.
           // FIXME: There's probably a better way to make sure we don't panic here.
-          let def = match tcx.expect_def_or_none(e.id) {
-              Some(def) => def,
-              None => signal!(e, UnresolvedPath)
+          let def = match e.node {
+              hir::ExprPath(_, ref path) => path.def,
+              hir::ExprProject(..) => {
+                  match tcx.tables().project_defs.get(&e.id) {
+                      Some(&def) => def,
+                      None => signal!(e, UnresolvedPath)
+                  }
+              },
+              _ => bug!()
           };
           match def {
               Def::Const(def_id) |
@@ -1361,13 +1379,9 @@ pub fn eval_length<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                 tcx, &err, count_expr.span, reason);
 
             match count_expr.node {
-                hir::ExprPath(None, hir::Path {
-                    global: false,
-                    ref segments,
-                    ..
-                }) if segments.len() == 1 => {
-                    if let Some(Def::Local(..)) = tcx.expect_def_or_none(count_expr.id) {
-                        diag.note(&format!("`{}` is a variable", segments[0].name));
+                hir::ExprPath(None, ref path) => {
+                    if let Def::Local(..) = path.def {
+                        diag.note(&format!("`{}` is a variable", path));
                     }
                 }
                 _ => {}

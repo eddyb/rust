@@ -50,7 +50,7 @@
 
 use rustc_const_eval::eval_length;
 use hir::{self, SelfKind};
-use hir::def::{Def, PathResolution};
+use hir::def::Def;
 use hir::def_id::DefId;
 use hir::print as pprust;
 use middle::resolve_lifetime as rl;
@@ -683,7 +683,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
     fn trait_def_id(&self, trait_ref: &hir::TraitRef) -> DefId {
         let path = &trait_ref.path;
-        match self.tcx().expect_def(trait_ref.ref_id) {
+        match path.def {
             Def::Trait(trait_def_id) => trait_def_id,
             Def::Err => {
                 self.tcx().sess.fatal("cannot continue compilation due to previous error");
@@ -958,24 +958,20 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let tcx = self.tcx();
         match ty.node {
             hir::TyPath(None, ref path) => {
-                let resolution = tcx.expect_resolution(ty.id);
-                match resolution.base_def {
-                    Def::Trait(trait_def_id) if resolution.depth == 0 => {
-                        self.trait_path_to_object_type(rscope,
-                                                       path.span,
-                                                       trait_def_id,
-                                                       ty.id,
-                                                       path.segments.last().unwrap(),
-                                                       span,
-                                                       partition_bounds(tcx, span, bounds))
-                    }
-                    _ => {
-                        struct_span_err!(tcx.sess, ty.span, E0172,
-                                  "expected a reference to a trait")
-                            .span_label(ty.span, &format!("expected a trait"))
-                            .emit();
-                        tcx.types.err
-                    }
+                if let Def::Trait(trait_def_id) = path.def {
+                    self.trait_path_to_object_type(rscope,
+                                                   path.span,
+                                                   trait_def_id,
+                                                   ty.id,
+                                                   path.segments.last().unwrap(),
+                                                   span,
+                                                   partition_bounds(tcx, span, bounds))
+                } else {
+                    struct_span_err!(tcx.sess, ty.span, E0172,
+                                     "expected a reference to a trait")
+                        .span_label(ty.span, &format!("expected a trait"))
+                        .emit();
+                    tcx.types.err
                 }
             }
             _ => {
@@ -1648,7 +1644,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                 });
                 self.def_to_ty(rscope,
                                ast_ty.span,
-                               tcx.expect_def(ast_ty.id),
+                               path.def,
                                opt_self_ty,
                                ast_ty.id,
                                &path.segments)
@@ -1659,12 +1655,16 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
 
                 // HACK(eddyb) This shouldn't be needed in the future, it's only used
                 // to detect an trait impl `Self`, for the trait's associated types.
-                let def = tcx.expect_def_or_none(qself.id).unwrap_or(Def::Err);
+                let def = if let hir::TyPath(_, ref path) = qself.node {
+                    path.def
+                } else {
+                    Def::Err
+                };
 
                 let (ty, def) = self.associated_path_def_to_ty(ast_ty.span, ty, def, segment);
 
                 // Write back the new resolution.
-                tcx.def_map.borrow_mut().insert(ast_ty.id, PathResolution::new(def));
+                tcx.tables.borrow_mut().project_defs.insert(ast_ty.id, def);
 
                 ty
             }
@@ -2002,7 +2002,7 @@ pub fn partition_bounds<'a, 'b, 'gcx, 'tcx>(tcx: TyCtxt<'a, 'gcx, 'tcx>,
     for ast_bound in ast_bounds {
         match *ast_bound {
             hir::TraitTyParamBound(ref b, hir::TraitBoundModifier::None) => {
-                match tcx.expect_def(b.trait_ref.ref_id) {
+                match b.trait_ref.path.def {
                     Def::Trait(trait_did) => {
                         if tcx.try_add_builtin_trait(trait_did,
                                                      &mut builtin_bounds) {

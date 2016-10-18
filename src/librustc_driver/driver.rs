@@ -59,7 +59,6 @@ use derive_registrar;
 
 #[derive(Clone)]
 pub struct Resolutions {
-    pub def_map: DefMap,
     pub freevars: FreevarMap,
     pub trait_map: TraitMap,
     pub maybe_unused_trait_imports: NodeSet,
@@ -116,7 +115,14 @@ pub fn compile_input(sess: &Session,
 
         let outputs = build_output_filenames(input, outdir, output, &krate.attrs, sess);
         let crate_name = link::find_crate_name(Some(sess), &krate.attrs, input);
-        let ExpansionResult { expanded_crate, defs, analysis, resolutions, mut hir_forest } = {
+        let ExpansionResult {
+            expanded_crate,
+            defs,
+            analysis,
+            def_map,
+            resolutions,
+            mut hir_forest
+        } = {
             phase_2_configure_and_expand(
                 sess, &cstore, krate, registry, &crate_name, addl_plugins, control.make_glob_map,
                 |expanded_crate| {
@@ -150,6 +156,7 @@ pub fn compile_input(sess: &Session,
                                                                   &cstore,
                                                                   &hir_map,
                                                                   &analysis,
+                                                                  &def_map,
                                                                   &resolutions,
                                                                   &expanded_crate,
                                                                   &hir_map.krate(),
@@ -186,6 +193,7 @@ pub fn compile_input(sess: &Session,
                                                                    opt_crate,
                                                                    tcx.map.krate(),
                                                                    &analysis,
+                                                                   &def_map,
                                                                    tcx,
                                                                    &crate_name);
                 (control.after_analysis.callback)(&mut state);
@@ -342,6 +350,7 @@ pub struct CompileState<'a, 'b, 'ast: 'a, 'tcx: 'b> where 'ast: 'tcx {
     pub expanded_crate: Option<&'a ast::Crate>,
     pub hir_crate: Option<&'a hir::Crate>,
     pub ast_map: Option<&'a hir_map::Map<'ast>>,
+    pub def_map: Option<&'a DefMap>,
     pub resolutions: Option<&'a Resolutions>,
     pub analysis: Option<&'a ty::CrateAnalysis<'a>>,
     pub tcx: Option<TyCtxt<'b, 'tcx, 'tcx>>,
@@ -367,6 +376,7 @@ impl<'a, 'b, 'ast, 'tcx> CompileState<'a, 'b, 'ast, 'tcx> {
             expanded_crate: None,
             hir_crate: None,
             ast_map: None,
+            def_map: None,
             resolutions: None,
             analysis: None,
             tcx: None,
@@ -416,6 +426,7 @@ impl<'a, 'b, 'ast, 'tcx> CompileState<'a, 'b, 'ast, 'tcx> {
                                 cstore: &'a CStore,
                                 hir_map: &'a hir_map::Map<'ast>,
                                 analysis: &'a ty::CrateAnalysis,
+                                def_map: &'a DefMap,
                                 resolutions: &'a Resolutions,
                                 krate: &'a ast::Crate,
                                 hir_crate: &'a hir::Crate,
@@ -427,6 +438,7 @@ impl<'a, 'b, 'ast, 'tcx> CompileState<'a, 'b, 'ast, 'tcx> {
             cstore: Some(cstore),
             ast_map: Some(hir_map),
             analysis: Some(analysis),
+            def_map: Some(def_map),
             resolutions: Some(resolutions),
             expanded_crate: Some(krate),
             hir_crate: Some(hir_crate),
@@ -442,11 +454,13 @@ impl<'a, 'b, 'ast, 'tcx> CompileState<'a, 'b, 'ast, 'tcx> {
                             krate: Option<&'a ast::Crate>,
                             hir_crate: &'a hir::Crate,
                             analysis: &'a ty::CrateAnalysis<'a>,
+                            def_map: &'a DefMap,
                             tcx: TyCtxt<'b, 'tcx, 'tcx>,
                             crate_name: &'a str)
                             -> CompileState<'a, 'b, 'ast, 'tcx> {
         CompileState {
             analysis: Some(analysis),
+            def_map: Some(def_map),
             tcx: Some(tcx),
             expanded_crate: krate,
             hir_crate: Some(hir_crate),
@@ -534,6 +548,7 @@ pub struct ExpansionResult<'a> {
     pub expanded_crate: ast::Crate,
     pub defs: hir_map::Definitions,
     pub analysis: ty::CrateAnalysis<'a>,
+    pub def_map: DefMap,
     pub resolutions: Resolutions,
     pub hir_forest: hir_map::Forest,
 }
@@ -781,8 +796,8 @@ pub fn phase_2_configure_and_expand<'a, F>(sess: &Session,
             name: crate_name,
             glob_map: if resolver.make_glob_map { Some(resolver.glob_map) } else { None },
         },
+        def_map: resolver.def_map,
         resolutions: Resolutions {
-            def_map: resolver.def_map,
             freevars: resolver.freevars,
             trait_map: resolver.trait_map,
             maybe_unused_trait_imports: resolver.maybe_unused_trait_imports,
@@ -829,9 +844,7 @@ pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
 
     let named_region_map = time(time_passes,
                                 "lifetime resolution",
-                                || middle::resolve_lifetime::krate(sess,
-                                                                   &hir_map,
-                                                                   &resolutions.def_map))?;
+                                || middle::resolve_lifetime::krate(sess, &hir_map))?;
 
     time(time_passes,
          "looking for entry point",
@@ -852,13 +865,12 @@ pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
 
     time(time_passes,
               "static item recursion checking",
-              || static_recursion::check_crate(sess, &resolutions.def_map, &hir_map))?;
+              || static_recursion::check_crate(sess, &hir_map))?;
 
     let index = stability::Index::new(&hir_map);
 
     TyCtxt::create_and_enter(sess,
                              arenas,
-                             resolutions.def_map,
                              resolutions.trait_map,
                              named_region_map,
                              hir_map,

@@ -1463,19 +1463,19 @@ impl<'a> State<'a> {
             hir::ExprProject(ref qself, ref segment) => {
                 self.print_projection(qself, segment, true)?;
             }
-            hir::ExprBreak(opt_name) => {
+            hir::ExprBreak(opt_label) => {
                 word(&mut self.s, "break")?;
                 space(&mut self.s)?;
-                if let Some(name) = opt_name {
-                    self.print_name(name.node)?;
+                if let Some(label) = opt_label {
+                    self.print_name(label.name)?;
                     space(&mut self.s)?;
                 }
             }
-            hir::ExprAgain(opt_name) => {
+            hir::ExprAgain(opt_label) => {
                 word(&mut self.s, "continue")?;
                 space(&mut self.s)?;
-                if let Some(name) = opt_name {
-                    self.print_name(name.node)?;
+                if let Some(label) = opt_label {
+                    self.print_name(label.name)?;
                     space(&mut self.s)?
                 }
             }
@@ -1749,7 +1749,7 @@ impl<'a> State<'a> {
         // is that it doesn't matter
         match pat.node {
             PatKind::Wild => word(&mut self.s, "_")?,
-            PatKind::Binding(binding_mode, ref path1, ref sub) => {
+            PatKind::Binding(binding_mode, _, ref path1, ref sub) => {
                 match binding_mode {
                     hir::BindByRef(mutbl) => {
                         self.word_nbsp("ref")?;
@@ -2164,7 +2164,7 @@ impl<'a> State<'a> {
                     self.print_path(path, false, 0)?;
                     word(&mut self.s, "::{")?;
                 }
-                self.commasep(Inconsistent, &segments[..], |s, w| s.print_name(w.node.name))?;
+                self.commasep(Inconsistent, &segments[..], |s, w| s.print_name(w.name))?;
                 word(&mut self.s, "}")
             }
         }
@@ -2190,7 +2190,7 @@ impl<'a> State<'a> {
                 if let Some(eself) = input.to_self() {
                     self.print_explicit_self(&eself)?;
                 } else {
-                    let invalid = if let PatKind::Binding(_, name, _) = input.pat.node {
+                    let invalid = if let PatKind::Binding(_, _, name, _) = input.pat.node {
                         name.node == keywords::Invalid.name()
                     } else {
                         false

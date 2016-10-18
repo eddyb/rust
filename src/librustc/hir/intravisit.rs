@@ -30,6 +30,7 @@ use syntax::ast::{NodeId, CRATE_NODE_ID, Name, Attribute};
 use syntax::codemap::Spanned;
 use syntax_pos::Span;
 use hir::*;
+use hir::def::Def;
 
 use std::cmp;
 use std::u32;
@@ -95,6 +96,9 @@ pub trait Visitor<'v> : Sized {
     ///////////////////////////////////////////////////////////////////////////
 
     fn visit_id(&mut self, _node_id: NodeId) {
+        // Nothing to do.
+    }
+    fn visit_def_mention(&mut self, _def: Def) {
         // Nothing to do.
     }
     fn visit_name(&mut self, _span: Span, _name: Name) {
@@ -444,6 +448,7 @@ pub fn walk_ty<'v, V: Visitor<'v>>(visitor: &mut V, typ: &'v Ty) {
 }
 
 pub fn walk_path<'v, V: Visitor<'v>>(visitor: &mut V, path: &'v Path) {
+    visitor.visit_def_mention(path.def);
     for segment in &path.segments {
         visitor.visit_path_segment(path.span, segment);
     }
@@ -452,9 +457,10 @@ pub fn walk_path<'v, V: Visitor<'v>>(visitor: &mut V, path: &'v Path) {
 pub fn walk_path_list_item<'v, V>(visitor: &mut V, _prefix: &'v Path, item: &'v PathListItem)
     where V: Visitor<'v>,
 {
-    visitor.visit_id(item.node.id);
-    visitor.visit_name(item.span, item.node.name);
-    walk_opt_name(visitor, item.span, item.node.rename);
+    visitor.visit_id(item.id);
+    visitor.visit_def_mention(item.def);
+    visitor.visit_name(item.span, item.name);
+    walk_opt_name(visitor, item.span, item.rename);
 }
 
 pub fn walk_path_segment<'v, V: Visitor<'v>>(visitor: &mut V,
@@ -518,7 +524,8 @@ pub fn walk_pat<'v, V: Visitor<'v>>(visitor: &mut V, pattern: &'v Pat) {
         PatKind::Ref(ref subpattern, _) => {
             visitor.visit_pat(subpattern)
         }
-        PatKind::Binding(_, ref pth1, ref optional_subpattern) => {
+        PatKind::Binding(_, def_id, ref pth1, ref optional_subpattern) => {
+            visitor.visit_def_mention(Def::Local(def_id));
             visitor.visit_name(pth1.span, pth1.node);
             walk_list!(visitor, visit_pat, optional_subpattern);
         }
@@ -851,8 +858,10 @@ pub fn walk_expr<'v, V: Visitor<'v>>(visitor: &mut V, expression: &'v Expr) {
             visitor.visit_ty(qself);
             visitor.visit_path_segment(expression.span, segment);
         }
-        ExprBreak(ref opt_sp_name) | ExprAgain(ref opt_sp_name) => {
-            walk_opt_sp_name(visitor, opt_sp_name);
+        ExprBreak(None) | ExprAgain(None) => {}
+        ExprBreak(Some(label)) | ExprAgain(Some(label)) => {
+            visitor.visit_def_mention(Def::Label(label.loop_id));
+            visitor.visit_name(label.span, label.name);
         }
         ExprRet(ref optional_expression) => {
             walk_list!(visitor, visit_expr, optional_expression);

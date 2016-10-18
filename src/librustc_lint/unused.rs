@@ -8,7 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use rustc::hir::pat_util;
 use rustc::ty;
 use rustc::ty::adjustment;
 use util::nodemap::FnvHashMap;
@@ -44,7 +43,7 @@ impl UnusedMut {
 
         let mut mutables = FnvHashMap();
         for p in pats {
-            pat_util::pat_bindings(p, |mode, id, _, path1| {
+            p.each_binding(|mode, id, _, path1| {
                 let name = path1.node;
                 if let hir::BindByValue(hir::MutMutable) = mode {
                     if !name.as_str().starts_with("_") {
@@ -414,8 +413,8 @@ impl LateLintPass for UnusedImportBraces {
     fn check_item(&mut self, cx: &LateContext, item: &hir::Item) {
         if let hir::ItemUse(ref view_path) = item.node {
             if let hir::ViewPathList(_, ref items) = view_path.node {
-                if items.len() == 1 && items[0].node.name != keywords::SelfValue.name() {
-                    let msg = format!("braces around {} is unnecessary", items[0].node.name);
+                if items.len() == 1 && items[0].name != keywords::SelfValue.name() {
+                    let msg = format!("braces around {} is unnecessary", items[0].name);
                     cx.span_lint(UNUSED_IMPORT_BRACES, item.span, &msg);
                 }
             }

@@ -488,7 +488,12 @@ fn check_expr<'a, 'tcx>(v: &mut CheckCrateVisitor<'a, 'tcx>, e: &hir::Expr, node
             }
         }
         hir::ExprPath(..) | hir::ExprProject(..) => {
-            match v.tcx.expect_def(e.id) {
+            let def = match e.node {
+                hir::ExprPath(_, ref path) => path.def,
+                hir::ExprProject(..) => v.tcx.tables().project_defs[&e.id],
+                _ => bug!()
+            };
+            match def {
                 Def::VariantCtor(_, CtorKind::Const) => {
                     // Size is determined by the whole enum, may be non-zero.
                     v.add_qualif(ConstQualif::NON_ZERO_SIZED);
@@ -531,17 +536,22 @@ fn check_expr<'a, 'tcx>(v: &mut CheckCrateVisitor<'a, 'tcx>, e: &hir::Expr, node
                 };
             }
             // The callee is an arbitrary expression, it doesn't necessarily have a definition.
-            let is_const = match v.tcx.expect_def_or_none(callee.id) {
-                Some(Def::StructCtor(_, CtorKind::Fn)) |
-                Some(Def::VariantCtor(_, CtorKind::Fn)) => {
+            let def = match callee.node {
+                hir::ExprPath(_, ref path) => path.def,
+                hir::ExprProject(..) => v.tcx.tables().project_defs[&callee.id],
+                _ => Def::Err
+            };
+            let is_const = match def {
+                Def::StructCtor(_, CtorKind::Fn) |
+                Def::VariantCtor(_, CtorKind::Fn) => {
                     // `NON_ZERO_SIZED` is about the call result, not about the ctor itself.
                     v.add_qualif(ConstQualif::NON_ZERO_SIZED);
                     true
                 }
-                Some(Def::Fn(did)) => {
+                Def::Fn(did) => {
                     v.handle_const_fn_call(e, did, node_ty)
                 }
-                Some(Def::Method(did)) => {
+                Def::Method(did) => {
                     match v.tcx.associated_item(did).container {
                         ty::ImplContainer(_) => {
                             v.handle_const_fn_call(e, did, node_ty)
@@ -565,9 +575,9 @@ fn check_expr<'a, 'tcx>(v: &mut CheckCrateVisitor<'a, 'tcx>, e: &hir::Expr, node
                 v.add_qualif(ConstQualif::NOT_CONST);
             }
         }
-        hir::ExprStruct(..) => {
+        hir::ExprStruct(ref path, ..) => {
             // unsafe_cell_type doesn't necessarily exist with no_core
-            if Some(v.tcx.expect_def(e.id).def_id()) == v.tcx.lang_items.unsafe_cell_type() {
+            if Some(path.def.def_id()) == v.tcx.lang_items.unsafe_cell_type() {
                 v.add_qualif(ConstQualif::MUTABLE_MEM);
             }
         }

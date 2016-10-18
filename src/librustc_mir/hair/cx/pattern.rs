@@ -77,7 +77,14 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
             },
 
             PatKind::Path(..) | PatKind::Project(..) => {
-                match self.cx.tcx.expect_def(pat.id) {
+                let def = match pat.node {
+                    PatKind::Path(_, ref path) => path.def,
+                    PatKind::Project(..) => {
+                        self.cx.tcx.tables().project_defs[&pat.id]
+                    }
+                    _ => bug!()
+                };
+                match def {
                     Def::Const(def_id) | Def::AssociatedConst(def_id) => {
                         let tcx = self.cx.tcx.global_tcx();
                         let substs = Some(tcx.tables().node_id_item_substs(pat.id)
@@ -103,9 +110,7 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
                             }
                         }
                     }
-                    _ => {
-                        self.variant_or_leaf(pat, vec![])
-                    }
+                    def => self.variant_or_leaf(def, vec![])
                 }
             }
 
@@ -158,8 +163,7 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
                 }
             }
 
-            PatKind::Binding(bm, ref ident, ref sub) => {
-                let def_id = self.cx.tcx.expect_def(pat.id).def_id();
+            PatKind::Binding(bm, def_id, ref ident, ref sub) => {
                 let id = self.cx.tcx.map.as_local_node_id(def_id).unwrap();
                 let var_ty = self.cx.tcx.tables().node_id_to_type(pat.id);
                 let region = match var_ty.sty {
@@ -197,13 +201,13 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
                 }
             }
 
-            PatKind::TupleStruct(_, ref subpatterns, ddpos) => {
+            PatKind::TupleStruct(ref path, ref subpatterns, ddpos) => {
                 let pat_ty = self.cx.tcx.tables().node_id_to_type(pat.id);
                 let adt_def = match pat_ty.sty {
                     ty::TyAdt(adt_def, _) => adt_def,
                     _ => span_bug!(pat.span, "tuple struct pattern not applied to an ADT"),
                 };
-                let variant_def = adt_def.variant_of_def(self.cx.tcx.expect_def(pat.id));
+                let variant_def = adt_def.variant_of_def(path.def);
 
                 let subpatterns =
                         subpatterns.iter()
@@ -213,10 +217,10 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
                                        pattern: self.to_pattern(field),
                                    })
                                    .collect();
-                self.variant_or_leaf(pat, subpatterns)
+                self.variant_or_leaf(path.def, subpatterns)
             }
 
-            PatKind::Struct(_, ref fields, _) => {
+            PatKind::Struct(ref path, ref fields, _) => {
                 let pat_ty = self.cx.tcx.tables().node_id_to_type(pat.id);
                 let adt_def = match pat_ty.sty {
                     ty::TyAdt(adt_def, _) => adt_def,
@@ -226,7 +230,7 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
                             "struct pattern not applied to an ADT");
                     }
                 };
-                let variant_def = adt_def.variant_of_def(self.cx.tcx.expect_def(pat.id));
+                let variant_def = adt_def.variant_of_def(path.def);
 
                 let subpatterns =
                     fields.iter()
@@ -245,7 +249,7 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
                           })
                           .collect();
 
-                self.variant_or_leaf(pat, subpatterns)
+                self.variant_or_leaf(path.def, subpatterns)
             }
         };
 
@@ -298,10 +302,10 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
     }
 
     fn variant_or_leaf(&mut self,
-                       pat: &hir::Pat,
+                       def: Def,
                        subpatterns: Vec<FieldPattern<'tcx>>)
                        -> PatternKind<'tcx> {
-        match self.cx.tcx.expect_def(pat.id) {
+        match def {
             Def::Variant(variant_id) | Def::VariantCtor(variant_id, ..) => {
                 let enum_id = self.cx.tcx.parent_def_id(variant_id).unwrap();
                 let adt_def = self.cx.tcx.lookup_adt_def(enum_id);
@@ -321,9 +325,7 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
                 PatternKind::Leaf { subpatterns: subpatterns }
             }
 
-            def => {
-                span_bug!(pat.span, "inappropriate def for pattern: {:?}", def);
-            }
+            _ => bug!()
         }
     }
 }

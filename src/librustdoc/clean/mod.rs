@@ -657,6 +657,7 @@ fn external_path(cx: &DocContext, name: &str, trait_did: Option<DefId>, has_self
                  bindings: Vec<TypeBinding>, substs: &Substs) -> Path {
     Path {
         global: false,
+        def: Def::Err,
         segments: vec![PathSegment {
             name: name.to_string(),
             params: external_path_params(cx, trait_did, has_self, bindings, substs)
@@ -1729,15 +1730,12 @@ impl Clean<Type> for hir::Ty {
             },
             TyTup(ref tys) => Tuple(tys.clean(cx)),
             TyPath(None, ref path) => {
-                let tcx_and_def = cx.tcx_opt().map(|tcx| (tcx, tcx.expect_def(self.id)));
-                if let Some((_, def)) = tcx_and_def {
-                    if let Some(new_ty) = cx.ty_substs.borrow().get(&def).cloned() {
-                        return new_ty;
-                    }
+                if let Some(new_ty) = cx.ty_substs.borrow().get(&path.def).cloned() {
+                    return new_ty;
                 }
 
-                let tcx_and_alias = tcx_and_def.and_then(|(tcx, def)| {
-                    if let Def::TyAlias(def_id) = def {
+                let tcx_and_alias = cx.tcx_opt().and_then(|tcx| {
+                    if let Def::TyAlias(def_id) = path.def {
                         // Substitute private type aliases
                         tcx.map.as_local_node_id(def_id).and_then(|node_id| {
                             if !cx.access_levels.borrow().is_exported(def_id) {
@@ -1755,7 +1753,7 @@ impl Clean<Type> for hir::Ty {
                     let mut ty_substs = FnvHashMap();
                     let mut lt_substs = FnvHashMap();
                     for (i, ty_param) in generics.ty_params.iter().enumerate() {
-                        let ty_param_def = tcx.expect_def(ty_param.id);
+                        let ty_param_def = Def::TyParam(tcx.map.local_def_id(ty_param.id));
                         if let Some(ty) = provided_params.types().get(i).cloned()
                                                                         .cloned() {
                             ty_substs.insert(ty_param_def, ty.unwrap().clean(cx));
@@ -1779,6 +1777,9 @@ impl Clean<Type> for hir::Ty {
                 let trait_path = hir::Path {
                     span: p.span,
                     global: p.global,
+                    def: cx.tcx_opt().map_or(Def::Err, |tcx| {
+                        Def::Trait(tcx.associated_item(p.def.def_id()).container.id())
+                    }),
                     segments: segments.into(),
                 };
                 Type::QPath {
@@ -1791,6 +1792,10 @@ impl Clean<Type> for hir::Ty {
                 let trait_path = hir::Path {
                     span: self.span,
                     global: false,
+                    def: cx.tcx_opt().map_or(Def::Err, |tcx| {
+                        let def_id = tcx.tables().project_defs[&self.id].def_id();
+                        Def::Trait(tcx.associated_item(def_id).container.id())
+                    }),
                     segments: vec![].into(),
                 };
                 Type::QPath {
@@ -2203,6 +2208,7 @@ impl Clean<Span> for syntax_pos::Span {
 #[derive(Clone, RustcEncodable, RustcDecodable, PartialEq, Debug)]
 pub struct Path {
     pub global: bool,
+    pub def: Def,
     pub segments: Vec<PathSegment>,
 }
 
@@ -2210,6 +2216,7 @@ impl Path {
     pub fn singleton(name: String) -> Path {
         Path {
             global: false,
+            def: Def::Err,
             segments: vec![PathSegment {
                 name: name,
                 params: PathParameters::AngleBracketed {
@@ -2230,6 +2237,7 @@ impl Clean<Path> for hir::Path {
     fn clean(&self, cx: &DocContext) -> Path {
         Path {
             global: self.global,
+            def: self.def,
             segments: self.segments.clean(cx),
         }
     }
@@ -2596,7 +2604,7 @@ impl Clean<Vec<Item>> for doctree::Import {
         });
         let (mut ret, inner) = match self.node {
             hir::ViewPathGlob(ref p) => {
-                (vec![], Import::Glob(resolve_use_source(cx, p.clean(cx), self.id)))
+                (vec![], Import::Glob(resolve_use_source(cx, p.clean(cx))))
             }
             hir::ViewPathList(ref p, ref list) => {
                 // Attempt to inline all reexported items, but be sure
@@ -2606,7 +2614,8 @@ impl Clean<Vec<Item>> for doctree::Import {
                 let remaining = if !denied {
                     let mut remaining = vec![];
                     for path in list {
-                        match inline::try_inline(cx, path.node.id, path.node.rename) {
+                        let inlined = inline::try_inline(cx, path.def, path.rename);
+                        match inlined {
                             Some(items) => {
                                 ret.extend(items);
                             }
@@ -2622,16 +2631,17 @@ impl Clean<Vec<Item>> for doctree::Import {
                 if remaining.is_empty() {
                     return ret;
                 }
-                (ret, Import::List(resolve_use_source(cx, p.clean(cx), self.id), remaining))
+                (ret, Import::List(resolve_use_source(cx, p.clean(cx)), remaining))
             }
             hir::ViewPathSimple(name, ref p) => {
                 if !denied {
-                    if let Some(items) = inline::try_inline(cx, self.id, Some(name)) {
+                    let inlined = inline::try_inline(cx, p.def, Some(name));
+                    if let Some(items) = inlined {
                         return items;
                     }
                 }
                 (vec![], Import::Simple(name.clean(cx),
-                                        resolve_use_source(cx, p.clean(cx), self.id)))
+                                        resolve_use_source(cx, p.clean(cx))))
             }
         };
         ret.push(Item {
@@ -2674,9 +2684,9 @@ pub struct ViewListIdent {
 impl Clean<ViewListIdent> for hir::PathListItem {
     fn clean(&self, cx: &DocContext) -> ViewListIdent {
         ViewListIdent {
-            name: self.node.name.clean(cx),
-            rename: self.node.rename.map(|r| r.clean(cx)),
-            source: resolve_def(cx, self.node.id)
+            name: self.name.clean(cx),
+            rename: self.rename.map(|r| r.clean(cx)),
+            source: cx.tcx_opt().map(|_| register_def(cx, self.def))
         }
     }
 }
@@ -2750,7 +2760,7 @@ fn name_from_pat(p: &hir::Pat) -> String {
 
     match p.node {
         PatKind::Wild => "_".to_string(),
-        PatKind::Binding(_, ref p, _) => p.node.to_string(),
+        PatKind::Binding(_, _, ref p, _) => p.node.to_string(),
         PatKind::TupleStruct(ref p, ..) | PatKind::Path(None, ref p) => path_to_string(p),
         PatKind::Path(Some(_), ..) |
         PatKind::Project(..) => {
@@ -2790,25 +2800,20 @@ fn resolve_type(cx: &DocContext,
                 path: Path,
                 id: ast::NodeId) -> Type {
     debug!("resolve_type({:?},{:?})", path, id);
-    let tcx = match cx.tcx_opt() {
-        Some(tcx) => tcx,
+    if cx.tcx_opt().is_none() {
         // If we're extracting tests, this return value's accuracy is not
         // important, all we want is a string representation to help people
         // figure out what doctests are failing.
-        None => {
-            let did = DefId::local(DefIndex::from_u32(0));
-            return ResolvedPath {
-                path: path,
-                typarams: None,
-                did: did,
-                is_generic: false
-            };
-        }
-    };
-    let def = tcx.expect_def(id);
-    debug!("resolve_type: def={:?}", def);
+        let did = DefId::local(DefIndex::from_u32(0));
+        return ResolvedPath {
+            path: path,
+            typarams: None,
+            did: did,
+            is_generic: false
+        };
+    }
 
-    let is_generic = match def {
+    let is_generic = match path.def {
         Def::PrimTy(p) => match p {
             hir::TyStr => return Primitive(PrimitiveType::Str),
             hir::TyBool => return Primitive(PrimitiveType::Bool),
@@ -2823,7 +2828,7 @@ fn resolve_type(cx: &DocContext,
         Def::SelfTy(..) | Def::TyParam(..) | Def::AssociatedTy(..) => true,
         _ => false,
     };
-    let did = register_def(&*cx, def);
+    let did = register_def(&*cx, path.def);
     ResolvedPath { path: path, typarams: None, did: did, is_generic: is_generic }
 }
 
@@ -2857,17 +2862,15 @@ fn register_def(cx: &DocContext, def: Def) -> DefId {
     did
 }
 
-fn resolve_use_source(cx: &DocContext, path: Path, id: ast::NodeId) -> ImportSource {
+fn resolve_use_source(cx: &DocContext, path: Path) -> ImportSource {
     ImportSource {
+        did: if path.def == Def::Err {
+            None
+        } else {
+            cx.tcx_opt().map(|_| register_def(cx, path.def))
+        },
         path: path,
-        did: resolve_def(cx, id),
     }
-}
-
-fn resolve_def(cx: &DocContext, id: ast::NodeId) -> Option<DefId> {
-    cx.tcx_opt().and_then(|tcx| {
-        tcx.expect_def_or_none(id).map(|def| register_def(cx, def))
-    })
 }
 
 #[derive(Clone, RustcEncodable, RustcDecodable, Debug)]
@@ -2971,6 +2974,7 @@ fn lang_struct(cx: &DocContext, did: Option<DefId>,
         did: did,
         path: Path {
             global: false,
+            def: Def::Err,
             segments: vec![PathSegment {
                 name: name.to_string(),
                 params: PathParameters::AngleBracketed {

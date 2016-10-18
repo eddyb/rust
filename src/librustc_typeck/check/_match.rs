@@ -103,7 +103,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                 self.demand_eqtype(pat.span, expected, rhs_ty);
                 common_type
             }
-            PatKind::Binding(bm, _, ref sub) => {
+            PatKind::Binding(bm, def_id, _, ref sub) => {
                 let typ = self.local_ty(pat.span, pat.id);
                 match bm {
                     hir::BindByRef(mutbl) => {
@@ -130,16 +130,10 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
 
                 // if there are multiple arms, make sure they all agree on
                 // what the type of the binding `x` ought to be
-                match tcx.expect_def(pat.id) {
-                    Def::Err => {}
-                    Def::Local(def_id) => {
-                        let var_id = tcx.map.as_local_node_id(def_id).unwrap();
-                        if var_id != pat.id {
-                            let vt = self.local_ty(pat.span, var_id);
-                            self.demand_eqtype(pat.span, vt, typ);
-                        }
-                    }
-                    d => bug!("bad def for pattern binding `{:?}`", d)
+                let var_id = tcx.map.as_local_node_id(def_id).unwrap();
+                if var_id != pat.id {
+                    let vt = self.local_ty(pat.span, var_id);
+                    self.demand_eqtype(pat.span, vt, typ);
                 }
 
                 if let Some(ref p) = *sub {
@@ -153,8 +147,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
             }
             PatKind::Path(ref opt_qself, ref path) => {
                 let opt_ty = opt_qself.as_ref().map(|qself| self.to_ty(qself));
-                let def = tcx.expect_def(pat.id);
-                self.check_pat_path(pat, opt_ty, def, &path.segments, expected)
+                self.check_pat_path(pat, opt_ty, path.def, &path.segments, expected)
             }
             PatKind::Project(ref qself, ref segment) => {
                 let ty = self.to_ty(qself);
@@ -380,7 +373,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
         // want to use the *precise* type of the discriminant, *not* some
         // supertype, as the "discriminant type" (issue #23116).
         let contains_ref_bindings = arms.iter()
-                                        .filter_map(|a| tcx.arm_contains_ref_binding(a))
+                                        .filter_map(|a| a.contains_ref_binding())
                                         .max_by_key(|m| match *m {
                                             hir::MutMutable => 1,
                                             hir::MutImmutable => 0,
@@ -574,8 +567,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
         };
 
         // Resolve the path and check the definition for errors.
-        let def = tcx.expect_def(pat.id);
-        let variant = match def {
+        let variant = match path.def {
             Def::Err => {
                 self.set_tainted_by_errors();
                 on_error();
@@ -583,13 +575,13 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
             }
             Def::VariantCtor(_, CtorKind::Fn) |
             Def::StructCtor(_, CtorKind::Fn) => {
-                tcx.expect_variant_def(def)
+                tcx.expect_variant_def(path.def)
             }
-            _ => bug!("unexpected pattern definition: {:?}", def)
+            _ => bug!("unexpected pattern definition: {:?}", path.def)
         };
 
         // Type check the path.
-        let pat_ty = self.instantiate_value_path(&path.segments, None, def, pat.span, pat.id);
+        let pat_ty = self.instantiate_value_path(&path.segments, None, path.def, pat.span, pat.id);
         // Replace constructor type with constructed type for tuple struct patterns.
         let pat_ty = tcx.no_late_bound_regions(&pat_ty.fn_ret()).expect("expected fn type");
         self.demand_eqtype(pat.span, expected, pat_ty);
@@ -610,7 +602,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
             let fields_ending = if variant.fields.len() == 1 { "" } else { "s" };
             struct_span_err!(tcx.sess, pat.span, E0023,
                              "this pattern has {} field{}, but the corresponding {} has {} field{}",
-                             subpats.len(), subpats_ending, def.kind_name(),
+                             subpats.len(), subpats_ending, path.def.kind_name(),
                              variant.fields.len(),  fields_ending)
                 .span_label(pat.span, &format!("expected {} field{}, found {}",
                                                variant.fields.len(), fields_ending, subpats.len()))

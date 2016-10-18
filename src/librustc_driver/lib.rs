@@ -535,6 +535,7 @@ impl<'a> CompilerCalls<'a> for RustcDefaultCalls {
             control.after_analysis.callback = box |state| {
                 time(state.session.time_passes(), "save analysis", || {
                     save::process_crate(state.tcx.unwrap(),
+                                        state.def_map.unwrap(),
                                         state.expanded_crate.unwrap(),
                                         state.analysis.unwrap(),
                                         state.crate_name.unwrap(),

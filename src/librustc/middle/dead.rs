@@ -14,7 +14,7 @@
 
 use dep_graph::DepNode;
 use hir::map as ast_map;
-use hir::{self, pat_util, PatKind};
+use hir::{self, PatKind};
 use hir::intravisit::{self, Visitor};
 
 use middle::privacy;
@@ -85,9 +85,7 @@ impl<'a, 'tcx> MarkSymbolVisitor<'a, 'tcx> {
         }
     }
 
-    fn lookup_and_handle_definition(&mut self, id: ast::NodeId) {
-        let def = self.tcx.expect_def(id);
-
+    fn handle_definition(&mut self, id: ast::NodeId, def: Def) {
         // If `bar` is a trait item, make sure to mark Foo as alive in `Foo::bar`
         match def {
             Def::AssociatedTy(..) | Def::Method(_) | Def::AssociatedConst(_)
@@ -146,12 +144,10 @@ impl<'a, 'tcx> MarkSymbolVisitor<'a, 'tcx> {
         }
     }
 
-    fn handle_field_pattern_match(&mut self, lhs: &hir::Pat,
+    fn handle_field_pattern_match(&mut self, lhs: &hir::Pat, def: Def,
                                   pats: &[codemap::Spanned<hir::FieldPat>]) {
         let variant = match self.tcx.tables().node_id_to_type(lhs.id).sty {
-            ty::TyAdt(adt, _) => {
-                adt.variant_of_def(self.tcx.expect_def(lhs.id))
-            }
+            ty::TyAdt(adt, _) => adt.variant_of_def(def),
             _ => span_bug!(lhs.span, "non-ADT in struct pattern")
         };
         for pat in pats {
@@ -240,7 +236,8 @@ impl<'a, 'tcx, 'v> Visitor<'v> for MarkSymbolVisitor<'a, 'tcx> {
     fn visit_expr(&mut self, expr: &hir::Expr) {
         match expr.node {
             hir::ExprProject(..) => {
-                self.lookup_and_handle_definition(expr.id);
+                let def = self.tcx.tables().project_defs[&expr.id];
+                self.handle_definition(expr.id, def);
             }
             hir::ExprMethodCall(..) => {
                 self.lookup_and_handle_method(expr.id);
@@ -259,8 +256,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for MarkSymbolVisitor<'a, 'tcx> {
 
     fn visit_arm(&mut self, arm: &hir::Arm) {
         if arm.pats.len() == 1 {
-            let pat = &*arm.pats[0];
-            let variants = pat_util::necessary_variants(&self.tcx.def_map.borrow(), pat);
+            let variants = arm.pats[0].necessary_variants();
 
             // Inside the body, ignore constructions of variants
             // necessary for the pattern to match. Those construction sites
@@ -275,14 +271,13 @@ impl<'a, 'tcx, 'v> Visitor<'v> for MarkSymbolVisitor<'a, 'tcx> {
     }
 
     fn visit_pat(&mut self, pat: &hir::Pat) {
-        let def_map = &self.tcx.def_map;
         match pat.node {
-            PatKind::Struct(_, ref fields, _) => {
-                self.handle_field_pattern_match(pat, fields);
+            PatKind::Struct(ref path, ref fields, _) => {
+                self.handle_field_pattern_match(pat, path.def, fields);
             }
-            _ if pat_util::pat_is_const(&def_map.borrow(), pat) => {
-                // it might be the only use of a const
-                self.lookup_and_handle_definition(pat.id)
+            PatKind::Project(..) => {
+                let def = self.tcx.tables().project_defs[&pat.id];
+                self.handle_definition(pat.id, def);
             }
             _ => ()
         }
@@ -293,12 +288,12 @@ impl<'a, 'tcx, 'v> Visitor<'v> for MarkSymbolVisitor<'a, 'tcx> {
     }
 
     fn visit_path(&mut self, path: &hir::Path, id: ast::NodeId) {
-        self.lookup_and_handle_definition(id);
+        self.handle_definition(id, path.def);
         intravisit::walk_path(self, path);
     }
 
     fn visit_path_list_item(&mut self, path: &hir::Path, item: &hir::PathListItem) {
-        self.lookup_and_handle_definition(item.node.id);
+        self.handle_definition(item.id, item.def);
         intravisit::walk_path_list_item(self, path, item);
     }
 }

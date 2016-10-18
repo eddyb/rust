@@ -107,6 +107,9 @@ pub struct Path {
     /// A `::foo` path, is relative to the crate root rather than current
     /// module (like paths in an import).
     pub global: bool,
+    /// The definition that the path resolved to, or if
+    /// inapplicable, (i.e. `use` multi-paths) `Def::Err`.
+    pub def: Def,
     /// The segments in the path: the things separated by `::`.
     pub segments: HirVec<PathSegment>,
 }
@@ -123,21 +126,6 @@ impl fmt::Display for Path {
     }
 }
 
-impl Path {
-    /// Convert a span and an identifier to the corresponding
-    /// 1-segment path.
-    pub fn from_name(s: Span, name: Name) -> Path {
-        Path {
-            span: s,
-            global: false,
-            segments: hir_vec![PathSegment {
-                name: name,
-                parameters: PathParameters::none()
-            }],
-        }
-    }
-}
-
 /// A segment of a path: an identifier, an optional lifetime, and a set of
 /// types.
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
@@ -151,6 +139,16 @@ pub struct PathSegment {
     /// parens affects the region binding rules, so we preserve the
     /// distinction.
     pub parameters: PathParameters,
+}
+
+impl PathSegment {
+    /// Convert an identifier to the corresponding segment.
+    pub fn from_name(name: Name) -> PathSegment {
+        PathSegment {
+            name: name,
+            parameters: PathParameters::none()
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
@@ -563,7 +561,8 @@ pub enum PatKind {
     Wild,
 
     /// A fresh binding `ref mut binding @ OPT_SUBPATTERN`.
-    Binding(BindingMode, Spanned<Name>, Option<P<Pat>>),
+    /// The `DefId` is for the definition of the variable being bound.
+    Binding(BindingMode, DefId, Spanned<Name>, Option<P<Pat>>),
 
     /// A struct or struct variant pattern, e.g. `Variant {x, y, ..}`.
     /// The `bool` is `true` in the presence of a `..`.
@@ -953,9 +952,9 @@ pub enum Expr_ {
     /// A referencing operation (`&a` or `&mut a`)
     ExprAddrOf(Mutability, P<Expr>),
     /// A `break`, with an optional label to break
-    ExprBreak(Option<Spanned<Name>>),
+    ExprBreak(Option<Label>),
     /// A `continue`, with an optional label
-    ExprAgain(Option<Spanned<Name>>),
+    ExprAgain(Option<Label>),
     /// A `return`, with an optional value to be returned
     ExprRet(Option<P<Expr>>),
 
@@ -991,6 +990,13 @@ pub enum MatchSource {
     ForLoopDesugar,
     /// A desugared `?` operator
     TryDesugar,
+}
+
+#[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug, Copy)]
+pub struct Label {
+    pub span: Span,
+    pub name: Name,
+    pub loop_id: NodeId
 }
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug, Copy)]
@@ -1197,7 +1203,7 @@ pub type ExplicitSelf = Spanned<SelfKind>;
 
 impl Arg {
     pub fn to_self(&self) -> Option<ExplicitSelf> {
-        if let PatKind::Binding(BindByValue(mutbl), name, _) = self.pat.node {
+        if let PatKind::Binding(BindByValue(mutbl), _, name, _) = self.pat.node {
             if name.node == keywords::SelfValue.name() {
                 return match self.ty.node {
                     TyInfer => Some(respan(self.pat.span, SelfKind::Value(mutbl))),
@@ -1213,7 +1219,7 @@ impl Arg {
     }
 
     pub fn is_self(&self) -> bool {
-        if let PatKind::Binding(_, name, _) = self.pat.node {
+        if let PatKind::Binding(_, _, name, _) = self.pat.node {
             name.node == keywords::SelfValue.name()
         } else {
             false
@@ -1347,14 +1353,15 @@ pub struct Variant_ {
 pub type Variant = Spanned<Variant_>;
 
 #[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug, Copy)]
-pub struct PathListItem_ {
+pub struct PathListItem {
+    /// The definition that the path resolved to.
+    pub def: Def,
     pub name: Name,
     /// renamed in list, eg `use foo::{bar as baz};`
     pub rename: Option<Name>,
     pub id: NodeId,
+    pub span: Span,
 }
-
-pub type PathListItem = Spanned<PathListItem_>;
 
 pub type ViewPath = Spanned<ViewPath_>;
 

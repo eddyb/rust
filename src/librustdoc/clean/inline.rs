@@ -29,31 +29,23 @@ use clean::{self, GetDefId};
 
 use super::Clean;
 
-/// Attempt to inline the definition of a local node id into this AST.
+/// Attempt to inline a definition into this AST.
 ///
-/// This function will fetch the definition of the id specified, and if it is
-/// from another crate it will attempt to inline the documentation from the
-/// other crate into this crate.
+/// This function will fetch the definition specified, and if it is
+/// from another crate it will attempt to inline the documentation
+/// from the other crate into this crate.
 ///
 /// This is primarily used for `pub use` statements which are, in general,
 /// implementation details. Inlining the documentation should help provide a
 /// better experience when reading the documentation in this use case.
 ///
-/// The returned value is `None` if the `id` could not be inlined, and `Some`
-/// of a vector of items if it was successfully expanded.
-pub fn try_inline(cx: &DocContext, id: ast::NodeId, into: Option<ast::Name>)
+/// The returned value is `None` if the definition could not be inlined,
+/// and `Some` of a vector of items if it was successfully expanded.
+pub fn try_inline(cx: &DocContext, def: Def, into: Option<ast::Name>)
                   -> Option<Vec<clean::Item>> {
-    let tcx = match cx.tcx_opt() {
-        Some(tcx) => tcx,
-        None => return None,
-    };
-    let def = match tcx.expect_def_or_none(id) {
-        Some(def) => def,
-        None => return None,
-    };
     let did = def.def_id();
     if did.is_local() { return None }
-    try_inline_def(cx, tcx, def).map(|vec| {
+    try_inline_def(cx, cx.tcx(), def).map(|vec| {
         vec.into_iter().map(|mut item| {
             match into {
                 Some(into) if item.name.is_some() => {

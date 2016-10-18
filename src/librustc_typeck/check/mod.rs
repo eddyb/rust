@@ -83,9 +83,8 @@ use self::TupleArgumentsFlag::*;
 use astconv::{AstConv, ast_region_to_region};
 use dep_graph::DepNode;
 use fmt_macros::{Parser, Piece, Position};
-use hir::def::{Def, CtorKind, PathResolution};
+use hir::def::{Def, CtorKind};
 use hir::def_id::{DefId, LOCAL_CRATE};
-use hir::pat_util;
 use rustc::infer::{self, InferCtxt, InferOk, TypeOrigin, TypeTrace, type_variable};
 use rustc::ty::subst::{Kind, Subst, Substs};
 use rustc::traits::{self, Reveal};
@@ -670,7 +669,7 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for GatherLocalsVisitor<'a, 'gcx, 'tcx> {
 
     // Add pattern bindings.
     fn visit_pat(&mut self, p: &'gcx hir::Pat) {
-        if let PatKind::Binding(_, ref path1, _) = p.node {
+        if let PatKind::Binding(_, _, ref path1, _) = p.node {
             let var_ty = self.assign(p.span, p.id, None);
 
             self.fcx.require_type_is_sized(var_ty, p.span,
@@ -755,7 +754,7 @@ fn check_fn<'a, 'gcx, 'tcx>(inherited: &'a Inherited<'a, 'gcx, 'tcx>,
             fcx.register_old_wf_obligation(arg_ty, input.ty.span, traits::MiscObligation);
 
             // Create type variables for each argument.
-            pat_util::pat_bindings(&input.pat, |_bm, pat_id, sp, _path| {
+            input.pat.each_binding(|_bm, pat_id, sp, _path| {
                 let var_ty = visit.assign(sp, pat_id, None);
                 fcx.require_type_is_sized(var_ty, sp, traits::VariableType(pat_id));
             });
@@ -3239,18 +3238,17 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                          node_id: ast::NodeId,
                          span: Span)
                          -> Option<(ty::VariantDef<'tcx>,  Ty<'tcx>)> {
-        let def = self.tcx().expect_def(node_id);
-        let variant = match def {
+        let variant = match path.def {
             Def::Err => {
                 self.set_tainted_by_errors();
                 return None;
             }
             Def::Variant(did) => {
                 let type_did = self.tcx.parent_def_id(did).unwrap();
-                Some((type_did, self.tcx.expect_variant_def(def)))
+                Some((type_did, self.tcx.expect_variant_def(path.def)))
             }
             Def::Struct(type_did) | Def::Union(type_did) => {
-                Some((type_did, self.tcx.expect_variant_def(def)))
+                Some((type_did, self.tcx.expect_variant_def(path.def)))
             }
             Def::TyAlias(did) | Def::AssociatedTy(did) => {
                 match self.tcx.opt_lookup_item_type(did).map(|scheme| &scheme.ty.sty) {
@@ -3517,9 +3515,8 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
           }
           hir::ExprPath(ref opt_qself, ref path) => {
               let opt_ty = opt_qself.as_ref().map(|qself| self.to_ty(qself));
-              let def = self.tcx.expect_def(expr.id);
-              let ty = if def != Def::Err {
-                  self.instantiate_value_path(&path.segments, opt_ty, def, expr.span, id)
+              let ty = if path.def != Def::Err {
+                  self.instantiate_value_path(&path.segments, opt_ty, path.def, expr.span, id)
               } else {
                   self.set_tainted_by_errors();
                   tcx.types.err
@@ -3626,7 +3623,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
           }
           hir::ExprLoop(ref body, _) => {
             self.check_block_no_value(&body);
-            if may_break(tcx, expr.id, &body) {
+            if may_break(expr.id, &body) {
                 // No way to know whether it's diverging because
                 // of a `break` or an outer `break` or `return.
                 self.diverges.set(Diverges::Maybe);
@@ -3851,7 +3848,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
     }
 
     // Resolve an associated value path into an associated constant or method definition.
-    // The newly resolved definition is written into `def_map`.
+    // The newly resolved definition is written into `project_defs`.
     pub fn resolve_def_ufcs(&self,
                             ty: Ty<'tcx>,
                             item_segment: &hir::PathSegment,
@@ -3875,7 +3872,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
         };
 
         // Write back the new resolution.
-        self.tcx().def_map.borrow_mut().insert(node_id, PathResolution::new(def));
+        self.tcx().tables.borrow_mut().project_defs.insert(node_id, def);
         def
     }
 
@@ -3883,7 +3880,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                                   local: &'gcx hir::Local,
                                   init: &'gcx hir::Expr) -> Ty<'tcx>
     {
-        let ref_bindings = self.tcx.pat_contains_ref_binding(&local.pat);
+        let ref_bindings = local.pat.contains_ref_binding();
 
         let local_ty = self.local_ty(init.span, local.id);
         if let Some(m) = ref_bindings {
@@ -4465,7 +4462,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
 }
 
 // Returns true if b contains a break that can exit from b
-pub fn may_break(tcx: TyCtxt, id: ast::NodeId, b: &hir::Block) -> bool {
+pub fn may_break(id: ast::NodeId, b: &hir::Block) -> bool {
     // First: is there an unlabeled break immediately
     // inside the loop?
     (loop_query(&b, |e| {
@@ -4477,8 +4474,8 @@ pub fn may_break(tcx: TyCtxt, id: ast::NodeId, b: &hir::Block) -> bool {
     // Second: is there a labeled break with label
     // <id> nested anywhere inside the loop?
     (block_query(b, |e| {
-        if let hir::ExprBreak(Some(_)) = e.node {
-            tcx.expect_def(e.id) == Def::Label(id)
+        if let hir::ExprBreak(Some(label)) = e.node {
+            label.loop_id == id
         } else {
             false
         }

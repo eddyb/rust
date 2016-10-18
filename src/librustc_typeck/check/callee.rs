@@ -205,12 +205,16 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                                                      callee_ty);
 
                 if let hir::ExprCall(ref expr, _) = call_expr.node {
-                    let tcx = self.tcx;
-                    if let Some(pr) = tcx.def_map.borrow().get(&expr.id) {
-                        if pr.depth == 0 && pr.base_def != Def::Err {
-                            if let Some(span) = tcx.map.span_if_local(pr.base_def.def_id()) {
-                                err.span_note(span, "defined here");
-                            }
+                    let def = match expr.node {
+                        hir::ExprPath(_, ref path) => path.def,
+                        hir::ExprProject(..) => {
+                            self.tcx.tables().project_defs[&expr.id]
+                        }
+                        _ => Def::Err
+                    };
+                    if def != Def::Err {
+                        if let Some(span) = self.tcx.map.span_if_local(def.def_id()) {
+                            err.span_note(span, "defined here");
                         }
                     }
                 }

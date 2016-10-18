@@ -200,7 +200,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
                        please_inline: bool) -> Option<hir::ViewPath_> {
         match path {
             hir::ViewPathSimple(dst, base) => {
-                if self.maybe_inline_local(id, Some(dst), false, om, please_inline) {
+                if self.maybe_inline_local(id, base.def, Some(dst), false, om, please_inline) {
                     None
                 } else {
                     Some(hir::ViewPathSimple(dst, base))
@@ -208,7 +208,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
             }
             hir::ViewPathList(p, paths) => {
                 let mine = paths.into_iter().filter(|path| {
-                    !self.maybe_inline_local(path.node.id, path.node.rename,
+                    !self.maybe_inline_local(path.id, path.def, path.rename,
                                              false, om, please_inline)
                 }).collect::<hir::HirVec<hir::PathListItem>>();
 
@@ -220,7 +220,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
             }
 
             hir::ViewPathGlob(base) => {
-                if self.maybe_inline_local(id, None, true, om, please_inline) {
+                if self.maybe_inline_local(id, base.def, None, true, om, please_inline) {
                     None
                 } else {
                     Some(hir::ViewPathGlob(base))
@@ -239,8 +239,13 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
     /// and follows different rules.
     ///
     /// Returns true if the target has been inlined.
-    fn maybe_inline_local(&mut self, id: ast::NodeId, renamed: Option<ast::Name>,
-                  glob: bool, om: &mut Module, please_inline: bool) -> bool {
+    fn maybe_inline_local(&mut self,
+                          id: ast::NodeId,
+                          def: Def,
+                          renamed: Option<ast::Name>,
+                          glob: bool,
+                          om: &mut Module,
+                          please_inline: bool) -> bool {
 
         fn inherits_doc_hidden(cx: &core::DocContext, mut node: ast::NodeId) -> bool {
             while let Some(id) = cx.map.get_enclosing_scope(node) {
@@ -260,7 +265,6 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
             Some(tcx) => tcx,
             None => return false
         };
-        let def = tcx.expect_def(id);
         let def_did = def.def_id();
 
         let use_attrs = tcx.map.attrs(id).clean(self.cx);

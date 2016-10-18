@@ -488,8 +488,13 @@ impl<'a, 'gcx, 'tcx> MemCategorizationContext<'a, 'gcx, 'tcx> {
             }
           }
 
-          hir::ExprPath(..) | hir::ExprProject(..) => {
-            self.cat_def(expr.id, expr.span, expr_ty, self.tcx().expect_def(expr.id))
+          hir::ExprPath(_, ref path) => {
+            self.cat_def(expr.id, expr.span, expr_ty, path.def)
+          }
+
+          hir::ExprProject(..) => {
+            let def = self.tcx().tables().project_defs[&expr.id];
+            self.cat_def(expr.id, expr.span, expr_ty, def)
           }
 
           hir::ExprType(ref e, _) => {
@@ -1064,24 +1069,31 @@ impl<'a, 'gcx, 'tcx> MemCategorizationContext<'a, 'gcx, 'tcx> {
 
         // Note: This goes up here (rather than within the PatKind::TupleStruct arm
         // alone) because PatKind::Struct can also refer to variants.
-        let cmt = match self.tcx().expect_def_or_none(pat.id) {
-            Some(Def::Err) => return Err(()),
-            Some(Def::Variant(variant_did)) |
-            Some(Def::VariantCtor(variant_did, ..)) => {
-                // univariant enums do not need downcasts
-                let enum_did = self.tcx().parent_def_id(variant_did).unwrap();
-                if !self.tcx().lookup_adt_def(enum_did).is_univariant() {
-                    self.cat_downcast(pat, cmt.clone(), cmt.ty, variant_did)
-                } else {
-                    cmt
+        let cmt = match pat.node {
+            PatKind::Path(_, ref path) |
+            PatKind::TupleStruct(ref path, ..) |
+            PatKind::Struct(ref path, ..) => {
+                match path.def {
+                    Def::Err => return Err(()),
+                    Def::Variant(variant_did) |
+                    Def::VariantCtor(variant_did, ..) => {
+                        // univariant enums do not need downcasts
+                        let enum_did = self.tcx().parent_def_id(variant_did).unwrap();
+                        if !self.tcx().lookup_adt_def(enum_did).is_univariant() {
+                            self.cat_downcast(pat, cmt.clone(), cmt.ty, variant_did)
+                        } else {
+                            cmt
+                        }
+                    }
+                    _ => cmt
                 }
             }
             _ => cmt
         };
 
         match pat.node {
-          PatKind::TupleStruct(_, ref subpats, ddpos) => {
-            let expected_len = match self.tcx().expect_def(pat.id) {
+          PatKind::TupleStruct(ref path, ref subpats, ddpos) => {
+            let expected_len = match path.def {
                 Def::VariantCtor(def_id, CtorKind::Fn) => {
                     let enum_def = self.tcx().parent_def_id(def_id).unwrap();
                     self.tcx().lookup_adt_def(enum_def).variant_with_id(def_id).fields.len()

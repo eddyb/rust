@@ -1387,7 +1387,7 @@ impl<'a, 'gcx, 'tcx> Rebuilder<'a, 'gcx, 'tcx> {
                     ty_queue.push(&mut_ty.ty);
                 }
                 hir::TyPath(ref maybe_qself, ref path) => {
-                    match self.tcx.expect_def(cur_ty.id) {
+                    match path.def {
                         Def::Enum(did) | Def::TyAlias(did) |
                         Def::Struct(did) | Def::Union(did) => {
                             let generics = self.tcx.lookup_generics(did);
@@ -1567,6 +1567,7 @@ impl<'a, 'gcx, 'tcx> Rebuilder<'a, 'gcx, 'tcx> {
         hir::Path {
             span: path.span,
             global: path.global,
+            def: path.def,
             segments: new_segs.into()
         }
     }

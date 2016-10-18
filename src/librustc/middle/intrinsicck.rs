@@ -161,9 +161,8 @@ impl<'a, 'tcx, 'v> Visitor<'v> for ItemVisitor<'a, 'tcx> {
 impl<'a, 'gcx, 'tcx, 'v> Visitor<'v> for ExprVisitor<'a, 'gcx, 'tcx> {
     fn visit_expr(&mut self, expr: &hir::Expr) {
         let def = match expr.node {
-            hir::ExprPath(..) | hir::ExprProject(..) => {
-                self.infcx.tcx.expect_def(expr.id)
-            }
+            hir::ExprPath(_, ref path) => path.def,
+            hir::ExprProject(..) => self.infcx.tcx.tables().project_defs[&expr.id],
             _ => Def::Err
         };
         match def {

@@ -66,27 +66,27 @@ struct ReachEverythingInTheInterfaceVisitor<'b, 'a: 'b, 'tcx: 'a> {
 
 impl<'a, 'tcx> EmbargoVisitor<'a, 'tcx> {
     fn ty_level(&self, ty: &hir::Ty) -> Option<AccessLevel> {
-        match ty.node {
-            hir::TyPath(..) | hir::TyProject(..) => {
-                match self.tcx.expect_def(ty.id) {
-                    Def::PrimTy(..) | Def::SelfTy(..) | Def::TyParam(..) => {
-                        Some(AccessLevel::Public)
-                    }
-                    def => {
-                        if let Some(node_id) = self.tcx.map.as_local_node_id(def.def_id()) {
-                            self.get(node_id)
-                        } else {
-                            Some(AccessLevel::Public)
-                        }
-                    }
+        let def = match ty.node {
+            hir::TyPath(_, ref path) => path.def,
+            hir::TyProject(..) => self.tcx.tables().project_defs[&ty.id],
+            _ => return Some(AccessLevel::Public)
+        };
+        match def {
+            Def::PrimTy(..) | Def::SelfTy(..) | Def::TyParam(..) => {
+                Some(AccessLevel::Public)
+            }
+            _ => {
+                if let Some(node_id) = self.tcx.map.as_local_node_id(def.def_id()) {
+                    self.get(node_id)
+                } else {
+                    Some(AccessLevel::Public)
                 }
             }
-            _ => Some(AccessLevel::Public)
         }
     }
 
     fn trait_level(&self, trait_ref: &hir::TraitRef) -> Option<AccessLevel> {
-        let did = self.tcx.expect_def(trait_ref.ref_id).def_id();
+        let did = trait_ref.path.def.def_id();
         if let Some(node_id) = self.tcx.map.as_local_node_id(did) {
             self.get(node_id)
         } else {
@@ -320,13 +320,16 @@ impl<'b, 'a, 'tcx: 'a> ReachEverythingInTheInterfaceVisitor<'b, 'a, 'tcx> {
 
 impl<'b, 'a, 'tcx: 'a, 'v> Visitor<'v> for ReachEverythingInTheInterfaceVisitor<'b, 'a, 'tcx> {
     fn visit_ty(&mut self, ty: &hir::Ty) {
-        let path_segment = match ty.node {
-            hir::TyPath(_, ref path) => path.segments.last(),
-            hir::TyProject(_, ref segment) => Some(&**segment),
+        let def_and_segment = match ty.node {
+            hir::TyPath(_, ref path) => {
+                Some((path.def, path.segments.last().unwrap()))
+            }
+            hir::TyProject(_, ref segment) => {
+                Some((self.ev.tcx.tables().project_defs[&ty.id], &**segment))
+            }
             _ => None
         };
-        if let Some(segment) = path_segment {
-            let def = self.ev.tcx.expect_def(ty.id);
+        if let Some((def, segment)) = def_and_segment {
             match def {
                 Def::Struct(def_id) | Def::Union(def_id) | Def::Enum(def_id) |
                 Def::TyAlias(def_id) | Def::Trait(def_id) | Def::AssociatedTy(def_id) => {
@@ -357,7 +360,7 @@ impl<'b, 'a, 'tcx: 'a, 'v> Visitor<'v> for ReachEverythingInTheInterfaceVisitor<
     }
 
     fn visit_trait_ref(&mut self, trait_ref: &hir::TraitRef) {
-        let def_id = self.ev.tcx.expect_def(trait_ref.ref_id).def_id();
+        let def_id = trait_ref.path.def.def_id();
         if let Some(node_id) = self.ev.tcx.map.as_local_node_id(def_id) {
             let item = self.ev.tcx.map.expect_item(node_id);
             self.ev.update(item.id, Some(AccessLevel::Reachable));
@@ -439,9 +442,9 @@ impl<'a, 'tcx, 'v> Visitor<'v> for PrivacyVisitor<'a, 'tcx> {
                 let method = self.tcx.tables().method_map[&method_call];
                 self.check_method(expr.span, method.def_id);
             }
-            hir::ExprStruct(_, ref expr_fields, _) => {
+            hir::ExprStruct(ref path, ref expr_fields, _) => {
                 let adt = self.tcx.tables().expr_ty(expr).ty_adt_def().unwrap();
-                let variant = adt.variant_of_def(self.tcx.expect_def(expr.id));
+                let variant = adt.variant_of_def(path.def);
                 // RFC 736: ensure all unmentioned fields are visible.
                 // Rather than computing the set of unmentioned fields
                 // (i.e. `all_fields - fields`), just check them all,
@@ -459,9 +462,9 @@ impl<'a, 'tcx, 'v> Visitor<'v> for PrivacyVisitor<'a, 'tcx> {
                     }
                 }
             }
-            hir::ExprPath(..) => {
-                if let def @ Def::StructCtor(_, CtorKind::Fn) = self.tcx.expect_def(expr.id) {
-                    let adt_def = self.tcx.expect_variant_def(def);
+            hir::ExprPath(_, ref path) => {
+                if let Def::StructCtor(_, CtorKind::Fn) = path.def {
+                    let adt_def = self.tcx.expect_variant_def(path.def);
                     let private_indexes = adt_def.fields.iter().enumerate().filter(|&(_, field)| {
                         !field.vis.is_accessible_from(self.curitem, &self.tcx.map)
                     }).map(|(i, _)| i).collect::<Vec<_>>();
@@ -500,9 +503,9 @@ impl<'a, 'tcx, 'v> Visitor<'v> for PrivacyVisitor<'a, 'tcx> {
         if self.in_foreign { return }
 
         match pattern.node {
-            PatKind::Struct(_, ref fields, _) => {
+            PatKind::Struct(ref path, ref fields, _) => {
                 let adt = self.tcx.tables().pat_ty(pattern).ty_adt_def().unwrap();
-                let variant = adt.variant_of_def(self.tcx.expect_def(pattern.id));
+                let variant = adt.variant_of_def(path.def);
                 for field in fields {
                     self.check_field(field.span, adt, variant.field_named(field.node.name));
                 }
@@ -562,8 +565,8 @@ struct ObsoleteCheckTypeForPrivatenessVisitor<'a, 'b: 'a, 'tcx: 'b> {
 }
 
 impl<'a, 'tcx> ObsoleteVisiblePrivateTypesVisitor<'a, 'tcx> {
-    fn path_is_private_type(&self, path_id: ast::NodeId) -> bool {
-        let did = match self.tcx.expect_def(path_id) {
+    fn path_is_private_type(&self, path: &hir::Path) -> bool {
+        let did = match path.def {
             Def::PrimTy(..) | Def::SelfTy(..) => return false,
             def => def.def_id(),
         };
@@ -591,7 +594,7 @@ impl<'a, 'tcx> ObsoleteVisiblePrivateTypesVisitor<'a, 'tcx> {
     fn check_ty_param_bound(&mut self,
                             ty_param_bound: &hir::TyParamBound) {
         if let hir::TraitTyParamBound(ref trait_ref, _) = *ty_param_bound {
-            if self.path_is_private_type(trait_ref.trait_ref.ref_id) {
+            if self.path_is_private_type(&trait_ref.trait_ref.path) {
                 self.old_error_set.insert(trait_ref.trait_ref.ref_id);
             }
         }
@@ -604,14 +607,17 @@ impl<'a, 'tcx> ObsoleteVisiblePrivateTypesVisitor<'a, 'tcx> {
 
 impl<'a, 'b, 'tcx, 'v> Visitor<'v> for ObsoleteCheckTypeForPrivatenessVisitor<'a, 'b, 'tcx> {
     fn visit_ty(&mut self, ty: &hir::Ty) {
+        if let hir::TyPath(_, ref path) = ty.node {
+            if self.inner.path_is_private_type(path) {
+                self.contains_private = true;
+                // found what we're looking for so let's stop
+                // working.
+                return
+            }
+        }
         match ty.node {
             hir::TyPath(..) | hir::TyProject(..) => {
-                if self.inner.path_is_private_type(ty.id) {
-                    self.contains_private = true;
-                    // found what we're looking for so let's stop
-                    // working.
-                    return
-                } else if self.at_outer_type {
+                if self.at_outer_type {
                     self.outer_type_is_public_path = true;
                 }
             }
@@ -684,7 +690,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for ObsoleteVisiblePrivateTypesVisitor<'a, 'tcx> 
                 let not_private_trait =
                     trait_ref.as_ref().map_or(true, // no trait counts as public trait
                                               |tr| {
-                        let did = self.tcx.expect_def(tr.ref_id).def_id();
+                        let did = tr.path.def.def_id();
 
                         if let Some(node_id) = self.tcx.map.as_local_node_id(did) {
                             self.trait_is_public(node_id)
@@ -843,8 +849,8 @@ impl<'a, 'tcx, 'v> Visitor<'v> for ObsoleteVisiblePrivateTypesVisitor<'a, 'tcx> 
 
     fn visit_ty(&mut self, t: &hir::Ty) {
         match t.node {
-            hir::TyPath(..) | hir::TyProject(..) => {
-                if self.path_is_private_type(t.id) {
+            hir::TyPath(_, ref path) => {
+                if self.path_is_private_type(path) {
                     self.old_error_set.insert(t.id);
                 }
             }
@@ -937,13 +943,17 @@ impl<'a, 'tcx: 'a> SearchInterfaceForPrivateItemsVisitor<'a, 'tcx> {
 
 impl<'a, 'tcx: 'a, 'v> Visitor<'v> for SearchInterfaceForPrivateItemsVisitor<'a, 'tcx> {
     fn visit_ty(&mut self, ty: &hir::Ty) {
-        let path_segment = match ty.node {
-            hir::TyPath(_, ref path) => path.segments.last(),
-            hir::TyProject(_, ref segment) => Some(&**segment),
+        let def_and_segment = match ty.node {
+            hir::TyPath(_, ref path) => {
+                Some((path.def, path.segments.last().unwrap()))
+            }
+            hir::TyProject(_, ref segment) => {
+                Some((self.tcx.tables().project_defs[&ty.id], &**segment))
+            }
             _ => None
         };
-        if let Some(segment) = path_segment {
-            match self.tcx.expect_def(ty.id) {
+        if let Some((def, segment)) = def_and_segment {
+            match def {
                 Def::PrimTy(..) | Def::SelfTy(..) | Def::TyParam(..) => {
                     // Public
                 }
@@ -1001,7 +1011,7 @@ impl<'a, 'tcx: 'a, 'v> Visitor<'v> for SearchInterfaceForPrivateItemsVisitor<'a,
 
     fn visit_trait_ref(&mut self, trait_ref: &hir::TraitRef) {
         // Non-local means public (private items can't leave their crate, modulo bugs)
-        let def_id = self.tcx.expect_def(trait_ref.ref_id).def_id();
+        let def_id = trait_ref.path.def.def_id();
         if let Some(node_id) = self.tcx.map.as_local_node_id(def_id) {
             let item = self.tcx.map.expect_item(node_id);
             let vis = ty::Visibility::from_hir(&item.vis, node_id, self.tcx);
