@@ -76,7 +76,7 @@ impl<'patcx, 'cx, 'gcx, 'tcx> PatCx<'patcx, 'cx, 'gcx, 'tcx> {
                 PatternKind::Range { lo: lo, hi: hi }
             },
 
-            PatKind::Path(..) => {
+            PatKind::Path(..) | PatKind::Project(..) => {
                 match self.cx.tcx.expect_def(pat.id) {
                     Def::Const(def_id) | Def::AssociatedConst(def_id) => {
                         let tcx = self.cx.tcx.global_tcx();

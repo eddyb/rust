@@ -414,9 +414,13 @@ pub fn walk_ty<'v, V: Visitor<'v>>(visitor: &mut V, typ: &'v Ty) {
         }
         TyPath(ref maybe_qself, ref path) => {
             if let Some(ref qself) = *maybe_qself {
-                visitor.visit_ty(&qself.ty);
+                visitor.visit_ty(qself);
             }
             visitor.visit_path(path, typ.id);
+        }
+        TyProject(ref qself, ref segment) => {
+            visitor.visit_ty(qself);
+            visitor.visit_path_segment(typ.span, segment);
         }
         TyObjectSum(ref ty, ref bounds) => {
             visitor.visit_ty(ty);
@@ -492,9 +496,13 @@ pub fn walk_pat<'v, V: Visitor<'v>>(visitor: &mut V, pattern: &'v Pat) {
         }
         PatKind::Path(ref opt_qself, ref path) => {
             if let Some(ref qself) = *opt_qself {
-                visitor.visit_ty(&qself.ty);
+                visitor.visit_ty(qself);
             }
             visitor.visit_path(path, pattern.id)
+        }
+        PatKind::Project(ref qself, ref segment) => {
+            visitor.visit_ty(qself);
+            visitor.visit_path_segment(pattern.span, segment);
         }
         PatKind::Struct(ref path, ref fields, _) => {
             visitor.visit_path(path, pattern.id);
@@ -835,9 +843,13 @@ pub fn walk_expr<'v, V: Visitor<'v>>(visitor: &mut V, expression: &'v Expr) {
         }
         ExprPath(ref maybe_qself, ref path) => {
             if let Some(ref qself) = *maybe_qself {
-                visitor.visit_ty(&qself.ty);
+                visitor.visit_ty(qself);
             }
             visitor.visit_path(path, expression.id)
+        }
+        ExprProject(ref qself, ref segment) => {
+            visitor.visit_ty(qself);
+            visitor.visit_path_segment(expression.span, segment);
         }
         ExprBreak(ref opt_sp_name) | ExprAgain(ref opt_sp_name) => {
             walk_opt_sp_name(visitor, opt_sp_name);

@@ -22,6 +22,7 @@ use syntax::ast;
 use syntax::codemap::Spanned;
 use syntax::ptr::P;
 use syntax_pos::Span;
+use rustc_back::slice;
 
 impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
     pub fn check_pat(&self, pat: &'gcx hir::Pat, expected: Ty<'tcx>) {
@@ -151,8 +152,14 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                 self.check_pat_tuple_struct(pat, path, &subpats, ddpos, expected)
             }
             PatKind::Path(ref opt_qself, ref path) => {
-                let opt_qself_ty = opt_qself.as_ref().map(|qself| self.to_ty(&qself.ty));
-                self.check_pat_path(pat, opt_qself_ty, path, expected)
+                let opt_ty = opt_qself.as_ref().map(|qself| self.to_ty(qself));
+                let def = tcx.expect_def(pat.id);
+                self.check_pat_path(pat, opt_ty, def, &path.segments, expected)
+            }
+            PatKind::Project(ref qself, ref segment) => {
+                let ty = self.to_ty(qself);
+                let def = self.resolve_def_ufcs(ty, segment, pat.id, pat.span);
+                self.check_pat_path(pat, Some(ty), def, slice::ref_slice(&**segment), expected)
             }
             PatKind::Struct(ref path, ref fields, etc) => {
                 self.check_pat_struct(pat, path, fields, etc, expected)
@@ -518,20 +525,19 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
 
     fn check_pat_path(&self,
                       pat: &hir::Pat,
-                      opt_self_ty: Option<Ty<'tcx>>,
-                      path: &hir::Path,
+                      opt_ty: Option<Ty<'tcx>>,
+                      def: Def,
+                      segments: &[hir::PathSegment],
                       expected: Ty<'tcx>) -> Ty<'tcx>
     {
         let tcx = self.tcx;
         let report_unexpected_def = |def: Def| {
             span_err!(tcx.sess, pat.span, E0533,
                       "expected unit struct/variant or constant, found {} `{}`",
-                      def.kind_name(), path);
+                      def.kind_name(),
+                      hir::print::pat_to_string(pat));
         };
 
-        // Resolve the path and check the definition for errors.
-        let (def, opt_ty, segments) = self.resolve_ty_and_def_ufcs(opt_self_ty, path,
-                                                                   pat.id, pat.span);
         match def {
             Def::Err => {
                 self.set_tainted_by_errors();
@@ -566,24 +572,13 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                 self.check_pat(&pat, tcx.types.err);
             }
         };
-        let report_unexpected_def = |def: Def| {
-            let msg = format!("expected tuple struct/variant, found {} `{}`",
-                              def.kind_name(), path);
-            struct_span_err!(tcx.sess, pat.span, E0164, "{}", msg)
-                .span_label(pat.span, &format!("not a tuple variant or struct")).emit();
-            on_error();
-        };
 
         // Resolve the path and check the definition for errors.
-        let (def, opt_ty, segments) = self.resolve_ty_and_def_ufcs(None, path, pat.id, pat.span);
+        let def = tcx.expect_def(pat.id);
         let variant = match def {
             Def::Err => {
                 self.set_tainted_by_errors();
                 on_error();
-                return tcx.types.err;
-            }
-            Def::AssociatedConst(..) | Def::Method(..) => {
-                report_unexpected_def(def);
                 return tcx.types.err;
             }
             Def::VariantCtor(_, CtorKind::Fn) |
@@ -594,7 +589,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
         };
 
         // Type check the path.
-        let pat_ty = self.instantiate_value_path(segments, opt_ty, def, pat.span, pat.id);
+        let pat_ty = self.instantiate_value_path(&path.segments, None, def, pat.span, pat.id);
         // Replace constructor type with constructed type for tuple struct patterns.
         let pat_ty = tcx.no_late_bound_regions(&pat_ty.fn_ret()).expect("expected fn type");
         self.demand_eqtype(pat.span, expected, pat_ty);

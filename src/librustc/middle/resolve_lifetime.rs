@@ -932,7 +932,7 @@ fn insert_late_bound_lifetimes(map: &mut NamedRegionMap,
     impl<'v> Visitor<'v> for ConstrainedCollector {
         fn visit_ty(&mut self, ty: &'v hir::Ty) {
             match ty.node {
-                hir::TyPath(Some(_), _) => {
+                hir::TyPath(Some(_), _) | hir::TyProject(..) => {
                     // ignore lifetimes appearing in associated type
                     // projections, as they are not *constrained*
                     // (defined above)

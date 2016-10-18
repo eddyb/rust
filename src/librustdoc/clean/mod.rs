@@ -1783,7 +1783,19 @@ impl Clean<Type> for hir::Ty {
                 };
                 Type::QPath {
                     name: p.segments.last().unwrap().name.clean(cx),
-                    self_type: box qself.ty.clean(cx),
+                    self_type: box qself.clean(cx),
+                    trait_: box resolve_type(cx, trait_path.clean(cx), self.id)
+                }
+            }
+            TyProject(ref qself, ref segment) => {
+                let trait_path = hir::Path {
+                    span: self.span,
+                    global: false,
+                    segments: vec![].into(),
+                };
+                Type::QPath {
+                    name: segment.name.clean(cx),
+                    self_type: box qself.clean(cx),
                     trait_: box resolve_type(cx, trait_path.clean(cx), self.id)
                 }
             }
@@ -2740,8 +2752,11 @@ fn name_from_pat(p: &hir::Pat) -> String {
         PatKind::Wild => "_".to_string(),
         PatKind::Binding(_, ref p, _) => p.node.to_string(),
         PatKind::TupleStruct(ref p, ..) | PatKind::Path(None, ref p) => path_to_string(p),
-        PatKind::Path(..) => panic!("tried to get argument name from qualified PatKind::Path, \
-                                     which is not allowed in function arguments"),
+        PatKind::Path(Some(_), ..) |
+        PatKind::Project(..) => {
+            panic!("tried to get argument name from qualified pattern path, \
+                    which is not allowed in function arguments");
+        }
         PatKind::Struct(ref name, ref fields, etc) => {
             format!("{} {{ {}{} }}", path_to_string(name),
                 fields.iter().map(|&Spanned { node: ref fp, .. }|

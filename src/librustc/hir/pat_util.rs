@@ -53,7 +53,11 @@ impl<T: ExactSizeIterator> EnumerateAndAdjustIterator for T {
 
 pub fn pat_is_refutable(dm: &DefMap, pat: &hir::Pat) -> bool {
     match pat.node {
-        PatKind::Lit(_) | PatKind::Range(..) | PatKind::Path(Some(..), _) => true,
+        PatKind::Lit(_) |
+        PatKind::Range(..) |
+        PatKind::Path(Some(..), _) |
+        PatKind::Project(..) => true,
+
         PatKind::TupleStruct(..) |
         PatKind::Path(..) |
         PatKind::Struct(..) => {
@@ -69,6 +73,7 @@ pub fn pat_is_refutable(dm: &DefMap, pat: &hir::Pat) -> bool {
 
 pub fn pat_is_const(dm: &DefMap, pat: &hir::Pat) -> bool {
     match pat.node {
+        PatKind::Project(..) => true,
         PatKind::Path(..) => {
             match dm.get(&pat.id).map(|d| d.full_def()) {
                 Some(Def::Const(..)) | Some(Def::AssociatedConst(..)) => true,

@@ -101,6 +101,7 @@ impl<'a, 'tcx> CFGBuilder<'a, 'tcx> {
         match pat.node {
             PatKind::Binding(.., None) |
             PatKind::Path(..) |
+            PatKind::Project(..) |
             PatKind::Lit(..) |
             PatKind::Range(..) |
             PatKind::Wild => {
@@ -360,7 +361,8 @@ impl<'a, 'tcx> CFGBuilder<'a, 'tcx> {
 
             hir::ExprClosure(..) |
             hir::ExprLit(..) |
-            hir::ExprPath(..) => {
+            hir::ExprPath(..) |
+            hir::ExprProject(..) => {
                 self.straightline(expr, pred, None::<hir::Expr>.iter())
             }
         }

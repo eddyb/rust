@@ -16,7 +16,7 @@ enum Foo {
 fn main(){
     foo(|| {
         match Foo::Bar(1) {
-            Foo::Baz(..) => (), //~ ERROR no associated
+            Foo::Baz(..) => (), //~ ERROR unresolved tuple struct/variant `Foo::Baz`
             _ => (),
         }
     });

@@ -532,7 +532,7 @@ fn make_mirror_unadjusted<'a, 'gcx, 'tcx>(cx: &mut Cx<'a, 'gcx, 'tcx>,
             }
         }
 
-        hir::ExprPath(..) => {
+        hir::ExprPath(..) | hir::ExprProject(..) => {
             convert_path_expr(cx, expr)
         }
 

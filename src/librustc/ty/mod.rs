@@ -2054,10 +2054,7 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
     pub fn expr_is_lval(self, expr: &hir::Expr) -> bool {
          match expr.node {
             hir::ExprPath(..) => {
-                // This function can be used during type checking when not all paths are
-                // fully resolved. Partially resolved paths in expressions can only legally
-                // refer to associated items which are always rvalues.
-                match self.expect_resolution(expr.id).base_def {
+                match self.expect_def(expr.id) {
                     Def::Local(..) | Def::Upvar(..) | Def::Static(..) | Def::Err => true,
                     _ => false,
                 }
@@ -2073,6 +2070,10 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
             hir::ExprIndex(..) => {
                 true
             }
+
+            // Partially qualified paths in expressions can only legally
+            // refer to associated items which are always rvalues.
+            hir::ExprProject(..) |
 
             hir::ExprCall(..) |
             hir::ExprMethodCall(..) |

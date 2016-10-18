@@ -3239,7 +3239,7 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
                          node_id: ast::NodeId,
                          span: Span)
                          -> Option<(ty::VariantDef<'tcx>,  Ty<'tcx>)> {
-        let def = self.finish_resolving_struct_path(path, node_id, span);
+        let def = self.tcx().expect_def(node_id);
         let variant = match def {
             Def::Err => {
                 self.set_tainted_by_errors();
@@ -3516,11 +3516,29 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
             }
           }
           hir::ExprPath(ref opt_qself, ref path) => {
-              let opt_self_ty = opt_qself.as_ref().map(|qself| self.to_ty(&qself.ty));
-              let (def, opt_ty, segments) = self.resolve_ty_and_def_ufcs(opt_self_ty, path,
-                                                                         expr.id, expr.span);
+              let opt_ty = opt_qself.as_ref().map(|qself| self.to_ty(qself));
+              let def = self.tcx.expect_def(expr.id);
               let ty = if def != Def::Err {
-                  self.instantiate_value_path(segments, opt_ty, def, expr.span, id)
+                  self.instantiate_value_path(&path.segments, opt_ty, def, expr.span, id)
+              } else {
+                  self.set_tainted_by_errors();
+                  tcx.types.err
+              };
+
+              // We always require that the type provided as the value for
+              // a type parameter outlives the moment of instantiation.
+              self.opt_node_ty_substs(expr.id, |item_substs| {
+                  self.add_wf_bounds(&item_substs.substs, expr);
+              });
+
+              ty
+          }
+          hir::ExprProject(ref qself, ref segment) => {
+              let self_ty = self.to_ty(qself);
+              let def = self.resolve_def_ufcs(self_ty, segment, expr.id, expr.span);
+              let ty = if def != Def::Err {
+                  self.instantiate_value_path(slice::ref_slice(&**segment),
+                                              Some(self_ty), def, expr.span, id)
               } else {
                   self.set_tainted_by_errors();
                   tcx.types.err
@@ -3832,77 +3850,33 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
         }
     }
 
-    // Finish resolving a path in a struct expression or pattern `S::A { .. }` if necessary.
+    // Resolve an associated value path into an associated constant or method definition.
     // The newly resolved definition is written into `def_map`.
-    pub fn finish_resolving_struct_path(&self,
-                                        path: &hir::Path,
-                                        node_id: ast::NodeId,
-                                        span: Span)
-                                        -> Def
+    pub fn resolve_def_ufcs(&self,
+                            ty: Ty<'tcx>,
+                            item_segment: &hir::PathSegment,
+                            node_id: ast::NodeId,
+                            span: Span)
+                            -> Def
     {
-        let path_res = self.tcx().expect_resolution(node_id);
-        if path_res.depth == 0 {
-            // If fully resolved already, we don't have to do anything.
-            path_res.base_def
-        } else {
-            let base_ty_end = path.segments.len() - path_res.depth;
-            let (_ty, def) = AstConv::finish_resolving_def_to_ty(self, self, span,
-                                                                 path_res.base_def,
-                                                                 None,
-                                                                 node_id,
-                                                                 &path.segments[..base_ty_end],
-                                                                 &path.segments[base_ty_end..]);
-            // Write back the new resolution.
-            self.tcx().def_map.borrow_mut().insert(node_id, PathResolution::new(def));
-            def
-        }
-    }
-
-    // Resolve associated value path into a base type and associated constant or method definition.
-    // The newly resolved definition is written into `def_map`.
-    pub fn resolve_ty_and_def_ufcs<'b>(&self,
-                                       opt_self_ty: Option<Ty<'tcx>>,
-                                       path: &'b hir::Path,
-                                       node_id: ast::NodeId,
-                                       span: Span)
-                                       -> (Def, Option<Ty<'tcx>>, &'b [hir::PathSegment])
-    {
-        let path_res = self.tcx().expect_resolution(node_id);
-        if path_res.depth == 0 {
-            // If fully resolved already, we don't have to do anything.
-            (path_res.base_def, opt_self_ty, &path.segments)
-        } else {
-            // Try to resolve everything except for the last segment as a type.
-            let ty_segments = path.segments.split_last().unwrap().1;
-            let base_ty_end = path.segments.len() - path_res.depth;
-            let (ty, _def) = AstConv::finish_resolving_def_to_ty(self, self, span,
-                                                                 path_res.base_def,
-                                                                 opt_self_ty,
-                                                                 node_id,
-                                                                 &ty_segments[..base_ty_end],
-                                                                 &ty_segments[base_ty_end..]);
-
-            // Resolve an associated constant or method on the previously resolved type.
-            let item_segment = path.segments.last().unwrap();
-            let item_name = item_segment.name;
-            let def = match self.resolve_ufcs(span, item_name, ty, node_id) {
-                Ok(def) => def,
-                Err(error) => {
-                    let def = match error {
-                        method::MethodError::PrivateMatch(def) => def,
-                        _ => Def::Err,
-                    };
-                    if item_name != keywords::Invalid.name() {
-                        self.report_method_error(span, ty, item_name, None, error);
-                    }
-                    def
+        let item_name = item_segment.name;
+        let def = match self.resolve_ufcs(span, item_name, ty, node_id) {
+            Ok(def) => def,
+            Err(error) => {
+                let def = match error {
+                    method::MethodError::PrivateMatch(def) => def,
+                    _ => Def::Err,
+                };
+                if item_name != keywords::Invalid.name() {
+                    self.report_method_error(span, ty, item_name, None, error);
                 }
-            };
+                def
+            }
+        };
 
-            // Write back the new resolution.
-            self.tcx().def_map.borrow_mut().insert(node_id, PathResolution::new(def));
-            (def, Some(ty), slice::ref_slice(item_segment))
-        }
+        // Write back the new resolution.
+        self.tcx().def_map.borrow_mut().insert(node_id, PathResolution::new(def));
+        def
     }
 
     pub fn check_decl_initializer(&self,

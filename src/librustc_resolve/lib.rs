@@ -1207,6 +1207,10 @@ impl<'a> hir::lowering::Resolver for Resolver<'a> {
         self.def_map.insert(id, PathResolution::new(def));
     }
 
+    fn clear_resolution(&mut self, id: NodeId) {
+        self.def_map.remove(&id);
+    }
+
     fn definitions(&mut self) -> &mut Definitions {
         &mut self.definitions
     }
@@ -2336,18 +2340,16 @@ impl<'a> Resolver<'a> {
         PathResolution::new(def)
     }
 
-    fn resolve_pattern_path<ExpectedFn>(&mut self,
-                                        pat_id: NodeId,
-                                        qself: Option<&QSelf>,
-                                        path: &Path,
-                                        namespace: Namespace,
-                                        expected_fn: ExpectedFn,
-                                        expected_what: &str)
+    fn finish_pattern_path<ExpectedFn>(&mut self,
+                                       pat_id: NodeId,
+                                       resolution: Result<PathResolution, bool>,
+                                       path: &Path,
+                                       expected_fn: ExpectedFn,
+                                       expected_what: &str)
         where ExpectedFn: FnOnce(Def) -> bool
     {
-        let resolution = if let Some(resolution) = self.resolve_possibly_assoc_item(pat_id,
-                                                                        qself, path, namespace) {
-            if resolution.depth == 0 {
+        let resolution = match resolution {
+            Ok(resolution) if resolution.depth == 0 => {
                 if expected_fn(resolution.base_def) || resolution.base_def == Def::Err {
                     resolution
                 } else {
@@ -2359,26 +2361,26 @@ impl<'a> Resolver<'a> {
                     );
                     err_path_resolution()
                 }
-            } else {
+            }
+            Ok(resolution) => {
                 // Not fully resolved associated item `T::A::B` or `<T as Tr>::A::B`
                 // or `<T>::A::B`. If `B` should be resolved in value namespace then
                 // it needs to be added to the trait map.
-                if namespace == ValueNS {
-                    let item_name = path.segments.last().unwrap().identifier.name;
-                    let traits = self.get_traits_containing_item(item_name);
-                    self.trait_map.insert(pat_id, traits);
-                }
+                let item_name = path.segments.last().unwrap().identifier.name;
+                let traits = self.get_traits_containing_item(item_name);
+                self.trait_map.insert(pat_id, traits);
                 resolution
             }
-        } else {
-            if let Err(false) = self.resolve_path(pat_id, path, 0, namespace) {
-                resolve_error(
-                    self,
-                    path.span,
-                    ResolutionError::PatPathUnresolved(expected_what, path)
-                );
+            Err(reported) => {
+                if !reported {
+                    resolve_error(
+                        self,
+                        path.span,
+                        ResolutionError::PatPathUnresolved(expected_what, path)
+                    );
+                }
+                err_path_resolution()
             }
-            err_path_resolution()
         };
 
         self.record_def(pat_id, resolution);
@@ -2439,18 +2441,14 @@ impl<'a> Resolver<'a> {
                     self.record_def(pat.id, resolution);
                 }
 
-                PatKind::TupleStruct(ref path, ..) => {
-                    self.resolve_pattern_path(pat.id, None, path, ValueNS, |def| {
-                        match def {
-                            Def::StructCtor(_, CtorKind::Fn) |
-                            Def::VariantCtor(_, CtorKind::Fn) => true,
-                            _ => false,
-                        }
-                    }, "tuple struct/variant");
-                }
-
                 PatKind::Path(ref qself, ref path) => {
-                    self.resolve_pattern_path(pat.id, qself.as_ref(), path, ValueNS, |def| {
+                    let resolution = self.resolve_possibly_assoc_item(pat.id,
+                                                                      qself.as_ref(),
+                                                                      path, ValueNS);
+                    let resolution = resolution.map_or_else(|| {
+                        self.resolve_path(pat.id, path, 0, ValueNS)
+                    }, Ok);
+                    self.finish_pattern_path(pat.id, resolution, path, |def| {
                         match def {
                             Def::StructCtor(_, CtorKind::Const) |
                             Def::VariantCtor(_, CtorKind::Const) |
@@ -2460,11 +2458,23 @@ impl<'a> Resolver<'a> {
                     }, "unit struct/variant or constant");
                 }
 
+                PatKind::TupleStruct(ref path, ..) => {
+                    let resolution = self.resolve_path(pat.id, path, 0, ValueNS);
+                    self.finish_pattern_path(pat.id, resolution, path, |def| {
+                        match def {
+                            Def::StructCtor(_, CtorKind::Fn) |
+                            Def::VariantCtor(_, CtorKind::Fn) => true,
+                            _ => false,
+                        }
+                    }, "tuple struct/variant");
+                }
+
                 PatKind::Struct(ref path, ..) => {
-                    self.resolve_pattern_path(pat.id, None, path, TypeNS, |def| {
+                    let resolution = self.resolve_path(pat.id, path, 0, TypeNS);
+                    self.finish_pattern_path(pat.id, resolution, path, |def| {
                         match def {
                             Def::Struct(..) | Def::Union(..) | Def::Variant(..) |
-                            Def::TyAlias(..) | Def::AssociatedTy(..) => true,
+                            Def::TyAlias(..) => true,
                             _ => false,
                         }
                     }, "variant, struct or type alias");

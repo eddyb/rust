@@ -20,13 +20,13 @@ impl Tr for S {
 
 fn f<T: Tr>() {
     match S {
-        T::A {} => {} //~ ERROR `T::A` does not name a struct or a struct variant
+        T::A {} => {} //~ ERROR failed to resolve. Use of undeclared type or module `T`
     }
 }
 
 fn g<T: Tr<A = S>>() {
     match S {
-        T::A {} => {} //~ ERROR `T::A` does not name a struct or a struct variant
+        T::A {} => {} //~ ERROR failed to resolve. Use of undeclared type or module `T`
     }
 }
 

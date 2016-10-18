@@ -324,10 +324,17 @@ pub fn const_expr_to_pat<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
             PatKind::Slice(pats, None, hir::HirVec::new())
         }
 
-        hir::ExprPath(_, ref path) => {
+        hir::ExprPath(..) | hir::ExprProject(..) => {
             match tcx.expect_def(expr.id) {
                 Def::StructCtor(_, CtorKind::Const) |
-                Def::VariantCtor(_, CtorKind::Const) => PatKind::Path(None, path.clone()),
+                Def::VariantCtor(_, CtorKind::Const) => {
+                    match expr.node {
+                        hir::ExprPath(_, ref path) => {
+                            PatKind::Path(None, path.clone())
+                        }
+                        _ => bug!()
+                    }
+                }
                 Def::Const(def_id) | Def::AssociatedConst(def_id) => {
                     let substs = Some(tcx.tables().node_id_item_substs(expr.id)
                         .unwrap_or_else(|| tcx.intern_substs(&[])));
@@ -782,14 +789,14 @@ pub fn eval_const_expr_partial<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
             Err(kind) => return Err(ConstEvalErr { span: e.span, kind: kind }),
         }
       }
-      hir::ExprPath(..) => {
+      hir::ExprPath(..) | hir::ExprProject(..) => {
           // This function can be used before type checking when not all paths are fully resolved.
           // FIXME: There's probably a better way to make sure we don't panic here.
-          let resolution = tcx.expect_resolution(e.id);
-          if resolution.depth != 0 {
-              signal!(e, UnresolvedPath);
-          }
-          match resolution.base_def {
+          let def = match tcx.expect_def_or_none(e.id) {
+              Some(def) => def,
+              None => signal!(e, UnresolvedPath)
+          };
+          match def {
               Def::Const(def_id) |
               Def::AssociatedConst(def_id) => {
                   let substs = if let ExprTypeChecked = ty_hint {

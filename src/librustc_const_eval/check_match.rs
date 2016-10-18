@@ -489,34 +489,34 @@ impl<'a, 'tcx> StaticInliner<'a, 'tcx> {
 
 impl<'a, 'tcx> StaticInliner<'a, 'tcx> {
     fn fold_pat(&mut self, pat: P<Pat>) -> P<Pat> {
-        match pat.node {
+        let const_def_id = match pat.node {
             PatKind::Path(..) => {
                 match self.tcx.expect_def(pat.id) {
-                    Def::AssociatedConst(did) | Def::Const(did) => {
-                        let substs = Some(self.tcx.tables().node_id_item_substs(pat.id)
-                            .unwrap_or_else(|| self.tcx.intern_substs(&[])));
-                        if let Some((const_expr, _)) = lookup_const_by_id(self.tcx, did, substs) {
-                            match const_expr_to_pat(self.tcx, const_expr, pat.id, pat.span) {
-                                Ok(new_pat) => return new_pat,
-                                Err(def_id) => {
-                                    self.failed = true;
-                                    self.tcx.sess.span_err(
-                                        pat.span,
-                                        &format!("constants of the type `{}` \
-                                                  cannot be used in patterns",
-                                                 self.tcx.item_path_str(def_id)));
-                                }
-                            }
-                        } else {
-                            self.failed = true;
-                            span_err!(self.tcx.sess, pat.span, E0158,
-                                "statics cannot be referenced in patterns");
-                        }
-                    }
-                    _ => {}
+                    Def::AssociatedConst(did) | Def::Const(did) => Some(did),
+                    _ => None
                 }
             }
-            _ => {}
+            PatKind::Project(..) => Some(self.tcx.expect_def(pat.id).def_id()),
+            _ => None
+        };
+        if let Some(did) = const_def_id {
+            let substs = Some(self.tcx.tables().node_id_item_substs(pat.id)
+                .unwrap_or_else(|| self.tcx.intern_substs(&[])));
+            if let Some((const_expr, _)) = lookup_const_by_id(self.tcx, did, substs) {
+                match const_expr_to_pat(self.tcx, const_expr, pat.id, pat.span) {
+                    Ok(new_pat) => return new_pat,
+                    Err(def_id) => {
+                        self.failed = true;
+                        self.tcx.sess.span_err(pat.span,
+                            &format!("constants of the type `{}` cannot be used in patterns",
+                                     self.tcx.item_path_str(def_id)));
+                    }
+                }
+            } else {
+                self.failed = true;
+                span_err!(self.tcx.sess, pat.span, E0158,
+                          "statics cannot be referenced in patterns");
+            }
         }
 
         pat.map(|Pat { id, node, span }| {
@@ -553,7 +553,8 @@ impl<'a, 'tcx> StaticInliner<'a, 'tcx> {
                 PatKind::Wild |
                 PatKind::Lit(_) |
                 PatKind::Range(..) |
-                PatKind::Path(..) => node
+                PatKind::Path(..) |
+                PatKind::Project(..) => node
             };
             Pat {
                 id: id,
@@ -808,7 +809,8 @@ fn pat_constructors(cx: &MatchCheckCtxt, p: &Pat,
                     left_ty: Ty, max_slice_length: usize) -> Vec<Constructor> {
     let pat = raw_pat(p);
     match pat.node {
-        PatKind::Struct(..) | PatKind::TupleStruct(..) | PatKind::Path(..) =>
+        PatKind::Struct(..) | PatKind::TupleStruct(..) |
+        PatKind::Path(..) =>
             match cx.tcx.expect_def(pat.id) {
                 Def::Variant(id) | Def::VariantCtor(id, ..) => vec![Variant(id)],
                 Def::Struct(..) | Def::StructCtor(..) | Def::Union(..) |
@@ -817,6 +819,8 @@ fn pat_constructors(cx: &MatchCheckCtxt, p: &Pat,
                     span_bug!(pat.span, "const pattern should've been rewritten"),
                 def => span_bug!(pat.span, "pat_constructors: unexpected definition {:?}", def),
             },
+        PatKind::Project(..) =>
+            span_bug!(pat.span, "const pattern should've been rewritten"),
         PatKind::Lit(ref expr) =>
             vec![ConstantValue(eval_const_expr(cx.tcx, &expr))],
         PatKind::Range(ref lo, ref hi) =>
@@ -927,6 +931,10 @@ pub fn specialize<'a, 'b, 'tcx>(
                 Def::StructCtor(_, CtorKind::Const) => Some(Vec::new()),
                 def => span_bug!(pat_span, "specialize: unexpected definition: {:?}", def),
             }
+        }
+
+        PatKind::Project(..) => {
+            span_bug!(pat_span, "const pattern should've been rewritten");
         }
 
         PatKind::TupleStruct(_, ref args, ddpos) => {

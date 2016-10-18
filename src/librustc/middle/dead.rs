@@ -239,6 +239,9 @@ impl<'a, 'tcx, 'v> Visitor<'v> for MarkSymbolVisitor<'a, 'tcx> {
 
     fn visit_expr(&mut self, expr: &hir::Expr) {
         match expr.node {
+            hir::ExprProject(..) => {
+                self.lookup_and_handle_definition(expr.id);
+            }
             hir::ExprMethodCall(..) => {
                 self.lookup_and_handle_method(expr.id);
             }

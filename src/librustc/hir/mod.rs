@@ -523,7 +523,8 @@ impl Pat {
             PatKind::Lit(_) |
             PatKind::Range(..) |
             PatKind::Binding(..) |
-            PatKind::Path(..) => {
+            PatKind::Path(..) |
+            PatKind::Project(..) => {
                 true
             }
         }
@@ -573,9 +574,13 @@ pub enum PatKind {
     /// 0 <= position <= subpats.len()
     TupleStruct(Path, HirVec<P<Pat>>, Option<usize>),
 
-    /// A possibly qualified path pattern.
-    /// Such pattern can be resolved to a unit struct/variant or a constant.
-    Path(Option<QSelf>, Path),
+    /// A path pattern for an unit struct/variant or a constant.
+    /// If an associated constant, can be either fully-qualified,
+    /// (`<T as Trait>::ASSOC`) or not (`Trait::ASSOC`).
+    Path(Option<P<Ty>>, Path),
+
+    /// A type-qualified (`<T>::ASSOC`) associated constant pattern.
+    Project(P<Ty>, P<PathSegment>),
 
     /// A tuple pattern `(a, b)`.
     /// If the `..` pattern fragment is present, then `Option<usize>` denotes its position.
@@ -929,12 +934,21 @@ pub enum Expr_ {
     /// An indexing operation (`foo[2]`)
     ExprIndex(P<Expr>, P<Expr>),
 
-    /// Variable reference, possibly containing `::` and/or type
-    /// parameters, e.g. foo::bar::<baz>.
+    /// Path to a definition, possibly containing `::`
+    /// and/or type parameters, e.g. foo::bar::<baz>.
     ///
-    /// Optionally "qualified",
-    /// e.g. `<HirVec<T> as SomeTrait>::SomeType`.
-    ExprPath(Option<QSelf>, Path),
+    /// Optionally "fully-qualified" with a `Self`
+    /// type if it points to an associated item,
+    /// e.g. `<HirVec<T> as SomeTrait>::method`.
+    ExprPath(Option<P<Ty>>, Path),
+
+    /// Type-qualified associated item path,
+    /// e.g. `<T>::default` and `<T>::CONST`.
+    /// UFCS source paths can desugar into this, with
+    /// `Vec::new` turning into `<Vec>::new`, and
+    /// `T::X::Y::method` into `<<<T>::X>::Y>::method`,
+    /// the inner nodes being each one `TyProject`.
+    ExprProject(P<Ty>, P<PathSegment>),
 
     /// A referencing operation (`&a` or `&mut a`)
     ExprAddrOf(Mutability, P<Expr>),
@@ -959,24 +973,6 @@ pub enum Expr_ {
     /// For example, `[1; 5]`. The first expression is the element
     /// to be repeated; the second is the number of times to repeat it.
     ExprRepeat(P<Expr>, P<Expr>),
-}
-
-/// The explicit Self type in a "qualified path". The actual
-/// path, including the trait and the associated item, is stored
-/// separately. `position` represents the index of the associated
-/// item qualified with this Self type.
-///
-///     <HirVec<T> as a::b::Trait>::AssociatedItem
-///      ^~~~~     ~~~~~~~~~~~~~~^
-///      ty        position = 3
-///
-///     <HirVec<T>>::AssociatedItem
-///      ^~~~~    ^
-///      ty       position = 0
-#[derive(Clone, PartialEq, Eq, RustcEncodable, RustcDecodable, Hash, Debug)]
-pub struct QSelf {
-    pub ty: P<Ty>,
-    pub position: usize,
 }
 
 /// Hints at the original code for a `match _ { .. }`
@@ -1131,10 +1127,20 @@ pub enum Ty_ {
     /// A tuple (`(A, B, C, D,...)`)
     TyTup(HirVec<P<Ty>>),
     /// A path (`module::module::...::Type`), optionally
-    /// "qualified", e.g. `<HirVec<T> as SomeTrait>::SomeType`.
+    /// "fully-qualified" with a `Self` type for associated
+    /// types, e.g. `<HirVec<T> as SomeTrait>::SomeType`.
     ///
     /// Type parameters are stored in the Path itself
-    TyPath(Option<QSelf>, Path),
+    TyPath(Option<P<Ty>>, Path),
+
+    /// Type-qualified associated type path,
+    /// e.g. `<T>::Target`.
+    /// UFCS source paths can desugar into this, with
+    /// `T::Target` turning into `<T>::Target`, and
+    /// `T::X::Y::Z` into `<<<T>::X>::Y>::Z`,
+    /// the inner nodes being each one `TyProject`.
+    TyProject(P<Ty>, P<PathSegment>),
+
     /// Something like `A+B`. Note that `B` must always be a path.
     TyObjectSum(P<Ty>, TyParamBounds),
     /// A type like `for<'a> Foo<&'a Bar>`

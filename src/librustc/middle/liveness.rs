@@ -444,7 +444,7 @@ fn visit_arm(ir: &mut IrMaps, arm: &hir::Arm) {
 fn visit_expr(ir: &mut IrMaps, expr: &Expr) {
     match expr.node {
       // live nodes required for uses or definitions of variables:
-      hir::ExprPath(..) => {
+      hir::ExprPath(..) | hir::ExprProject(..) => {
         let def = ir.tcx.expect_def(expr.id);
         debug!("expr {}: path that leads to {:?}", expr.id, def);
         if let Def::Local(..) = def {
@@ -1172,7 +1172,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
             self.propagate_through_exprs(inputs, succ)
           }
 
-          hir::ExprLit(..) => {
+          hir::ExprLit(..) | hir::ExprProject(..) => {
             succ
           }
 
@@ -1236,7 +1236,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
         // just ignore such cases and treat them as reads.
 
         match expr.node {
-            hir::ExprPath(..) => succ,
+            hir::ExprPath(..) | hir::ExprProject(..) => succ,
             hir::ExprField(ref e, _) => self.propagate_through_expr(&e, succ),
             hir::ExprTupField(ref e, _) => self.propagate_through_expr(&e, succ),
             _ => self.propagate_through_expr(expr, succ)
@@ -1432,8 +1432,8 @@ fn check_expr(this: &mut Liveness, expr: &Expr) {
       hir::ExprBreak(..) | hir::ExprAgain(..) | hir::ExprLit(_) |
       hir::ExprBlock(..) | hir::ExprAddrOf(..) |
       hir::ExprStruct(..) | hir::ExprRepeat(..) |
-      hir::ExprClosure(..) | hir::ExprPath(..) | hir::ExprBox(..) |
-      hir::ExprType(..) => {
+      hir::ExprClosure(..) | hir::ExprPath(..) | hir::ExprProject(..) |
+      hir::ExprBox(..) | hir::ExprType(..) => {
         intravisit::walk_expr(this, expr);
       }
     }

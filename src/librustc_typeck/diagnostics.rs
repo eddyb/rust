@@ -1839,33 +1839,6 @@ fn my_start(argc: isize, argv: *const *const u8) -> isize {
 ```
 "##,
 
-E0164: r##"
-This error means that an attempt was made to match a struct type enum
-variant as a non-struct type:
-
-```compile_fail,E0164
-enum Foo { B { i: u32 } }
-
-fn bar(foo: Foo) -> u32 {
-    match foo {
-        Foo::B(i) => i, // error E0164
-    }
-}
-```
-
-Try using `{}` instead:
-
-```
-enum Foo { B { i: u32 } }
-
-fn bar(foo: Foo) -> u32 {
-    match foo {
-        Foo::B{i} => i,
-    }
-}
-```
-"##,
-
 E0172: r##"
 This error means that an attempt was made to specify the type of a variable with
 a combination of a concrete type and a trait. Consider the following example:

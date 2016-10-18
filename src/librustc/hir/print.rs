@@ -531,7 +531,10 @@ impl<'a> State<'a> {
                 self.print_path(path, false, 0)?;
             }
             hir::TyPath(Some(ref qself), ref path) => {
-                self.print_qpath(path, qself, false)?
+                self.print_qpath(qself, path, false)?
+            }
+            hir::TyProject(ref qself, ref segment) => {
+                self.print_projection(qself, segment, false)?;
             }
             hir::TyObjectSum(ref ty, ref bounds) => {
                 self.print_type(&ty)?;
@@ -1455,7 +1458,10 @@ impl<'a> State<'a> {
                 self.print_path(path, true, 0)?
             }
             hir::ExprPath(Some(ref qself), ref path) => {
-                self.print_qpath(path, qself, true)?
+                self.print_qpath(qself, path, true)?
+            }
+            hir::ExprProject(ref qself, ref segment) => {
+                self.print_projection(qself, segment, true)?;
             }
             hir::ExprBreak(opt_name) => {
                 word(&mut self.s, "break")?;
@@ -1626,21 +1632,31 @@ impl<'a> State<'a> {
     }
 
     fn print_qpath(&mut self,
+                   qself: &hir::Ty,
                    path: &hir::Path,
-                   qself: &hir::QSelf,
                    colons_before_params: bool)
                    -> io::Result<()> {
         word(&mut self.s, "<")?;
-        self.print_type(&qself.ty)?;
-        if qself.position > 0 {
-            space(&mut self.s)?;
-            self.word_space("as")?;
-            let depth = path.segments.len() - qself.position;
-            self.print_path(&path, false, depth)?;
-        }
+        self.print_type(qself)?;
+        space(&mut self.s)?;
+        self.word_space("as")?;
+        self.print_path(&path, false, 1)?;
         word(&mut self.s, ">")?;
         word(&mut self.s, "::")?;
         let item_segment = path.segments.last().unwrap();
+        self.print_name(item_segment.name)?;
+        self.print_path_parameters(&item_segment.parameters, colons_before_params)
+    }
+
+    fn print_projection(&mut self,
+                        qself: &hir::Ty,
+                        item_segment: &hir::PathSegment,
+                        colons_before_params: bool)
+                        -> io::Result<()> {
+        word(&mut self.s, "<")?;
+        self.print_type(qself)?;
+        word(&mut self.s, ">")?;
+        word(&mut self.s, "::")?;
         self.print_name(item_segment.name)?;
         self.print_path_parameters(&item_segment.parameters, colons_before_params)
     }
@@ -1650,7 +1666,15 @@ impl<'a> State<'a> {
                              colons_before_params: bool)
                              -> io::Result<()> {
         if parameters.is_empty() {
-            return Ok(());
+            let infer_types = match *parameters {
+                hir::AngleBracketedParameters(ref data) => data.infer_types,
+                hir::ParenthesizedParameters(_) => false
+            };
+
+            // FIXME(eddyb) See the comment below about infer_types.
+            if !(infer_types && false) {
+                return Ok(());
+            }
         }
 
         if colons_before_params {
@@ -1764,7 +1788,10 @@ impl<'a> State<'a> {
                 self.print_path(path, true, 0)?;
             }
             PatKind::Path(Some(ref qself), ref path) => {
-                self.print_qpath(path, qself, false)?;
+                self.print_qpath(qself, path, true)?;
+            }
+            PatKind::Project(ref qself, ref segment) => {
+                self.print_projection(qself, segment, true)?;
             }
             PatKind::Struct(ref path, ref fields, etc) => {
                 self.print_path(path, true, 0)?;

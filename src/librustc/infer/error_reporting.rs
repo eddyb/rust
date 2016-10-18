@@ -1422,11 +1422,8 @@ impl<'a, 'gcx, 'tcx> Rebuilder<'a, 'gcx, 'tcx> {
                             };
                             let new_path = self.rebuild_path(rebuild_info, lifetime);
                             let qself = maybe_qself.as_ref().map(|qself| {
-                                hir::QSelf {
-                                    ty: self.rebuild_arg_ty_or_output(&qself.ty, lifetime,
-                                                                      anon_nums, region_names),
-                                    position: qself.position
-                                }
+                                self.rebuild_arg_ty_or_output(qself, lifetime,
+                                                              anon_nums, region_names)
                             });
                             let to = hir::Ty {
                                 id: cur_ty.id,
