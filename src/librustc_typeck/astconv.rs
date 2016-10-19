@@ -74,6 +74,14 @@ pub trait AstConv<'gcx, 'tcx> {
     fn ty_cache_lookup(&self, hir_ty: &hir::Ty) -> Option<Ty<'tcx>>;
     fn ty_cache_insert(&self, hir_ty: &hir::Ty, ty: Ty<'tcx>);
 
+    /// Returns an incomplete type for the given node if it's
+    /// known that the type node will be retried again, i.e.
+    /// by a further up instance of the current request
+    /// (in `typeck::demand`, which handles such cases).
+    fn defer_type_ambiguity(&self, _hir_ty: &hir::Ty) -> Option<Ty<'tcx>> {
+        None
+    }
+
     /// Returns the set of bounds in scope for the given type.
     fn get_type_bounds(&self, ty: Ty<'tcx>) -> Vec<ty::PolyTraitRef<'tcx>>;
 
@@ -1172,11 +1180,11 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
     // and item_segment is the path segment for D. We return a type and a def for
     // the whole path.
     fn associated_path_def_to_ty(&self,
-                                 span: Span,
+                                 ast_ty: &hir::Ty,
                                  ty: Ty<'tcx>,
                                  ty_path_def: Def,
                                  item_segment: &hir::PathSegment)
-                                 -> (Ty<'tcx>, Def)
+                                 -> Ty<'tcx>
     {
         let tcx = self.tcx();
         let assoc_name = item_segment.name;
@@ -1209,16 +1217,29 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
             .filter(|b| self.trait_defines_associated_type_named(b.def_id(), assoc_name))
             .collect();
 
-        let bound = match self.one_bound_for_assoc_type(candidates, ty, assoc_name, span) {
-            Ok(bound) => bound,
-            Err(ErrorReported) => return (tcx.types.err, Def::Err),
+        // Avoid reporting ambiguities if we can defer that decision.
+        if candidates.len() != 1 {
+            if let Some(incomplete) = self.defer_type_ambiguity(ast_ty) {
+                return incomplete;
+            }
+        }
+
+        let (ty, def) = match self.one_bound_for_assoc_type(candidates, ty,
+                                                            assoc_name,
+                                                            ast_ty.span) {
+            Ok(bound) => {
+                let item = tcx.associated_items(bound.def_id()).find(|i| i.name == assoc_name);
+                let def_id = item.expect("missing associated type").def_id;
+                (self.projected_ty_from_poly_trait_ref(ast_ty.span, bound, assoc_name),
+                 Def::AssociatedTy(def_id))
+            }
+            Err(ErrorReported) => (tcx.types.err, Def::Err),
         };
 
-        let trait_did = bound.def_id();
-        let ty = self.projected_ty_from_poly_trait_ref(span, bound, assoc_name);
+        // Write back the new resolution.
+        tcx.tables.borrow_mut().project_defs.insert(ast_ty.id, def);
 
-        let item = tcx.associated_items(trait_did).find(|i| i.name == assoc_name);
-        (ty, Def::AssociatedTy(item.expect("missing associated type").def_id))
+        ty
     }
 
     fn qpath_to_ty(&self,
@@ -1527,12 +1548,7 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                     Def::Err
                 };
 
-                let (ty, def) = self.associated_path_def_to_ty(ast_ty.span, ty, def, segment);
-
-                // Write back the new resolution.
-                tcx.tables.borrow_mut().project_defs.insert(ast_ty.id, def);
-
-                ty
+                self.associated_path_def_to_ty(ast_ty, ty, def, segment)
             }
             hir::TyArray(ref ty, ref e) => {
                 if let Ok(length) = eval_length(tcx.global_tcx(), &e, "array length") {

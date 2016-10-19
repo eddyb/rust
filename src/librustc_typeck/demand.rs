@@ -186,28 +186,10 @@ impl<'a, 'tcx> ItemCtxt<'a, 'tcx> {
     fn sanitize<'b, T: 'b, I>(self, values: I) -> bool
     where I: Iterator<Item=&'b T>,
           T: TypeFoldable<'tcx> {
-        let mut pending_incomplete = self.provider.pending_incomplete.borrow_mut();
         let current = {
             let stack = self.provider.stack.borrow();
             let current = *stack.last().unwrap();
             if stack[..stack.len() - 1].contains(&current) {
-                // Clear the type cache of all the incomplete entries.
-                // FIXME(eddyb) Figure out how to do this without
-                // resulting in infinite recursion in some edge
-                // cases. Possibly only clear those that were
-                // introduced in this stack frame, not just this
-                // specific request. Could do this by stack depth.
-                /*if let Some(ids) = pending_incomplete.get(&current) {
-                    let mut cache = self.provider.ty_cache.borrow_mut();
-                    for &id in ids {
-                        if let Entry::Occupied(entry) = cache.entry(id) {
-                            if let TyCacheEntry::Incomplete = *entry.get() {
-                                entry.remove();
-                            }
-                        }
-                    }
-                }*/
-
                 // This is a nested request, can't cache it
                 // without risking unnecessary failures.
                 return false;
@@ -235,6 +217,7 @@ impl<'a, 'tcx> ItemCtxt<'a, 'tcx> {
         // request - the ones that don't show up would just waste memory,
         // and if they haven't surfaced already, in this request, or some
         // other one using a previous, less complete result, they can't.
+        let mut pending_incomplete = self.provider.pending_incomplete.borrow_mut();
         if let Some(ids) = pending_incomplete.remove(&current) {
             for id in ids {
                 incomplete_types.remove(&id);
@@ -248,6 +231,27 @@ impl<'a, 'tcx> ItemCtxt<'a, 'tcx> {
 impl<'a, 'tcx> Drop for ItemCtxt<'a, 'tcx> {
     fn drop(&mut self) {
         assert!(self.provider.stack.borrow_mut().pop().is_some());
+
+        // Clear the type cache of the last `TyCacheEntry::Incomplete`
+        // entry created by this stack frame. By construction,
+        // the type couldn't have been entered by any outer frame,
+        // and as such the recursion depth is limited to the
+        // number of type nodes involved in this request cycle.
+
+        // FIXME(eddyb) This is pretty bad in larger cases,
+        // it ends up being `O(N!)`, i.e. factorial in the
+        // number of HIR path nodes. It turns out that the
+        // algorithm is effectively backtracking to find a
+        // DAG that fully spans a graph with cycles.
+        // Should probably re-learn graph theory first...
+        if let Some(last) = self.last_incomplete.get() {
+            let mut cache = self.provider.ty_cache.borrow_mut();
+            if let Entry::Occupied(entry) = cache.entry(last) {
+                if let TyCacheEntry::Incomplete = *entry.get() {
+                    entry.remove();
+                }
+            }
+        }
     }
 }
 
@@ -414,6 +418,28 @@ impl<'a, 'tcx> AstConv<'tcx, 'tcx> for ItemCtxt<'a, 'tcx> {
         // Don't cache incomplete types.
         if !ty.references_incomplete() {
             self.provider.ty_cache.borrow_mut().insert(hir_ty.id, TyCacheEntry::Done(ty));
+        }
+    }
+
+    fn defer_type_ambiguity(&self, hir_ty: &hir::Ty) -> Option<Ty<'tcx>> {
+        let reentrant = {
+            let stack = self.provider.stack.borrow();
+            let current = *stack.last().unwrap();
+            stack[..stack.len() - 1].contains(&current)
+        };
+
+        // If there's another instance of this request further up,
+        // we're bound to error at that level, so defer the error,
+        // which can allow a more complex situation to succeed.
+        if reentrant {
+            // Use the `TyIncomplete` creation in `ty_cache_lookup`.
+            let ty = self.ty_cache_lookup(hir_ty).or_else(|| {
+                // Second time it will surely work.
+                self.ty_cache_lookup(hir_ty)
+            }).expect("defer_type_ambiguity: type was not entered?!");
+            Some(ty)
+        } else {
+            None
         }
     }
 
