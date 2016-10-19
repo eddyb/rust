@@ -244,6 +244,30 @@ impl<'a, 'tcx> Drop for ItemCtxt<'a, 'tcx> {
         // algorithm is effectively backtracking to find a
         // DAG that fully spans a graph with cycles.
         // Should probably re-learn graph theory first...
+        //
+        // Later that day: it seems that the trick to the most efficient order
+        // is that, if you consider type-dependent lookup (`<T>::A`) as the
+        // only kind of node in the tree that's not a leaf (i.e. `X<A, B>` is
+        // just `(X, A, B)`) then the deepest nodes have be visited *first*.
+        // The resulting recursion would only go through the deepest nodes
+        // before stopping, i.e. the stack can only be as deep as the number
+        // of deepest yet-unresolved nodes, which brings the total of
+        // operations to merely quadratic or linear, as opposed to visiting
+        // the shallowest nodes first, because that would recurse through
+        // every node on the way down and result in factorial total cost.
+        //
+        // A practical way to do this is to iterate on the AST, keeping only
+        // the deepest nodes (counted by their "type-dependent potentially-
+        // ambiguous depth" i.e. the number of `<...>::A` they're wrapped in),
+        // and then converting those to `Ty`, then repeating the process until
+        // no nodes are left. However, a difficulty here are "region scopes":
+        // nodes can create "invisible wrappers" around their children,
+        // altering implied lifetime semantics - and we don't have that ahead
+        // of time, nor can we easily, in many cases, e.g. `fn(A) -> R` uses a
+        // lifetime from `A` (if exactly one exists) to elide lifetimes needed
+        // in `R`, and the lifetimes from `A` depend on *its* "region scope".
+        // A first step forward would to precompute "region scopes", or at
+        // least the bits that can easily be obtained from the HIR directly.
         if let Some(last) = self.last_incomplete.get() {
             let mut cache = self.provider.ty_cache.borrow_mut();
             if let Entry::Occupied(entry) = cache.entry(last) {
