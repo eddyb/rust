@@ -1187,9 +1187,16 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
                                  -> Ty<'tcx>
     {
         let tcx = self.tcx();
-        let assoc_name = item_segment.name;
 
+        let assoc_name = item_segment.name;
         debug!("associated_path_def_to_ty: {:?}::{}", ty, assoc_name);
+
+        // Avoid querying the bounds for incomplete types, if possible.
+        if let ty::TyIncomplete(..) = ty.sty {
+            if let Some(incomplete) = self.defer_type_ambiguity(ast_ty) {
+                return incomplete;
+            }
+        }
 
         tcx.prohibit_type_params(slice::ref_slice(item_segment));
 

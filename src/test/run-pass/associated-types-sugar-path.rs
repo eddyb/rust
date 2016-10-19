@@ -44,22 +44,27 @@ impl<T: Foo> C for B<T> {
 
 // Several layers of associated types, in both directions.
 // FIXME(eddyb) This is pretty bad for larger testcases,
-// the algorithm is currently `O((n * (n+1) / 2)!)`, with
-// n = 4 here, that is, factorial of the number of HIR
-// `<T>::Assoc` nodes, which is the sum 1 + 2 + ... + n.
+// the algorithm is currently `O(n!)`, with n = 7 here,
+// that is, factorial of the maximal associated path length.
 // The reverse order *happens* to be faster though.
-fn deref4_to_string_forward<T>(x: T) -> String
+fn deref7_to_string_forward<T>(x: T) -> String
     where T: Deref,
           T::Target: Deref,
           T::Target::Target: Deref,
           T::Target::Target::Target: Deref,
-          T::Target::Target::Target::Target: ToString
+          T::Target::Target::Target::Target: Deref,
+          T::Target::Target::Target::Target::Target: Deref,
+          T::Target::Target::Target::Target::Target::Target: Deref,
+          T::Target::Target::Target::Target::Target::Target::Target: ToString
 {
     x.to_string()
 }
 
-fn deref4_to_string_reverse<T>(x: T) -> String
-    where T::Target::Target::Target::Target: ToString,
+fn deref7_to_string_reverse<T>(x: T) -> String
+    where T::Target::Target::Target::Target::Target::Target::Target: ToString,
+          T::Target::Target::Target::Target::Target::Target: Deref,
+          T::Target::Target::Target::Target::Target: Deref,
+          T::Target::Target::Target::Target: Deref,
           T::Target::Target::Target: Deref,
           T::Target::Target: Deref,
           T::Target: Deref,
@@ -71,6 +76,6 @@ fn deref4_to_string_reverse<T>(x: T) -> String
 pub fn main() {
     let z: usize = bar(2, 4);
 
-    assert_eq!(deref4_to_string_forward(&&&&5), String::from("5"));
-    assert_eq!(deref4_to_string_reverse(&&&&7), String::from("7"));
+    assert_eq!(deref7_to_string_forward(&&&&&&&5), String::from("5"));
+    assert_eq!(deref7_to_string_reverse(&&&&&&&7), String::from("7"));
 }
