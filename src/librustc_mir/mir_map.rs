@@ -259,7 +259,7 @@ fn closure_self_ty<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                              closure_expr_id: ast::NodeId,
                              body_id: ast::NodeId)
                              -> Ty<'tcx> {
-    let closure_ty = tcx.node_id_to_type(closure_expr_id);
+    let closure_ty = tcx.tables().node_id_to_type(closure_expr_id);
 
     // We're just hard-coding the idea that the signature will be
     // &self or &mut self and hence will have a bound region with
