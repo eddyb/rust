@@ -54,18 +54,13 @@ There are some shortcomings in this design:
 
 */
 
-use constrained_type_params as ctp;
 use rustc::dep_graph::DepNode;
-use rustc::ty::{self, TyCtxt};
-use util::nodemap::{FnvHashMap, FnvHashSet};
+use rustc::ty::TyCtxt;
+use util::nodemap::FnvHashMap;
 
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 
-use syntax::abi;
-use syntax_pos::Span;
-
-use rustc::hir::{self, intravisit, print as pprust};
-use rustc::hir::def_id::DefId;
+use rustc::hir::{self, intravisit};
 
 ///////////////////////////////////////////////////////////////////////////
 // Main entry point
@@ -85,25 +80,6 @@ impl<'a, 'tcx, 'v> intravisit::Visitor<'v> for CollectItemTypesVisitor<'a, 'tcx>
     }
 }
 
-fn ensure_no_ty_param_bounds(tcx: TyCtxt, span: Span, generics: &hir::Generics) {
-    let warn = generics.ty_params.iter().flat_map(|p| &p.bounds).any(|bound| {
-        match *bound {
-            hir::TraitTyParamBound(..) => true,
-            hir::RegionTyParamBound(..) => false
-        }
-    });
-
-    if warn {
-        // According to accepted RFC #XXX, we should
-        // eventually accept these, but it will not be
-        // part of this PR. Still, convert to warning to
-        // make bootstrapping easier.
-        span_warn!(tcx.sess, span, E0122,
-                   "trait bounds are not (yet) enforced \
-                    in type definitions");
-    }
-}
-
 fn convert_item<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, it: &hir::Item) {
     debug!("convert: item {} with id {}", it.name, it.id);
     let def_id = tcx.map.local_def_id(it.id);
@@ -113,7 +89,10 @@ fn convert_item<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, it: &hir::Item) {
         }
         hir::ItemForeignMod(ref foreign_mod) => {
             for item in &foreign_mod.items {
-                convert_foreign_item(tcx, item);
+                let def_id = tcx.map.local_def_id(item.id);
+                tcx.item_generics(def_id);
+                tcx.item_predicates(def_id);
+                tcx.item_type(def_id);
             }
         }
         hir::ItemEnum(..) => {
@@ -135,13 +114,10 @@ fn convert_item<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, it: &hir::Item) {
                 tcx.record_trait_has_default_impl(trait_ref.def_id);
             }
         }
-        hir::ItemImpl(.., ref generics, _, _, ref impl_items) => {
+        hir::ItemImpl(.., ref impl_items) => {
             // Create generics from the generics specified in the impl head.
-            debug!("convert: ast_generics={:?}", generics);
             tcx.item_generics(def_id);
-            let ty_predicates = tcx.item_predicates(def_id);
-
-            debug!("convert: impl_bounds={:?}", ty_predicates);
+            tcx.item_predicates(def_id);
 
             tcx.item_type(def_id);
             tcx.impl_trait_ref(def_id);
@@ -179,10 +155,6 @@ fn convert_item<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, it: &hir::Item) {
                 tcx.item_predicates(def_id);
                 tcx.item_type(def_id);
             }
-
-            let mut ty_predicates = (*ty_predicates).clone();
-            enforce_impl_params_are_constrained(tcx, generics, &mut ty_predicates, def_id);
-            enforce_impl_lifetimes_are_constrained(tcx, generics, def_id, impl_items);
         },
         hir::ItemTrait(.., ref trait_items) => {
             tcx.lookup_trait_def(def_id);
@@ -221,159 +193,11 @@ fn convert_item<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, it: &hir::Item) {
                 tcx.item_predicates(def_id);
                 tcx.item_type(def_id);
             }
-        },
-        hir::ItemTy(_, ref generics) => {
-            ensure_no_ty_param_bounds(tcx, it.span, generics);
-            tcx.item_generics(def_id);
-            tcx.item_predicates(def_id);
-            tcx.item_type(def_id);
-        },
+        }
         _ => {
             tcx.item_generics(def_id);
             tcx.item_predicates(def_id);
             tcx.item_type(def_id);
         },
     }
-}
-
-fn convert_foreign_item<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
-                                  it: &hir::ForeignItem)
-{
-    let def_id = tcx.map.local_def_id(it.id);
-    tcx.item_generics(def_id);
-    tcx.item_predicates(def_id);
-    let ty = tcx.item_type(def_id);
-
-    let decl = match it.node {
-        hir::ForeignItemFn(ref decl, _) => decl,
-        _ => return
-    };
-
-    let abi = tcx.map.get_foreign_abi(it.id);
-
-    // feature gate SIMD types in FFI, since I (huonw) am not sure the
-    // ABIs are handled at all correctly.
-    if abi != abi::Abi::RustIntrinsic && abi != abi::Abi::PlatformIntrinsic
-            && !tcx.sess.features.borrow().simd_ffi {
-        let check = |ast_ty: &hir::Ty, ty: ty::Ty| {
-            if ty.is_simd() {
-                tcx.sess.struct_span_err(ast_ty.span,
-                              &format!("use of SIMD type `{}` in FFI is highly experimental and \
-                                        may result in invalid code",
-                                       pprust::ty_to_string(ast_ty)))
-                    .help("add #![feature(simd_ffi)] to the crate attributes to enable")
-                    .emit();
-            }
-        };
-        let sig = ty.fn_sig();
-        for (input, ty) in decl.inputs.iter().zip(sig.inputs().skip_binder()) {
-            check(&input.ty, ty)
-        }
-        if let hir::Return(ref ty) = decl.output {
-            check(&ty, sig.output().skip_binder())
-        }
-    }
-}
-
-/// Checks that all the type parameters on an impl
-fn enforce_impl_params_are_constrained<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
-                                                 generics: &hir::Generics,
-                                                 impl_predicates: &mut ty::GenericPredicates<'tcx>,
-                                                 impl_def_id: DefId)
-{
-    let impl_ty = tcx.item_type(impl_def_id);
-    let impl_trait_ref = tcx.impl_trait_ref(impl_def_id);
-
-    // The trait reference is an input, so find all type parameters
-    // reachable from there, to start (if this is an inherent impl,
-    // then just examine the self type).
-    let mut input_parameters: FnvHashSet<_> =
-        ctp::parameters_for(&impl_ty, false).into_iter().collect();
-    if let Some(ref trait_ref) = impl_trait_ref {
-        input_parameters.extend(ctp::parameters_for(trait_ref, false));
-    }
-
-    ctp::setup_constraining_predicates(&mut impl_predicates.predicates,
-                                       impl_trait_ref,
-                                       &mut input_parameters);
-
-    let ty_generics = tcx.item_generics(impl_def_id);
-    for (ty_param, param) in ty_generics.types.iter().zip(&generics.ty_params) {
-        let param_ty = ty::ParamTy::for_def(ty_param);
-        if !input_parameters.contains(&ctp::Parameter::from(param_ty)) {
-            report_unused_parameter(tcx, param.span, "type", &param_ty.to_string());
-        }
-    }
-}
-
-fn enforce_impl_lifetimes_are_constrained<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
-                                                    ast_generics: &hir::Generics,
-                                                    impl_def_id: DefId,
-                                                    impl_items: &[hir::ImplItem])
-{
-    // Every lifetime used in an associated type must be constrained.
-    let impl_ty = tcx.item_type(impl_def_id);
-    let impl_predicates = tcx.item_predicates(impl_def_id);
-    let impl_trait_ref = tcx.impl_trait_ref(impl_def_id);
-
-    let mut input_parameters: FnvHashSet<_> =
-        ctp::parameters_for(&impl_ty, false).into_iter().collect();
-    if let Some(ref trait_ref) = impl_trait_ref {
-        input_parameters.extend(ctp::parameters_for(trait_ref, false));
-    }
-    ctp::identify_constrained_type_params(
-        &impl_predicates.predicates.as_slice(), impl_trait_ref, &mut input_parameters);
-
-    let lifetimes_in_associated_types: FnvHashSet<_> = impl_items.iter()
-        .map(|item| tcx.map.local_def_id(item.id))
-        .filter(|&def_id| {
-            let item = tcx.associated_item(def_id);
-            item.kind == ty::AssociatedKind::Type && item.has_value
-        })
-        .flat_map(|def_id| {
-            ctp::parameters_for(&tcx.item_type(def_id), true)
-        }).collect();
-
-    for (ty_lifetime, lifetime) in tcx.item_generics(impl_def_id).regions.iter()
-        .zip(&ast_generics.lifetimes)
-    {
-        let param = ctp::Parameter::from(ty_lifetime.to_early_bound_region_data());
-
-        if
-            lifetimes_in_associated_types.contains(&param) && // (*)
-            !input_parameters.contains(&param)
-        {
-            report_unused_parameter(tcx, lifetime.lifetime.span,
-                                    "lifetime", &lifetime.lifetime.name.to_string());
-        }
-    }
-
-    // (*) This is a horrible concession to reality. I think it'd be
-    // better to just ban unconstrianed lifetimes outright, but in
-    // practice people do non-hygenic macros like:
-    //
-    // ```
-    // macro_rules! __impl_slice_eq1 {
-    //     ($Lhs: ty, $Rhs: ty, $Bound: ident) => {
-    //         impl<'a, 'b, A: $Bound, B> PartialEq<$Rhs> for $Lhs where A: PartialEq<B> {
-    //            ....
-    //         }
-    //     }
-    // }
-    // ```
-    //
-    // In a concession to backwards compatbility, we continue to
-    // permit those, so long as the lifetimes aren't used in
-    // associated types. I believe this is sound, because lifetimes
-    // used elsewhere are not projected back out.
-}
-
-fn report_unused_parameter(tcx: TyCtxt, span: Span, kind: &str, name: &str) {
-    struct_span_err!(
-        tcx.sess, span, E0207,
-        "the {} parameter `{}` is not constrained by the \
-        impl trait, self type, or predicates",
-        kind, name)
-        .span_label(span, &format!("unconstrained {} parameter", kind))
-        .emit();
 }

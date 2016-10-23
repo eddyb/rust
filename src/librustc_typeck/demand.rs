@@ -9,6 +9,7 @@
 // except according to those terms.
 
 use astconv::{AstConv, ast_region_to_region, SizedByDefault};
+use constrained_type_params as ctp;
 use rscope::*;
 
 use rustc::hir;
@@ -31,7 +32,8 @@ use rustc_const_eval::{eval_const_expr_partial, report_const_eval_err};
 use rustc_const_math::ConstInt;
 use rustc_data_structures::bitvec::BitVector;
 
-use syntax::{abi, ast, attr};
+use syntax::{ast, attr};
+use syntax::abi::Abi;
 use syntax::codemap::Spanned;
 use syntax::parse::token::keywords;
 use syntax_pos::Span;
@@ -737,6 +739,152 @@ fn evaluate_discr_expr<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     }
 }
 
+/// Checks that all the type parameters on an impl
+fn enforce_impl_params_are_constrained<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
+                                                 generics: &hir::Generics,
+                                                 impl_predicates: &mut ty::GenericPredicates<'tcx>,
+                                                 impl_def_id: DefId)
+{
+    let impl_ty = tcx.item_type(impl_def_id);
+    let impl_trait_ref = tcx.impl_trait_ref(impl_def_id);
+
+    // The trait reference is an input, so find all type parameters
+    // reachable from there, to start (if this is an inherent impl,
+    // then just examine the self type).
+    let mut input_parameters: FnvHashSet<_> =
+        ctp::parameters_for(&impl_ty, false).into_iter().collect();
+    if let Some(ref trait_ref) = impl_trait_ref {
+        input_parameters.extend(ctp::parameters_for(trait_ref, false));
+    }
+
+    ctp::setup_constraining_predicates(&mut impl_predicates.predicates,
+                                       impl_trait_ref,
+                                       &mut input_parameters);
+
+    let ty_generics = tcx.item_generics(impl_def_id);
+    for (ty_param, param) in ty_generics.types.iter().zip(&generics.ty_params) {
+        let param_ty = ty::ParamTy::for_def(ty_param);
+        if !input_parameters.contains(&ctp::Parameter::from(param_ty)) {
+            report_unused_parameter(tcx, param.span, "type", &param_ty.to_string());
+        }
+    }
+}
+
+fn enforce_impl_lifetimes_are_constrained<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
+                                                    ast_generics: &hir::Generics,
+                                                    impl_def_id: DefId,
+                                                    impl_items: &[hir::ImplItem])
+{
+    // Every lifetime used in an associated type must be constrained.
+    let impl_ty = tcx.item_type(impl_def_id);
+    let impl_predicates = tcx.item_predicates(impl_def_id);
+    let impl_trait_ref = tcx.impl_trait_ref(impl_def_id);
+
+    let mut input_parameters: FnvHashSet<_> =
+        ctp::parameters_for(&impl_ty, false).into_iter().collect();
+    if let Some(ref trait_ref) = impl_trait_ref {
+        input_parameters.extend(ctp::parameters_for(trait_ref, false));
+    }
+    ctp::identify_constrained_type_params(
+        &impl_predicates.predicates.as_slice(), impl_trait_ref, &mut input_parameters);
+
+    let lifetimes_in_associated_types: FnvHashSet<_> = impl_items.iter()
+        .map(|item| tcx.map.local_def_id(item.id))
+        .filter(|&def_id| {
+            let item = tcx.associated_item(def_id);
+            item.kind == ty::AssociatedKind::Type && item.has_value
+        })
+        .flat_map(|def_id| {
+            ctp::parameters_for(&tcx.item_type(def_id), true)
+        }).collect();
+
+    for (ty_lifetime, lifetime) in tcx.item_generics(impl_def_id).regions.iter()
+        .zip(&ast_generics.lifetimes)
+    {
+        let param = ctp::Parameter::from(ty_lifetime.to_early_bound_region_data());
+
+        if
+            lifetimes_in_associated_types.contains(&param) && // (*)
+            !input_parameters.contains(&param)
+        {
+            report_unused_parameter(tcx, lifetime.lifetime.span,
+                                    "lifetime", &lifetime.lifetime.name.to_string());
+        }
+    }
+
+    // (*) This is a horrible concession to reality. I think it'd be
+    // better to just ban unconstrianed lifetimes outright, but in
+    // practice people do non-hygenic macros like:
+    //
+    // ```
+    // macro_rules! __impl_slice_eq1 {
+    //     ($Lhs: ty, $Rhs: ty, $Bound: ident) => {
+    //         impl<'a, 'b, A: $Bound, B> PartialEq<$Rhs> for $Lhs where A: PartialEq<B> {
+    //            ....
+    //         }
+    //     }
+    // }
+    // ```
+    //
+    // In a concession to backwards compatbility, we continue to
+    // permit those, so long as the lifetimes aren't used in
+    // associated types. I believe this is sound, because lifetimes
+    // used elsewhere are not projected back out.
+}
+
+fn report_unused_parameter(tcx: TyCtxt, span: Span, kind: &str, name: &str) {
+    struct_span_err!(
+        tcx.sess, span, E0207,
+        "the {} parameter `{}` is not constrained by the \
+        impl trait, self type, or predicates",
+        kind, name)
+        .span_label(span, &format!("unconstrained {} parameter", kind))
+        .emit();
+}
+
+fn ensure_no_ty_param_bounds(tcx: TyCtxt, span: Span, generics: &hir::Generics) {
+    let warn = generics.ty_params.iter().flat_map(|p| &p.bounds).any(|bound| {
+        match *bound {
+            hir::TraitTyParamBound(..) => true,
+            hir::RegionTyParamBound(..) => false
+        }
+    });
+
+    if warn {
+        // According to accepted RFC #XXX, we should
+        // eventually accept these, but it will not be
+        // part of this PR. Still, convert to warning to
+        // make bootstrapping easier.
+        span_warn!(tcx.sess, span, E0122,
+                   "trait bounds are not (yet) enforced \
+                    in type definitions");
+    }
+}
+
+fn feature_gate_simd_ffi(tcx: TyCtxt, abi: Abi, decl: &hir::FnDecl, sig: &ty::PolyFnSig) {
+    // feature gate SIMD types in FFI, since I (huonw) am not sure the
+    // ABIs are handled at all correctly.
+    if abi != Abi::RustIntrinsic && abi != Abi::PlatformIntrinsic
+            && !tcx.sess.features.borrow().simd_ffi {
+        let check = |ast_ty: &hir::Ty, ty: ty::Ty| {
+            if ty.is_simd() {
+                tcx.sess.struct_span_err(ast_ty.span,
+                              &format!("use of SIMD type `{}` in FFI is highly experimental and \
+                                        may result in invalid code",
+                                       ty))
+                    .help("add #![feature(simd_ffi)] to the crate attributes to enable")
+                    .emit();
+            }
+        };
+        for (input, ty) in decl.inputs.iter().zip(sig.inputs().skip_binder()) {
+            check(&input.ty, ty)
+        }
+        if let hir::Return(ref ty) = decl.output {
+            check(&ty, sig.output().skip_binder())
+        }
+    }
+}
+
 /// Enter an `ItemCtxt` for a specific `DefId` and `Request`.
 /// This returns `Unsupported` for non-local `DefId`s and checks
 /// for cycles - which can be ignored with `ignore` or handled
@@ -1227,7 +1375,8 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
         let mut predicates = vec![];
 
         let no_generics = Generics::empty();
-        let ast_generics = match tcx.map.get(id) {
+        let node = tcx.map.get(id);
+        let ast_generics = match node {
             NodeTraitItem(item) => {
                 match item.node {
                     MethodTraitItem(ref sig, _) => &sig.generics,
@@ -1244,9 +1393,13 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
 
             NodeItem(item) => {
                 match item.node {
+                    ItemTy(_, ref generics) => {
+                        ensure_no_ty_param_bounds(tcx, item.span, generics);
+                        generics
+                    }
+
                     ItemFn(.., ref generics, _) |
                     ItemImpl(_, _, ref generics, ..) |
-                    ItemTy(_, ref generics) |
                     ItemEnum(_, ref generics) |
                     ItemStruct(_, ref generics) |
                     ItemUnion(_, ref generics) => {
@@ -1406,15 +1559,41 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
             bounds.predicates(tcx, assoc_ty).into_iter()
         }));
 
-        let predicates = Rc::new(ty::GenericPredicates {
+        let mut predicates = ty::GenericPredicates {
             parent: generics.parent,
             predicates: predicates
-        });
+        };
 
         if icx.sanitize(predicates.predicates.iter()) {
+            // This is not only for user errors: it sorts predicates
+            // so that specialization's recursive evaluation can work
+            // without an obligation forest, just evaluating in order.
+            if let NodeItem(item) = node {
+                if let ItemImpl(..) = item.node {
+                    // FIXME(eddyb) avoid cycles from within
+                    // `enforce_impl_params_are_constrained`.
+                    tcx.predicates.borrow_mut().insert(def_id, Rc::new(predicates.clone()));
+                    enforce_impl_params_are_constrained(tcx, ast_generics,
+                                                        &mut predicates, def_id);
+                }
+            }
+
+            // Cache before `enforce_impl_lifetimes_are_constrained`
+            // may be called, to avoid faux cycle errors from it.
+            let predicates = Rc::new(predicates);
             tcx.predicates.borrow_mut().insert(def_id, predicates.clone());
+
+            if let NodeItem(item) = node {
+                if let ItemImpl(.., ref impl_items) = item.node {
+                    enforce_impl_lifetimes_are_constrained(tcx, ast_generics,
+                                                           def_id, impl_items);
+                }
+            }
+
+            Ok(predicates)
+        } else {
+            Ok(Rc::new(predicates))
         }
-        Ok(predicates)
     }
 
     fn ty<'a>(&self, tcx: TyCtxt<'a, 'tcx, 'tcx>, def_id: DefId)
@@ -1496,6 +1675,8 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
                     ForeignItemFn(ref decl, _) => {
                         let abi = tcx.map.get_foreign_abi(id);
                         let fty = AstConv::ty_of_bare_fn(&icx, Unsafety::Unsafe, abi, decl, None);
+                        feature_gate_simd_ffi(tcx, abi, decl, &fty.sig);
+
                         let substs = Substs::identity_for_item(tcx, def_id);
                         tcx.mk_fn_def(def_id, substs, fty)
                     }
@@ -1515,7 +1696,7 @@ impl<'tcx> Provider<'tcx> for TypeckProvider<'tcx> {
                         let substs = Substs::identity_for_item(tcx, def_id);
                         tcx.mk_fn_def(def_id, substs, tcx.mk_bare_fn(ty::BareFnTy {
                             unsafety: Unsafety::Normal,
-                            abi: abi::Abi::Rust,
+                            abi: Abi::Rust,
                             sig: ty::Binder(ty::FnSig {
                                 inputs: inputs,
                                 output: ty,
