@@ -300,17 +300,19 @@ impl<'v, 'a, 'tcx> Visitor<'v> for ParamUseFinder<'a, 'tcx> {
             }
         }
 
-        // Every `impl Trait` captures all parameters in scope.
-        if let hir::TyImplTrait(..) = ty.node {
-            for i in 0..self.num_types {
-                self.types.insert(i);
+        // Every `impl Trait` captures all parameters in scope,
+        // and associated type projection *could* capture some.
+        match ty.node {
+            hir::TyImplTrait(..) | hir::TyProject(..) => {
+                for i in 0..self.num_types {
+                    self.types.insert(i);
+                }
+                for i in 0..self.num_regions {
+                    self.regions.insert(i);
+                }
             }
-            for i in 0..self.num_regions {
-                self.regions.insert(i);
-            }
+            _ => intravisit::walk_ty(self, ty)
         }
-
-        intravisit::walk_ty(self, ty);
     }
 
     fn visit_lifetime(&mut self, lifetime: &hir::Lifetime) {

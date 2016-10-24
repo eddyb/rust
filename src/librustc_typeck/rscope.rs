@@ -22,8 +22,6 @@ pub struct ElisionFailureInfo {
     pub have_bound_regions: bool
 }
 
-pub type ElidedLifetime = Result<ty::Region, Option<Vec<ElisionFailureInfo>>>;
-
 /// Defines strategies for handling regions that are omitted.  For
 /// example, if one writes the type `&Foo`, then the lifetime of
 /// this reference has been omitted. When converting this

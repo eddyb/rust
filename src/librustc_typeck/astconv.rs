@@ -53,7 +53,7 @@ use rustc_back::slice;
 use require_c_abi_if_variadic;
 use rscope::{self, UnelidableRscope, RegionScope, ElidableRscope,
              ObjectLifetimeDefaultRscope, ShiftedRscope, BindingRscope,
-             ElisionFailureInfo, ElidedLifetime, ExplicitRscope};
+             ElisionFailureInfo, ExplicitRscope};
 use rscope::{AnonTypeScope, MaybeWithAnonTypes};
 use util::common::{ErrorReported, FN_OUTPUT_NAME};
 use util::nodemap::FnvHashSet;
@@ -509,12 +509,14 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         (substs, assoc_bindings)
     }
 
-    /// Returns the appropriate lifetime to use for any output lifetimes
-    /// (if one exists) and a vector of the (pattern, number of lifetimes)
-    /// corresponding to each input type/pattern.
-    fn find_implied_output_region<F>(&self,
-                                     input_tys: &[Ty<'tcx>],
-                                     input_pats: F) -> ElidedLifetime
+    /// Finds the appropriate lifetime to use for any output lifetimes
+    /// (if one exists) and uses it in the region scope for the type.
+    fn convert_ty_with_lifetime_elision<F>(&self,
+                                           input_tys: &[Ty<'tcx>],
+                                           input_pats: F,
+                                           ty: &hir::Ty,
+                                           anon_scope: Option<AnonTypeScope>)
+                                           -> Ty<'tcx>
         where F: FnOnce() -> Vec<String>
     {
         let tcx = self.tcx();
@@ -522,6 +524,14 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let mut possible_implied_output_region = None;
 
         for input_type in input_tys.iter() {
+            // `TyIncomplete` can hide lifetimes, so we should give up if
+            // we can, and let the higher up instance of this request try.
+            if input_type.references_incomplete() {
+                if let Some(incomplete) = self.defer_type_ambiguity(ty) {
+                    return incomplete;
+                }
+            }
+
             let mut regions = FnvHashSet();
             let have_bound_regions = tcx.collect_regions(input_type, &mut regions);
 
@@ -546,35 +556,20 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         }
 
         if lifetimes_for_params.iter().map(|e| e.lifetime_count).sum::<usize>() == 1 {
-            Ok(*possible_implied_output_region.unwrap())
+            let rb = ElidableRscope::new(*possible_implied_output_region.unwrap());
+            self.ast_ty_to_ty(&MaybeWithAnonTypes::new(rb, anon_scope), ty)
         } else {
             // Fill in the expensive `name` fields now that we know they're
             // needed.
             for (info, input_pat) in lifetimes_for_params.iter_mut().zip(input_pats()) {
                 info.name = input_pat;
             }
-            Err(Some(lifetimes_for_params))
-        }
-    }
 
-    fn convert_ty_with_lifetime_elision(&self,
-                                        elided_lifetime: ElidedLifetime,
-                                        ty: &hir::Ty,
-                                        anon_scope: Option<AnonTypeScope>)
-                                        -> Ty<'tcx>
-    {
-        match elided_lifetime {
-            Ok(implied_output_region) => {
-                let rb = ElidableRscope::new(implied_output_region);
-                self.ast_ty_to_ty(&MaybeWithAnonTypes::new(rb, anon_scope), ty)
-            }
-            Err(param_lifetimes) => {
-                // All regions must be explicitly specified in the output
-                // if the lifetime elision rules do not apply. This saves
-                // the user from potentially-confusing errors.
-                let rb = UnelidableRscope::new(param_lifetimes);
-                self.ast_ty_to_ty(&MaybeWithAnonTypes::new(rb, anon_scope), ty)
-            }
+            // All regions must be explicitly specified in the output
+            // if the lifetime elision rules do not apply. This saves
+            // the user from potentially-confusing errors.
+            let rb = UnelidableRscope::new(Some(lifetimes_for_params));
+            self.ast_ty_to_ty(&MaybeWithAnonTypes::new(rb, anon_scope), ty)
         }
     }
 
@@ -589,13 +584,13 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let inputs = self.tcx().mk_type_list(data.inputs.iter().map(|a_t| {
             self.ast_ty_arg_to_ty(&binding_rscope, None, region_substs, a_t)
         }));
-        let inputs_len = inputs.len();
-        let input_params = || vec![String::new(); inputs_len];
-        let implied_output_region = self.find_implied_output_region(&inputs, input_params);
 
         let (output, output_span) = match data.output {
             Some(ref output_ty) => {
-                (self.convert_ty_with_lifetime_elision(implied_output_region,
+                let inputs_len = inputs.len();
+                let input_params = || vec![String::new(); inputs_len];
+                (self.convert_ty_with_lifetime_elision(&inputs,
+                                                       input_params,
                                                        &output_ty,
                                                        anon_scope),
                  output_ty.span)
@@ -1659,28 +1654,28 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let arg_tys: Vec<Ty> =
             arg_params.iter().map(|a| self.ty_of_arg(&rb, a, None)).collect();
 
-        // Second, if there was exactly one lifetime (either a substitution or a
-        // reference) in the arguments, then any anonymous regions in the output
-        // have that lifetime.
-        let implied_output_region = match explicit_self {
-            Some(ExplicitSelf::ByReference(region, _)) => Ok(*region),
-            _ => {
-                // `pat_to_string` is expensive and
-                // `find_implied_output_region` only needs its result when
-                // there's an error. So we wrap it in a closure to avoid
-                // calling it until necessary.
-                let arg_pats = || {
-                    arg_params.iter().map(|a| pprust::pat_to_string(&a.pat)).collect()
-                };
-                self.find_implied_output_region(&arg_tys, arg_pats)
-            }
-        };
-
         let output_ty = match decl.output {
-            hir::Return(ref output) =>
-                self.convert_ty_with_lifetime_elision(implied_output_region,
-                                                      &output,
-                                                      ret_anon_scope),
+            hir::Return(ref output) => {
+                // Second, if there was exactly one lifetime (either a substitution or a
+                // reference) in the arguments, then any anonymous regions in the output
+                // have that lifetime.
+                if let Some(ExplicitSelf::ByReference(region, _)) = explicit_self {
+                    let rb = ElidableRscope::new(*region);
+                    self.ast_ty_to_ty(&MaybeWithAnonTypes::new(rb, ret_anon_scope), output)
+                } else {
+                    // `pat_to_string` is expensive and
+                    // `find_implied_output_region` only needs its result when
+                    // there's an error. So we wrap it in a closure to avoid
+                    // calling it until necessary.
+                    let arg_pats = || {
+                        arg_params.iter().map(|a| pprust::pat_to_string(&a.pat)).collect()
+                    };
+                    self.convert_ty_with_lifetime_elision(&arg_tys,
+                                                          arg_pats,
+                                                          output,
+                                                          ret_anon_scope)
+                }
+            }
             hir::DefaultReturn(..) => self.tcx().mk_nil(),
         };
 
