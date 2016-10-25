@@ -61,7 +61,7 @@ pub fn borrowck_mir<'a, 'tcx: 'a>(
     fk: FnKind,
     _decl: &hir::FnDecl,
     mir: &'a Mir<'tcx>,
-    body: &hir::Block,
+    body: &hir::Expr,
     _sp: Span,
     id: ast::NodeId,
     attributes: &[ast::Attribute]) {

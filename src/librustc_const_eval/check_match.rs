@@ -152,7 +152,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for MatchCheckCtxt<'a, 'tcx> {
         check_local(self, l);
     }
     fn visit_fn(&mut self, fk: FnKind<'v>, fd: &'v hir::FnDecl,
-                b: &'v hir::Block, s: Span, n: NodeId) {
+                b: &'v hir::Expr, s: Span, n: NodeId) {
         check_fn(self, fk, fd, b, s, n);
     }
 }
@@ -1071,7 +1071,7 @@ fn check_local(cx: &mut MatchCheckCtxt, loc: &hir::Local) {
 fn check_fn(cx: &mut MatchCheckCtxt,
             kind: FnKind,
             decl: &hir::FnDecl,
-            body: &hir::Block,
+            body: &hir::Expr,
             sp: Span,
             fn_id: NodeId) {
     match kind {

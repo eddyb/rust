@@ -47,9 +47,7 @@ use syntax_pos::{MultiSpan, Span};
 use errors::DiagnosticBuilder;
 
 use rustc::hir;
-use rustc::hir::{FnDecl, Block};
-use rustc::hir::intravisit;
-use rustc::hir::intravisit::{Visitor, FnKind};
+use rustc::hir::intravisit::{self, Visitor, FnKind};
 
 use rustc::mir::mir_map::MirMap;
 
@@ -67,8 +65,8 @@ pub struct LoanDataFlowOperator;
 pub type LoanDataFlow<'a, 'tcx> = DataFlowContext<'a, 'tcx, LoanDataFlowOperator>;
 
 impl<'a, 'tcx, 'v> Visitor<'v> for BorrowckCtxt<'a, 'tcx> {
-    fn visit_fn(&mut self, fk: FnKind<'v>, fd: &'v FnDecl,
-                b: &'v Block, s: Span, id: ast::NodeId) {
+    fn visit_fn(&mut self, fk: FnKind<'v>, fd: &'v hir::FnDecl,
+                b: &'v hir::Expr, s: Span, id: ast::NodeId) {
         match fk {
             FnKind::ItemFn(..) |
             FnKind::Method(..) => {
@@ -162,7 +160,7 @@ pub struct AnalysisData<'a, 'tcx: 'a> {
 fn borrowck_fn(this: &mut BorrowckCtxt,
                fk: FnKind,
                decl: &hir::FnDecl,
-               body: &hir::Block,
+               body: &hir::Expr,
                sp: Span,
                id: ast::NodeId,
                attributes: &[ast::Attribute]) {
@@ -206,7 +204,7 @@ fn build_borrowck_dataflow_data<'a, 'tcx>(this: &mut BorrowckCtxt<'a, 'tcx>,
                                           fk: FnKind,
                                           decl: &hir::FnDecl,
                                           cfg: &cfg::CFG,
-                                          body: &hir::Block,
+                                          body: &hir::Expr,
                                           sp: Span,
                                           id: ast::NodeId)
                                           -> AnalysisData<'a, 'tcx>
