@@ -57,6 +57,11 @@ impl<'a> FnKind<'a> {
     }
 }
 
+pub enum BodyHeader<'a> {
+    Fn(FnKind<'a>, &'a FnDecl),
+    Constant
+}
+
 /// Each method of the Visitor trait is a hook to be potentially
 /// overridden.  Each method's default implementation recursively visits
 /// the substructure of the input via the corresponding `walk` method;
@@ -144,6 +149,9 @@ pub trait Visitor<'v> : Sized {
     }
     fn visit_fn(&mut self, fk: FnKind<'v>, fd: &'v FnDecl, b: &'v Expr, s: Span, id: NodeId) {
         walk_fn(self, fk, fd, b, s, id)
+    }
+    fn visit_body(&mut self, _header: BodyHeader<'v>, body: &'v Expr, _s: Span, _id: NodeId) {
+        self.visit_expr(body);
     }
     fn visit_trait_item(&mut self, ti: &'v TraitItem) {
         walk_trait_item(self, ti)
@@ -651,12 +659,13 @@ pub fn walk_fn<'v, V: Visitor<'v>>(visitor: &mut V,
                                    function_kind: FnKind<'v>,
                                    function_declaration: &'v FnDecl,
                                    function_body: &'v Expr,
-                                   _span: Span,
+                                   span: Span,
                                    id: NodeId) {
     visitor.visit_id(id);
-    walk_fn_decl(visitor, function_declaration);
     walk_fn_kind(visitor, function_kind);
-    visitor.visit_expr(function_body)
+    walk_fn_decl(visitor, function_declaration);
+    visitor.visit_body(BodyHeader::Fn(function_kind, function_declaration),
+                       function_body, span, id);
 }
 
 pub fn walk_trait_item<'v, V: Visitor<'v>>(visitor: &mut V, trait_item: &'v TraitItem) {

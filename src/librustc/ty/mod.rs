@@ -1913,6 +1913,10 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         self.tables.borrow()
     }
 
+    pub fn item_tables(self, _def_id: DefId) -> Ref<'a, Tables<'gcx>> {
+        self.tables.borrow()
+    }
+
     pub fn expr_span(self, id: NodeId) -> Span {
         match self.map.find(id) {
             Some(ast_map::NodeExpr(e)) => {
