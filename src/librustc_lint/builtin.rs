@@ -221,7 +221,7 @@ impl LateLintPass for UnsafeCode {
                 cx: &LateContext,
                 fk: FnKind,
                 _: &hir::FnDecl,
-                _: &hir::Block,
+                _: &hir::Expr,
                 span: Span,
                 _: ast::NodeId) {
         match fk {
@@ -763,7 +763,7 @@ impl LateLintPass for UnconditionalRecursion {
                 cx: &LateContext,
                 fn_kind: FnKind,
                 _: &hir::FnDecl,
-                blk: &hir::Block,
+                blk: &hir::Expr,
                 sp: Span,
                 id: ast::NodeId) {
         let method = match fn_kind {
