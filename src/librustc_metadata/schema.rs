@@ -243,7 +243,7 @@ pub enum EntryKind<'tcx> {
     Trait(Lazy<TraitData<'tcx>>),
     Impl(Lazy<ImplData<'tcx>>),
     DefaultImpl(Lazy<ImplData<'tcx>>),
-    Method(Lazy<MethodData<'tcx>>),
+    Method(Lazy<MethodData>),
     AssociatedType(AssociatedContainer),
     AssociatedConst(AssociatedContainer)
 }
@@ -298,7 +298,7 @@ pub enum AssociatedContainer {
 }
 
 impl AssociatedContainer {
-    pub fn with_def_id(&self, def_id: DefId) -> ty::ImplOrTraitItemContainer {
+    pub fn with_def_id(&self, def_id: DefId) -> ty::AssociatedItemContainer {
         match *self {
             AssociatedContainer::TraitRequired |
             AssociatedContainer::TraitWithDefault => {
@@ -312,7 +312,7 @@ impl AssociatedContainer {
         }
     }
 
-    pub fn has_body(&self) -> bool {
+    pub fn has_value(&self) -> bool {
         match *self {
             AssociatedContainer::TraitRequired => false,
 
@@ -334,10 +334,10 @@ impl AssociatedContainer {
 }
 
 #[derive(RustcEncodable, RustcDecodable)]
-pub struct MethodData<'tcx> {
+pub struct MethodData {
     pub fn_data: FnData,
     pub container: AssociatedContainer,
-    pub explicit_self: Lazy<ty::ExplicitSelfCategory<'tcx>>
+    pub has_self: bool
 }
 
 #[derive(RustcEncodable, RustcDecodable)]
