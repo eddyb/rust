@@ -217,7 +217,7 @@ fn check_expr(cx: &mut MatchCheckCtxt, ex: &hir::Expr) {
 
             // Finally, check if the whole match expression is exhaustive.
             // Check for empty enum, because is_useful only works on inhabited types.
-            let pat_ty = cx.tcx.node_id_to_type(scrut.id);
+            let pat_ty = cx.tcx.tables().node_id_to_type(scrut.id);
             if inlined_arms.is_empty() {
                 if !pat_ty.is_uninhabited(cx.tcx) {
                     // We know the type is inhabited, so this must be wrong
@@ -249,7 +249,7 @@ fn check_expr(cx: &mut MatchCheckCtxt, ex: &hir::Expr) {
 fn check_for_bindings_named_the_same_as_variants(cx: &MatchCheckCtxt, pat: &Pat) {
     pat.walk(|p| {
         if let PatKind::Binding(hir::BindByValue(hir::MutImmutable), name, None) = p.node {
-            let pat_ty = cx.tcx.pat_ty(p);
+            let pat_ty = cx.tcx.tables().pat_ty(p);
             if let ty::TyAdt(edef, _) = pat_ty.sty {
                 if edef.is_enum() {
                     if let Def::Local(..) = cx.tcx.expect_def(p.id) {
@@ -493,7 +493,8 @@ impl<'a, 'tcx> StaticInliner<'a, 'tcx> {
             PatKind::Path(..) => {
                 match self.tcx.expect_def(pat.id) {
                     Def::AssociatedConst(did) | Def::Const(did) => {
-                        let substs = Some(self.tcx.node_id_item_substs(pat.id).substs);
+                        let substs = Some(self.tcx.tables().node_id_item_substs(pat.id)
+                            .unwrap_or_else(|| self.tcx.intern_substs(&[])));
                         if let Some((const_expr, _)) = lookup_const_by_id(self.tcx, did, substs) {
                             match const_expr_to_pat(self.tcx, const_expr, pat.id, pat.span) {
                                 Ok(new_pat) => return new_pat,
@@ -882,7 +883,7 @@ fn wrap_pat<'a, 'b, 'tcx>(cx: &MatchCheckCtxt<'b, 'tcx>,
                           pat: &'a Pat)
                           -> (&'a Pat, Option<Ty<'tcx>>)
 {
-    let pat_ty = cx.tcx.pat_ty(pat);
+    let pat_ty = cx.tcx.tables().pat_ty(pat);
     (pat, Some(match pat.node {
         PatKind::Binding(hir::BindByRef(..), ..) => {
             pat_ty.builtin_deref(false, ty::NoPreference).unwrap().ty
@@ -953,7 +954,7 @@ pub fn specialize<'a, 'b, 'tcx>(
         }
 
         PatKind::Struct(_, ref pattern_fields, _) => {
-            let adt = cx.tcx.node_id_to_type(pat_id).ty_adt_def().unwrap();
+            let adt = cx.tcx.tables().node_id_to_type(pat_id).ty_adt_def().unwrap();
             let variant = constructor.variant_for_adt(adt);
             let def_variant = adt.variant_of_def(cx.tcx.expect_def(pat_id));
             if variant.did == def_variant.did {
@@ -1155,7 +1156,7 @@ fn check_legality_of_move_bindings(cx: &MatchCheckCtxt,
     for pat in pats {
         pat.walk(|p| {
             if let PatKind::Binding(hir::BindByValue(..), _, ref sub) = p.node {
-                let pat_ty = cx.tcx.node_id_to_type(p.id);
+                let pat_ty = cx.tcx.tables().node_id_to_type(p.id);
                 //FIXME: (@jroesch) this code should be floated up as well
                 cx.tcx.infer_ctxt(None, Some(cx.param_env.clone()),
                                   Reveal::NotSpecializable).enter(|infcx| {
