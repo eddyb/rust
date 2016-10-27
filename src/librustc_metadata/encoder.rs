@@ -22,7 +22,6 @@ use rustc::mir;
 use rustc::traits::specialization_graph;
 use rustc::ty::{self, Ty, TyCtxt};
 
-use rustc::mir::mir_map::MirMap;
 use rustc::session::config::{self, CrateTypeProcMacro};
 use rustc::util::nodemap::{FnvHashMap, NodeSet};
 
@@ -51,7 +50,6 @@ pub struct EncodeContext<'a, 'tcx: 'a> {
     link_meta: &'a LinkMeta,
     cstore: &'a cstore::CStore,
     reachable: &'a NodeSet,
-    mir_map: &'a MirMap<'tcx>,
 
     lazy_state: LazyState,
     type_shorthands: FnvHashMap<Ty<'tcx>, usize>,
@@ -613,8 +611,8 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         }))
     }
 
-    fn encode_mir(&mut self, def_id: DefId) -> Option<Lazy<mir::repr::Mir<'tcx>>> {
-        self.mir_map.map.get(&def_id).map(|mir| self.lazy(mir))
+    fn encode_mir(&mut self, def_id: DefId) -> Option<Lazy<mir::Mir<'tcx>>> {
+        self.tcx.mir_map.borrow().get(&def_id).map(|mir| self.lazy(&*mir.borrow()))
     }
 
     // Encodes the inherent implementations of a structure, enumeration, or trait.
@@ -1368,8 +1366,7 @@ pub fn encode_metadata<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
                                  cstore: &cstore::CStore,
                                  reexports: &def::ExportMap,
                                  link_meta: &LinkMeta,
-                                 reachable: &NodeSet,
-                                 mir_map: &MirMap<'tcx>) -> Vec<u8> {
+                                 reachable: &NodeSet) -> Vec<u8> {
     let mut cursor = Cursor::new(vec![]);
     cursor.write_all(METADATA_HEADER).unwrap();
 
@@ -1383,7 +1380,6 @@ pub fn encode_metadata<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         link_meta: link_meta,
         cstore: cstore,
         reachable: reachable,
-        mir_map: mir_map,
         lazy_state: LazyState::NoNode,
         type_shorthands: Default::default(),
         predicate_shorthands: Default::default()

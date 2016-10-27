@@ -11,7 +11,7 @@
 use hair::cx::Cx;
 use rustc::middle::region::{CodeExtent, CodeExtentData, ROOT_CODE_EXTENT};
 use rustc::ty::{self, Ty};
-use rustc::mir::repr::*;
+use rustc::mir::*;
 use rustc::util::nodemap::NodeMap;
 use rustc::hir;
 use syntax::abi::Abi;
