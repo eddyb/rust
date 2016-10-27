@@ -1090,10 +1090,7 @@ impl<'b, 'a, 'v> hir_visit::Visitor<'v> for RootCollector<'b, 'a, 'v> {
             hir::ItemStruct(_, ref generics) |
             hir::ItemUnion(_, ref generics) => {
                 if !generics.is_parameterized() {
-                    let ty = {
-                        let tables = self.scx.tcx().tables.borrow();
-                        tables.node_types[&item.id]
-                    };
+                    let ty = self.scx.tcx().tables().node_types[&item.id];
 
                     if self.mode == TransItemCollectionMode::Eager {
                         debug!("RootCollector: ADT drop-glue for {}",
