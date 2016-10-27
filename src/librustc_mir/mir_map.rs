@@ -214,7 +214,7 @@ impl<'a, 'tcx> Visitor<'tcx> for BuildMir<'a, 'tcx> {
                 id: ast::NodeId) {
         // fetch the fully liberated fn signature (that is, all bound
         // types/lifetimes replaced)
-        let fn_sig = match self.tcx.tables.borrow().liberated_fn_sigs.get(&id) {
+        let fn_sig = match self.tcx.tables().liberated_fn_sigs.get(&id) {
             Some(f) => f.clone(),
             None => {
                 span_bug!(span, "no liberated fn sig for {:?}", id);
