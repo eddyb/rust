@@ -836,9 +836,7 @@ pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
 
     let named_region_map = time(time_passes,
                                 "lifetime resolution",
-                                || middle::resolve_lifetime::krate(sess,
-                                                                   &hir_map,
-                                                                   &resolutions.def_map))?;
+                                || middle::resolve_lifetime::krate(sess, &hir_map))?;
 
     time(time_passes,
          "looking for entry point",
@@ -855,17 +853,16 @@ pub fn phase_3_run_analysis_passes<'tcx, F, R>(sess: &'tcx Session,
 
     time(time_passes,
          "loop checking",
-         || loops::check_crate(sess, &resolutions.def_map, &hir_map));
+         || loops::check_crate(sess, &hir_map));
 
     time(time_passes,
               "static item recursion checking",
-              || static_recursion::check_crate(sess, &resolutions.def_map, &hir_map))?;
+              || static_recursion::check_crate(sess, &hir_map))?;
 
     let index = stability::Index::new(&hir_map);
 
     TyCtxt::create_and_enter(sess,
                              arenas,
-                             resolutions.def_map,
                              resolutions.trait_map,
                              named_region_map,
                              hir_map,
