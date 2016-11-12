@@ -295,10 +295,15 @@ impl<'a, 'tcx> ReachableContext<'a, 'tcx> {
                     hir::ImplItemKind::Type(_) => {}
                 }
             }
+            // Closures can be reachable through `impl Trait`.
+            ast_map::NodeExpr(&hir::Expr { node: hir::ExprClosure(.., ref body, _), .. }) => {
+                self.visit_expr(body);
+            }
             // Nothing to recurse on for these
             ast_map::NodeForeignItem(_) |
             ast_map::NodeVariant(_) |
-            ast_map::NodeStructCtor(_) => {}
+            ast_map::NodeStructCtor(_) |
+            ast_map::NodeTy(_) => {}
             _ => {
                 bug!("found unexpected thingy in worklist: {}",
                      self.tcx.map.node_to_string(search_item))

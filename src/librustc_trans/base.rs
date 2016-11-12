@@ -1483,7 +1483,7 @@ fn iter_functions(llmod: llvm::ModuleRef) -> ValueIter {
 /// This list is later used by linkers to determine the set of symbols needed to
 /// be exposed from a dynamic library and it's also encoded into the metadata.
 pub fn filter_reachable_ids(tcx: TyCtxt, reachable: NodeSet) -> NodeSet {
-    reachable.into_iter().filter(|&id| {
+    fn export_symbol(tcx: TyCtxt, id: ast::NodeId) -> bool {
         // Next, we want to ignore some FFI functions that are not exposed from
         // this crate. Reachable FFI functions can be lumped into two
         // categories:
@@ -1518,9 +1518,18 @@ pub fn filter_reachable_ids(tcx: TyCtxt, reachable: NodeSet) -> NodeSet {
                 !attr::requests_inline(&attributes[..])
             }
 
+            // Closures exposed via -> impl Fn from functions which
+            // are not inlined cross-crate also need to be exported.
+            hir_map::NodeExpr(&hir::Expr { node: hir::ExprClosure(..), .. }) => {
+                let def_id = tcx.map.local_def_id(id);
+                let base_def_id = tcx.closure_base_def_id(def_id);
+                export_symbol(tcx, tcx.map.as_local_node_id(base_def_id).unwrap())
+            }
+
             _ => false
         }
-    }).collect()
+    }
+    reachable.into_iter().filter(|&id| export_symbol(tcx, id)).collect()
 }
 
 pub fn trans_crate<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
@@ -1926,7 +1935,14 @@ fn symbol_for_def_id<'a, 'tcx>(def_id: DefId,
         }
     }
 
-    let instance = Instance::mono(scx, def_id);
+    let instance = if common::is_closure(scx.tcx(), def_id) {
+        // HACK(eddyb) `Instance::mono` doesn't work for closures because of the
+        // upvar types being stored in the generics & substs, work around it.
+        let base_def_id = scx.tcx().closure_base_def_id(def_id);
+        Instance::new(def_id, scx.empty_substs_for_def_id(base_def_id))
+    } else {
+        Instance::mono(scx, def_id)
+    };
 
     symbol_map.get(TransItem::Fn(instance))
               .map(str::to_owned)
