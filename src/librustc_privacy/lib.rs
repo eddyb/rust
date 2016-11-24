@@ -394,6 +394,7 @@ struct PrivacyVisitor<'a, 'tcx: 'a> {
     tcx: TyCtxt<'a, 'tcx, 'tcx>,
     curitem: ast::NodeId,
     in_foreign: bool,
+    span: Span,
 }
 
 impl<'a, 'tcx> PrivacyVisitor<'a, 'tcx> {
@@ -428,6 +429,34 @@ impl<'a, 'tcx> PrivacyVisitor<'a, 'tcx> {
             _ => {}
         }
     }
+
+    // Checks that a type should be visible from this item.
+    fn check_node_type(&mut self, id: ast::NodeId, span: Span) {
+        if let Some(ty) = self.tcx.tables().node_id_to_type_opt(id) {
+            self.span = span;
+            TypeVisitor::visit_ty(self, ty);
+        }
+    }
+}
+
+impl<'a, 'tcx> TypeVisitor<'tcx> for PrivacyVisitor<'a, 'tcx> {
+    fn visit_ty(&mut self, ty: Ty<'tcx>) -> bool {
+        let ty_def_id = match ty.sty {
+            ty::TyAdt(adt, _) => Some(adt.did),
+            ty::TyTrait(ref obj) => Some(obj.principal.def_id()),
+            ty::TyProjection(ref proj) => Some(proj.trait_ref.def_id),
+            _ => None
+        };
+
+        if let Some(def_id) = ty_def_id {
+            if !self.item_is_accessible(def_id) {
+                let msg = format!("type `{}` is private", ty);
+                self.tcx.sess.span_err(self.span, &msg);
+            }
+        }
+
+        ty.super_visit_with(self)
+    }
 }
 
 impl<'a, 'tcx> Visitor<'tcx> for PrivacyVisitor<'a, 'tcx> {
@@ -444,6 +473,7 @@ impl<'a, 'tcx> Visitor<'tcx> for PrivacyVisitor<'a, 'tcx> {
     }
 
     fn visit_expr(&mut self, expr: &'tcx hir::Expr) {
+        self.check_node_type(expr.id, expr.span);
         match expr.node {
             hir::ExprMethodCall(..) => {
                 let method_call = ty::MethodCall::expr(expr.id);
@@ -511,6 +541,7 @@ impl<'a, 'tcx> Visitor<'tcx> for PrivacyVisitor<'a, 'tcx> {
         // external C function anyway.
         if self.in_foreign { return }
 
+        self.check_node_type(pattern.id, pattern.span);
         match pattern.node {
             PatKind::Struct(ref qpath, ref fields, _) => {
                 let def = self.tcx.tables().qpath_def(qpath, pattern.id);
@@ -1198,6 +1229,7 @@ pub fn check_crate<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     let mut visitor = PrivacyVisitor {
         curitem: ast::DUMMY_NODE_ID,
         in_foreign: false,
+        span: krate.span,
         tcx: tcx,
     };
     intravisit::walk_crate(&mut visitor, krate);
