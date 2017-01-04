@@ -58,6 +58,7 @@ use rustc::lint;
 use rustc::ty::subst::{Kind, Subst, Substs};
 use rustc::traits;
 use rustc::ty::{self, Ty, TyCtxt, ToPredicate, TypeFoldable};
+use rustc::ty::fold::TypeVisitor;
 use rustc::ty::wf::object_region_bounds;
 use rustc_back::slice;
 use require_c_abi_if_variadic;
@@ -550,9 +551,52 @@ impl<'o, 'gcx: 'tcx, 'tcx> AstConv<'gcx, 'tcx>+'o {
         let mut possible_implied_output_region = None;
         let mut lifetimes = 0;
 
+        struct RegionCollector<'a, 'gcx: 'a+'tcx, 'tcx: 'a> {
+            tcx: TyCtxt<'a, 'gcx, 'tcx>,
+            skipped_regions: &'a mut bool,
+            current_depth: u32,
+            regions: &'a mut FxHashSet<&'tcx ty::Region>,
+        }
+
+        impl<'a, 'gcx, 'tcx> TypeVisitor<'tcx> for RegionCollector<'a, 'gcx, 'tcx> {
+            fn visit_binder<T: TypeFoldable<'tcx>>(&mut self, t: &ty::Binder<T>) -> bool {
+                self.current_depth += 1;
+                let t = t.super_visit_with(self);
+                self.current_depth -= 1;
+                t
+            }
+
+            fn visit_region(&mut self, r: &'tcx ty::Region) -> bool {
+                match *r {
+                    ty::ReLateBound(debruijn, _) if debruijn.depth < self.current_depth => {
+                        *self.skipped_regions = true;
+                    }
+                    _ => {
+                        self.regions.insert(self.tcx.mk_region(r.from_depth(self.current_depth)));
+                    }
+                }
+                r.super_visit_with(self)
+            }
+
+            fn visit_ty(&mut self, ty: Ty<'tcx>) -> bool {
+                if let ty::TyProjection(_) = ty.sty {
+                    // Skip over projections.
+                    false
+                } else {
+                    ty.super_visit_with(self)
+                }
+            }
+        }
+
         for (input_type, index) in input_tys.iter().zip(input_indices) {
             let mut regions = FxHashSet();
-            let have_bound_regions = tcx.collect_regions(input_type, &mut regions);
+            let mut have_bound_regions = false;
+            input_type.visit_with(&mut RegionCollector {
+                tcx: tcx,
+                skipped_regions: &mut have_bound_regions,
+                current_depth: 1,
+                regions: &mut regions,
+            });
 
             debug!("find_implied_output_regions: collected {:?} from {:?} \
                     have_bound_regions={:?}", &regions, input_type, have_bound_regions);
