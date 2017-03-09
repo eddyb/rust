@@ -1109,3 +1109,4 @@ fi
 
 msg "run \`python ${X_PY} --help\`"
 msg
+git submodule update --init
