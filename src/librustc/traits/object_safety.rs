@@ -22,6 +22,7 @@ use super::elaborate_predicates;
 use hir::def_id::DefId;
 use traits;
 use ty::{self, Ty, TyCtxt, TypeFoldable};
+use ty::fold::TypeVisitor;
 use ty::subst::Substs;
 use std::borrow::Cow;
 use syntax::ast;
@@ -260,6 +261,11 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
             return Some(MethodViolationCode::StaticMethod);
         }
 
+        // We can't monomorphize things like `fn foo<A>(...)`.
+        if !self.generics_of(method.def_id).types.is_empty() {
+            return Some(MethodViolationCode::Generic);
+        }
+
         // The `Self` type is erased, so it should not appear in list of
         // arguments or return type apart from the receiver.
         let ref sig = self.fn_sig(method.def_id);
@@ -272,17 +278,12 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
             return Some(MethodViolationCode::ReferencesSelf);
         }
 
-        // We can't monomorphize things like `fn foo<A>(...)`.
-        if !self.generics_of(method.def_id).types.is_empty() {
-            return Some(MethodViolationCode::Generic);
-        }
-
         None
     }
 
     fn contains_illegal_self_type_reference(self,
                                             trait_def_id: DefId,
-                                            ty: Ty<'tcx>)
+                                            ty: Ty<'gcx>)
                                             -> bool
     {
         // This is somewhat subtle. In general, we want to forbid
@@ -324,54 +325,87 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         // object type, and we cannot resolve `Self as SomeOtherTrait`
         // without knowing what `Self` is.
 
-        let mut supertraits: Option<Vec<ty::PolyTraitRef<'tcx>>> = None;
-        let mut error = false;
-        ty.maybe_walk(|ty| {
-            match ty.sty {
-                ty::TyParam(ref param_ty) => {
-                    if param_ty.is_self() {
-                        error = true;
-                    }
+        HasIllegalSelf {
+            tcx: self.global_tcx(),
+            trait_def_id,
+            supertraits: None,
+        }.visit_ty(ty)
+    }
+}
 
-                    false // no contained types to walk
+struct HasIllegalSelf<'a, 'tcx: 'a> {
+    tcx: TyCtxt<'a, 'tcx, 'tcx>,
+    trait_def_id: DefId,
+    supertraits: Option<Vec<ty::PolyTraitRef<'tcx>>>,
+}
+
+impl<'a, 'tcx> TypeVisitor<'tcx> for HasIllegalSelf<'a, 'tcx> {
+    fn visit_ty(&mut self, mut ty: Ty<'tcx>) -> bool {
+        // Do not recurse on types that do not mention `Self`.
+        if !ty.has_self_ty() {
+            return false;
+        }
+
+        let tcx = self.tcx;
+        match ty.sty {
+            ty::TyParam(ref param_ty) => {
+                if param_ty.is_self() {
+                    // Stops the visitor and signals the error.
+                    return true;
                 }
-
-                ty::TyProjection(ref data) => {
-                    // This is a projected type `<Foo as SomeTrait>::X`.
-
-                    // Compute supertraits of current trait lazily.
-                    if supertraits.is_none() {
-                        let trait_ref = ty::Binder(ty::TraitRef {
-                            def_id: trait_def_id,
-                            substs: Substs::identity_for_item(self, trait_def_id)
-                        });
-                        supertraits = Some(traits::supertraits(self, trait_ref).collect());
-                    }
-
-                    // Determine whether the trait reference `Foo as
-                    // SomeTrait` is in fact a supertrait of the
-                    // current trait. In that case, this type is
-                    // legal, because the type `X` will be specified
-                    // in the object type.  Note that we can just use
-                    // direct equality here because all of these types
-                    // are part of the formal parameter listing, and
-                    // hence there should be no inference variables.
-                    let projection_trait_ref = ty::Binder(data.trait_ref(self));
-                    let is_supertrait_of_current_trait =
-                        supertraits.as_ref().unwrap().contains(&projection_trait_ref);
-
-                    if is_supertrait_of_current_trait {
-                        false // do not walk contained types, do not report error, do collect $200
-                    } else {
-                        true // DO walk contained types, POSSIBLY reporting an error
-                    }
-                }
-
-                _ => true, // walk contained types, if any
             }
-        });
 
-        error
+            ty::TyProjection(ref data) => {
+                // This is a projected type `<Foo as SomeTrait>::X`.
+
+                // Compute supertraits of current trait lazily.
+                if self.supertraits.is_none() {
+                    let trait_ref = ty::Binder(ty::TraitRef {
+                        def_id: self.trait_def_id,
+                        substs: Substs::identity_for_item(tcx, self.trait_def_id)
+                    });
+                    self.supertraits = Some(traits::supertraits(tcx, trait_ref).collect());
+                }
+
+                // Determine whether the trait reference `Foo as
+                // SomeTrait` is in fact a supertrait of the
+                // current trait. In that case, this type is
+                // legal, because the type `X` will be specified
+                // in the object type.  Note that we can just use
+                // direct equality here because all of these types
+                // are part of the formal parameter listing, and
+                // hence there should be no inference variables.
+                let projection_trait_ref = ty::Binder(data.trait_ref(tcx));
+                let is_supertrait_of_current_trait =
+                    self.supertraits.as_ref().unwrap().contains(&projection_trait_ref);
+
+                if is_supertrait_of_current_trait {
+                    return false; // do not walk contained types, do not report error
+                }
+
+                // Try to normalize this projection, if at all possible.
+                let param_env = tcx.param_env(self.trait_def_id);
+                ty = tcx.normalize_associated_type_in_env(&ty, param_env);
+            }
+            _ => {}
+        }
+
+        // Do not recurse on types that do not mention `Self`.
+        if !ty.has_self_ty() {
+            return false;
+        }
+
+        // Walk contained types, if any.
+        ty.super_visit_with(self)
+    }
+
+    fn visit_const(&mut self, mut constant: &'tcx ty::Const<'tcx>) -> bool {
+        // Try to normalize projections, if at all possible.
+        if constant.has_projections() {
+            let param_env = self.tcx.param_env(self.trait_def_id);
+            constant = self.tcx.normalize_associated_type_in_env(&constant, param_env);
+        }
+        constant.super_visit_with(self)
     }
 }
 

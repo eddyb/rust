@@ -503,10 +503,7 @@ impl<'a, 'tcx> TyCtxt<'a, 'tcx, 'tcx> {
         })
     }
 
-    /// Does a best-effort to normalize any associated types in
-    /// `value`; this includes revealing specializable types, so this
-    /// should be not be used during type-checking, but only during
-    /// optimization and code generation.
+    /// Does a best-effort to normalize any associated types in `value`.
     pub fn normalize_associated_type_in_env<T>(
         self, value: &T, env: ty::ParamEnv<'tcx>
     ) -> T
@@ -514,14 +511,12 @@ impl<'a, 'tcx> TyCtxt<'a, 'tcx, 'tcx> {
     {
         debug!("normalize_associated_type_in_env(t={:?})", value);
 
-        let value = self.erase_regions(value);
-
         if !value.has_projections() {
-            return value;
+            return value.clone();
         }
 
         self.infer_ctxt().enter(|infcx| {
-            value.trans_normalize(&infcx, env.reveal_all())
+            value.trans_normalize(&infcx, env)
        })
     }
 }
