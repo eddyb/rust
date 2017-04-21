@@ -776,6 +776,18 @@ fn generics<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
     let node_id = tcx.hir.as_local_node_id(def_id).unwrap();
 
     let node = tcx.hir.get(node_id);
+    let item_like_parent = || {
+        let mut parent_id = node_id;
+        loop {
+            match tcx.hir.get(parent_id) {
+                NodeItem(_) | NodeImplItem(_) | NodeTraitItem(_) => break,
+                _ => {
+                    parent_id = tcx.hir.get_parent_node(parent_id);
+                }
+            }
+        }
+        Some(tcx.hir.local_def_id(parent_id))
+    };
     let parent_def_id = match node {
         NodeImplItem(_) |
         NodeTraitItem(_) |
@@ -788,17 +800,17 @@ fn generics<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
         NodeExpr(&hir::Expr { node: hir::ExprClosure(..), .. }) => {
             Some(tcx.closure_base_def_id(def_id))
         }
-        NodeTy(&hir::Ty { node: hir::TyImplTrait(..), .. }) => {
-            let mut parent_id = node_id;
-            loop {
-                match tcx.hir.get(parent_id) {
-                    NodeItem(_) | NodeImplItem(_) | NodeTraitItem(_) => break,
-                    _ => {
-                        parent_id = tcx.hir.get_parent_node(parent_id);
-                    }
-                }
+        NodeExpr(_) => {
+            match tcx.hir.get(tcx.hir.get_parent_node(node_id)) {
+                NodeTy(&hir::Ty { node: TyArray(_, body), .. }) |
+                NodeTy(&hir::Ty { node: TyTypeof(body), .. }) |
+                NodeExpr(&hir::Expr { node: ExprRepeat(_, body), .. })
+                    if body.node_id == node_id => item_like_parent(),
+                _ => None
             }
-            Some(tcx.hir.local_def_id(parent_id))
+        }
+        NodeTy(&hir::Ty { node: hir::TyImplTrait(..), .. }) => {
+            item_like_parent()
         }
         _ => None
     };
