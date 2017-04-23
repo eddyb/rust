@@ -1209,65 +1209,40 @@ impl<'a, 'tcx> ParameterEnvironment<'tcx> {
     /// Construct a parameter environment given an item, impl item, or trait item
     pub fn for_item(tcx: TyCtxt<'a, 'tcx, 'tcx>, id: NodeId)
                     -> ParameterEnvironment<'tcx> {
-        match tcx.hir.find(id) {
+        let code_extent = match tcx.hir.find(id) {
             Some(hir_map::NodeImplItem(ref impl_item)) => {
                 match impl_item.node {
                     hir::ImplItemKind::Type(_) | hir::ImplItemKind::Const(..) => {
-                        // associated types don't have their own entry (for some reason),
-                        // so for now just grab environment for the impl
-                        let impl_id = tcx.hir.get_parent(id);
-                        let impl_def_id = tcx.hir.local_def_id(impl_id);
-                        tcx.construct_parameter_environment(impl_item.span,
-                                                            impl_def_id,
-                                                            tcx.region_maps.item_extent(id))
+                        tcx.region_maps.item_extent(id)
                     }
                     hir::ImplItemKind::Method(_, ref body) => {
-                        tcx.construct_parameter_environment(
-                            impl_item.span,
-                            tcx.hir.local_def_id(id),
-                            tcx.region_maps.call_site_extent(id, body.node_id))
+                        tcx.region_maps.call_site_extent(id, body.node_id)
                     }
                 }
             }
             Some(hir_map::NodeTraitItem(trait_item)) => {
                 match trait_item.node {
                     hir::TraitItemKind::Type(..) | hir::TraitItemKind::Const(..) => {
-                        // associated types don't have their own entry (for some reason),
-                        // so for now just grab environment for the trait
-                        let trait_id = tcx.hir.get_parent(id);
-                        let trait_def_id = tcx.hir.local_def_id(trait_id);
-                        tcx.construct_parameter_environment(trait_item.span,
-                                                            trait_def_id,
-                                                            tcx.region_maps.item_extent(id))
+                        tcx.region_maps.item_extent(id)
                     }
                     hir::TraitItemKind::Method(_, ref body) => {
                         // Use call-site for extent (unless this is a
                         // trait method with no default; then fallback
                         // to the method id).
-                        let extent = if let hir::TraitMethod::Provided(body_id) = *body {
+                        if let hir::TraitMethod::Provided(body_id) = *body {
                             // default impl: use call_site extent as free_id_outlive bound.
                             tcx.region_maps.call_site_extent(id, body_id.node_id)
                         } else {
                             // no default impl: use item extent as free_id_outlive bound.
                             tcx.region_maps.item_extent(id)
-                        };
-                        tcx.construct_parameter_environment(
-                            trait_item.span,
-                            tcx.hir.local_def_id(id),
-                            extent)
+                        }
                     }
                 }
             }
             Some(hir_map::NodeItem(item)) => {
                 match item.node {
                     hir::ItemFn(.., body_id) => {
-                        // We assume this is a function.
-                        let fn_def_id = tcx.hir.local_def_id(id);
-
-                        tcx.construct_parameter_environment(
-                            item.span,
-                            fn_def_id,
-                            tcx.region_maps.call_site_extent(id, body_id.node_id))
+                        tcx.region_maps.call_site_extent(id, body_id.node_id)
                     }
                     hir::ItemEnum(..) |
                     hir::ItemStruct(..) |
@@ -1275,17 +1250,9 @@ impl<'a, 'tcx> ParameterEnvironment<'tcx> {
                     hir::ItemTy(..) |
                     hir::ItemImpl(..) |
                     hir::ItemConst(..) |
-                    hir::ItemStatic(..) => {
-                        let def_id = tcx.hir.local_def_id(id);
-                        tcx.construct_parameter_environment(item.span,
-                                                            def_id,
-                                                            tcx.region_maps.item_extent(id))
-                    }
+                    hir::ItemStatic(..) |
                     hir::ItemTrait(..) => {
-                        let def_id = tcx.hir.local_def_id(id);
-                        tcx.construct_parameter_environment(item.span,
-                                                            def_id,
-                                                            tcx.region_maps.item_extent(id))
+                        tcx.region_maps.item_extent(id)
                     }
                     _ => {
                         span_bug!(item.span,
@@ -1296,37 +1263,26 @@ impl<'a, 'tcx> ParameterEnvironment<'tcx> {
                 }
             }
             Some(hir_map::NodeExpr(expr)) => {
-                // This is a convenience to allow closures to work.
                 if let hir::ExprClosure(.., body, _) = expr.node {
-                    let def_id = tcx.hir.local_def_id(id);
-                    let base_def_id = tcx.closure_base_def_id(def_id);
-                    tcx.construct_parameter_environment(
-                        expr.span,
-                        base_def_id,
-                        tcx.region_maps.call_site_extent(id, body.node_id))
+                    tcx.region_maps.call_site_extent(id, body.node_id)
                 } else {
-                    tcx.empty_parameter_environment()
+                    ROOT_CODE_EXTENT
                 }
             }
-            Some(hir_map::NodeForeignItem(item)) => {
-                let def_id = tcx.hir.local_def_id(id);
-                tcx.construct_parameter_environment(item.span,
-                                                    def_id,
-                                                    ROOT_CODE_EXTENT)
-            }
+            Some(hir_map::NodeForeignItem(_)) |
             Some(hir_map::NodeStructCtor(..)) |
             Some(hir_map::NodeVariant(..)) => {
-                let def_id = tcx.hir.local_def_id(id);
-                tcx.construct_parameter_environment(tcx.hir.span(id),
-                                                    def_id,
-                                                    ROOT_CODE_EXTENT)
+                ROOT_CODE_EXTENT
             }
             it => {
                 bug!("ParameterEnvironment::from_item(): \
                       `{}` = {:?} is unsupported",
                      tcx.hir.node_to_string(id), it)
             }
-        }
+        };
+        tcx.construct_parameter_environment(tcx.hir.span(id),
+                                            tcx.hir.local_def_id(id),
+                                            code_extent)
     }
 }
 
