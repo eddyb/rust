@@ -18,6 +18,7 @@ use rustc::hir::map::{DefKey, DefPath, DefPathData, DefPathHash};
 use rustc::hir::map::definitions::GlobalMetaDataKind;
 use rustc::hir;
 
+use rustc::middle::const_val::{ByteArray, ConstVal};
 use rustc::middle::cstore::LinkagePreference;
 use rustc::hir::def::{self, Def, CtorKind};
 use rustc::hir::def_id::{CrateNum, DefId, DefIndex, CRATE_DEF_INDEX, LOCAL_CRATE};
@@ -375,6 +376,20 @@ impl<'a, 'tcx> SpecializedDecoder<&'tcx ty::Slice<ty::ExistentialPredicate<'tcx>
         -> Result<&'tcx ty::Slice<ty::ExistentialPredicate<'tcx>>, Self::Error> {
         Ok(self.tcx().mk_existential_predicates((0..self.read_usize()?)
                                                 .map(|_| Decodable::decode(self)))?)
+    }
+}
+
+impl<'a, 'tcx> SpecializedDecoder<ByteArray<'tcx>> for DecodeContext<'a, 'tcx> {
+    fn specialized_decode(&mut self) -> Result<ByteArray<'tcx>, Self::Error> {
+        Ok(ByteArray {
+            data: self.tcx().alloc_byte_array(&Vec::decode(self)?)
+        })
+    }
+}
+
+impl<'a, 'tcx> SpecializedDecoder<&'tcx ConstVal<'tcx>> for DecodeContext<'a, 'tcx> {
+    fn specialized_decode(&mut self) -> Result<&'tcx ConstVal<'tcx>, Self::Error> {
+        Ok(self.tcx().mk_const(Decodable::decode(self)?))
     }
 }
 

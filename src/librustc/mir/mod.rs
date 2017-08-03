@@ -1190,7 +1190,9 @@ impl<'tcx> Operand<'tcx> {
         Operand::Constant(box Constant {
             span,
             ty: tcx.type_of(def_id).subst(tcx, substs),
-            literal: Literal::Value { value: ConstVal::Function(def_id, substs) },
+            literal: Literal::Value {
+                value: tcx.mk_const(ConstVal::Function(def_id, substs))
+            },
         })
     }
 
@@ -1482,7 +1484,7 @@ pub enum Literal<'tcx> {
         substs: &'tcx Substs<'tcx>,
     },
     Value {
-        value: ConstVal<'tcx>,
+        value: &'tcx ConstVal<'tcx>,
     },
     Promoted {
         // Index into the `promoted` vector of `Mir`.
@@ -1520,9 +1522,9 @@ fn fmt_const_val<W: Write>(fmt: &mut W, const_val: &ConstVal) -> fmt::Result {
     match *const_val {
         Float(f) => write!(fmt, "{:?}", f),
         Integral(n) => write!(fmt, "{}", n),
-        Str(ref s) => write!(fmt, "{:?}", s),
-        ByteStr(ref bytes) => {
-            let escaped: String = bytes
+        Str(s) => write!(fmt, "{:?}", s),
+        ByteStr(bytes) => {
+            let escaped: String = bytes.data
                 .iter()
                 .flat_map(|&ch| ascii::escape_default(ch).map(|c| c as char))
                 .collect();
@@ -1532,8 +1534,7 @@ fn fmt_const_val<W: Write>(fmt: &mut W, const_val: &ConstVal) -> fmt::Result {
         Char(c) => write!(fmt, "{:?}", c),
         Variant(def_id) |
         Function(def_id, _) => write!(fmt, "{}", item_path_str(def_id)),
-        Struct(_) | Tuple(_) | Array(_) | Repeat(..) =>
-            bug!("ConstVal `{:?}` should not be in MIR", const_val),
+        Aggregate(_) => bug!("`ConstVal::{:?}` should not be in MIR", const_val),
     }
 }
 
