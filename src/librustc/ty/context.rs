@@ -21,7 +21,6 @@ use hir::map as hir_map;
 use hir::map::DefPathHash;
 use lint::{self, Lint};
 use ich::{self, StableHashingContext, NodeIdHashingMode};
-use middle::const_val::ConstVal;
 use middle::free_region::FreeRegionMap;
 use middle::lang_items;
 use middle::resolve_lifetime;
@@ -33,7 +32,7 @@ use ty::ReprOptions;
 use traits;
 use ty::{self, Ty, TypeAndMut};
 use ty::{TyS, TypeVariants, Slice};
-use ty::{AdtKind, AdtDef, ClosureSubsts, GeneratorInterior, Region};
+use ty::{AdtKind, AdtDef, ClosureSubsts, GeneratorInterior, Region, Const};
 use hir::FreevarMap;
 use ty::{PolyFnSig, InferTy, ParamTy, ProjectionTy, ExistentialPredicate, Predicate};
 use ty::RegionKind;
@@ -110,7 +109,7 @@ pub struct CtxtInterners<'tcx> {
     region: RefCell<FxHashSet<Interned<'tcx, RegionKind>>>,
     existential_predicates: RefCell<FxHashSet<Interned<'tcx, Slice<ExistentialPredicate<'tcx>>>>>,
     predicates: RefCell<FxHashSet<Interned<'tcx, Slice<Predicate<'tcx>>>>>,
-    const_: RefCell<FxHashSet<Interned<'tcx, ConstVal<'tcx>>>>,
+    const_: RefCell<FxHashSet<Interned<'tcx, Const<'tcx>>>>,
 }
 
 impl<'gcx: 'tcx, 'tcx> CtxtInterners<'tcx> {
@@ -978,21 +977,21 @@ impl<'a, 'gcx, 'tcx> TyCtxt<'a, 'gcx, 'tcx> {
         }
     }
 
-    pub fn alloc_constval_slice(self, values: &[&'tcx ConstVal<'gcx>])
-                                -> &'gcx [&'tcx ConstVal<'gcx>] {
+    pub fn alloc_const_slice(self, values: &[&'tcx ty::Const<'tcx>])
+                             -> &'tcx [&'tcx ty::Const<'tcx>] {
         if values.is_empty() {
             &[]
         } else {
-            self.global_interners.arena.alloc_slice(values)
+            self.interners.arena.alloc_slice(values)
         }
     }
 
-    pub fn alloc_name_constval_slice(self, values: &[(ast::Name, &'tcx ConstVal<'gcx>)])
-                                     -> &'gcx [(ast::Name, &'tcx ConstVal<'gcx>)] {
+    pub fn alloc_name_const_slice(self, values: &[(ast::Name, &'tcx ty::Const<'tcx>)])
+                                  -> &'tcx [(ast::Name, &'tcx ty::Const<'tcx>)] {
         if values.is_empty() {
             &[]
         } else {
-            self.global_interners.arena.alloc_slice(values)
+            self.interners.arena.alloc_slice(values)
         }
     }
 
@@ -1202,13 +1201,10 @@ impl<'a, 'tcx> Lift<'tcx> for Ty<'a> {
     }
 }
 
-impl<'a, 'tcx> Lift<'tcx> for &'a Substs<'a> {
-    type Lifted = &'tcx Substs<'tcx>;
-    fn lift_to_tcx<'b, 'gcx>(&self, tcx: TyCtxt<'b, 'gcx, 'tcx>) -> Option<&'tcx Substs<'tcx>> {
-        if self.len() == 0 {
-            return Some(Slice::empty());
-        }
-        if tcx.interners.arena.in_arena(&self[..] as *const _) {
+impl<'a, 'tcx> Lift<'tcx> for Region<'a> {
+    type Lifted = Region<'tcx>;
+    fn lift_to_tcx<'b, 'gcx>(&self, tcx: TyCtxt<'b, 'gcx, 'tcx>) -> Option<Region<'tcx>> {
+        if tcx.interners.arena.in_arena(*self as *const _) {
             return Some(unsafe { mem::transmute(*self) });
         }
         // Also try in the global tcx if we're not that.
@@ -1220,10 +1216,28 @@ impl<'a, 'tcx> Lift<'tcx> for &'a Substs<'a> {
     }
 }
 
-impl<'a, 'tcx> Lift<'tcx> for Region<'a> {
-    type Lifted = Region<'tcx>;
-    fn lift_to_tcx<'b, 'gcx>(&self, tcx: TyCtxt<'b, 'gcx, 'tcx>) -> Option<Region<'tcx>> {
+impl<'a, 'tcx> Lift<'tcx> for &'a Const<'a> {
+    type Lifted = &'tcx Const<'tcx>;
+    fn lift_to_tcx<'b, 'gcx>(&self, tcx: TyCtxt<'b, 'gcx, 'tcx>) -> Option<&'tcx Const<'tcx>> {
         if tcx.interners.arena.in_arena(*self as *const _) {
+            return Some(unsafe { mem::transmute(*self) });
+        }
+        // Also try in the global tcx if we're not that.
+        if !tcx.is_global() {
+            self.lift_to_tcx(tcx.global_tcx())
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, 'tcx> Lift<'tcx> for &'a Substs<'a> {
+    type Lifted = &'tcx Substs<'tcx>;
+    fn lift_to_tcx<'b, 'gcx>(&self, tcx: TyCtxt<'b, 'gcx, 'tcx>) -> Option<&'tcx Substs<'tcx>> {
+        if self.len() == 0 {
+            return Some(Slice::empty());
+        }
+        if tcx.interners.arena.in_arena(&self[..] as *const _) {
             return Some(unsafe { mem::transmute(*self) });
         }
         // Also try in the global tcx if we're not that.
@@ -1522,8 +1536,8 @@ impl<'tcx: 'lcx, 'lcx> Borrow<[Predicate<'lcx>]>
     }
 }
 
-impl<'tcx: 'lcx, 'lcx> Borrow<ConstVal<'lcx>> for Interned<'tcx, ConstVal<'tcx>> {
-    fn borrow<'a>(&'a self) -> &'a ConstVal<'lcx> {
+impl<'tcx: 'lcx, 'lcx> Borrow<Const<'lcx>> for Interned<'tcx, Const<'tcx>> {
+    fn borrow<'a>(&'a self) -> &'a Const<'lcx> {
         &self.0
     }
 }
@@ -1609,7 +1623,7 @@ direct_interners!('tcx,
             _ => false
         }
     }) -> RegionKind,
-    const_: mk_const(/*|c: &Const| keep_local(&c.ty)*/ |_| false) -> ConstVal<'tcx>
+    const_: mk_const(|c: &Const| keep_local(&c.ty) || keep_local(&c.val)) -> Const<'tcx>
 );
 
 macro_rules! slice_interners {
