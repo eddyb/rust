@@ -1661,11 +1661,11 @@ impl<'a, 'gcx, 'tcx> AdtDef {
         match repr_type {
             attr::UnsignedInt(ty) => {
                 ConstInt::new_unsigned_truncating(discr, ty,
-                                                  tcx.sess.target.uint_type)
+                                                  tcx.sess.target.usize_ty)
             }
             attr::SignedInt(ty) => {
                 ConstInt::new_signed_truncating(discr as i128, ty,
-                                                tcx.sess.target.int_type)
+                                                tcx.sess.target.isize_ty)
             }
         }
     }
