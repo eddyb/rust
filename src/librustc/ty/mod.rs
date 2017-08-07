@@ -846,6 +846,9 @@ pub enum Predicate<'tcx> {
 
     /// `T1 <: T2`
     Subtype(PolySubtypePredicate<'tcx>),
+
+    /// Constant initializer must evaluate successfully.
+    ConstEvaluatable(DefId, &'tcx Substs<'tcx>),
 }
 
 impl<'a, 'gcx, 'tcx> Predicate<'tcx> {
@@ -938,6 +941,8 @@ impl<'a, 'gcx, 'tcx> Predicate<'tcx> {
                 Predicate::ObjectSafe(trait_def_id),
             Predicate::ClosureKind(closure_def_id, kind) =>
                 Predicate::ClosureKind(closure_def_id, kind),
+            Predicate::ConstEvaluatable(def_id, const_substs) =>
+                Predicate::ConstEvaluatable(def_id, const_substs.subst(tcx, substs)),
         }
     }
 }
@@ -1116,6 +1121,9 @@ impl<'tcx> Predicate<'tcx> {
             ty::Predicate::ClosureKind(_closure_def_id, _kind) => {
                 vec![]
             }
+            ty::Predicate::ConstEvaluatable(_, substs) => {
+                substs.types().collect()
+            }
         };
 
         // The only reason to collect into a vector here is that I was
@@ -1138,7 +1146,8 @@ impl<'tcx> Predicate<'tcx> {
             Predicate::WellFormed(..) |
             Predicate::ObjectSafe(..) |
             Predicate::ClosureKind(..) |
-            Predicate::TypeOutlives(..) => {
+            Predicate::TypeOutlives(..) |
+            Predicate::ConstEvaluatable(..) => {
                 None
             }
         }

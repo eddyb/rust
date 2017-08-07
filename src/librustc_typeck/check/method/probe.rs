@@ -589,7 +589,8 @@ impl<'a, 'gcx, 'tcx> ProbeContext<'a, 'gcx, 'tcx> {
                     ty::Predicate::WellFormed(..) |
                     ty::Predicate::ObjectSafe(..) |
                     ty::Predicate::ClosureKind(..) |
-                    ty::Predicate::TypeOutlives(..) => None,
+                    ty::Predicate::TypeOutlives(..) |
+                    ty::Predicate::ConstEvaluatable(..) => None,
                 }
             })
             .collect();

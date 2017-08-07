@@ -17,6 +17,7 @@ pub use self::ObligationCauseCode::*;
 
 use hir;
 use hir::def_id::DefId;
+use middle::const_val::ConstEvalErr;
 use middle::region::RegionMaps;
 use middle::free_region::FreeRegionMap;
 use ty::subst::Substs;
@@ -217,6 +218,7 @@ pub enum SelectionError<'tcx> {
                                 ty::PolyTraitRef<'tcx>,
                                 ty::error::TypeError<'tcx>),
     TraitNotObjectSafe(DefId),
+    ConstEvalFailure(ConstEvalErr<'tcx>),
 }
 
 pub struct FulfillmentError<'tcx> {

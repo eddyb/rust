@@ -17,6 +17,7 @@ use super::{
     ObligationCauseCode,
     OutputTypeParameterMismatch,
     TraitNotObjectSafe,
+    ConstEvalFailure,
     PredicateObligation,
     Reveal,
     SelectionContext,
@@ -30,6 +31,7 @@ use hir;
 use hir::def_id::DefId;
 use infer::{self, InferCtxt};
 use infer::type_variable::TypeVariableOrigin;
+use middle::const_val;
 use rustc::lint::builtin::EXTRA_REQUIREMENT_IN_IMPL;
 use std::fmt;
 use syntax::ast;
@@ -712,6 +714,14 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                         // (which may fail).
                         span_bug!(span, "WF predicate not satisfied for {:?}", ty);
                     }
+
+                    ty::Predicate::ConstEvaluatable(..) => {
+                        // Errors for `ConstEvaluatable` predicates show up as
+                        // `SelectionError::ConstEvalFailure`,
+                        // not `Unimplemented`.
+                        span_bug!(span,
+                            "const-evaluatable requirement gave wrong error: `{:?}`", obligation)
+                    }
                 }
             }
 
@@ -775,6 +785,13 @@ impl<'a, 'gcx, 'tcx> InferCtxt<'a, 'gcx, 'tcx> {
                 let violations = self.tcx.object_safety_violations(did);
                 self.tcx.report_object_safety_error(span, did,
                                                     violations)
+            }
+
+            ConstEvalFailure(ref err) => {
+                if let const_val::ErrKind::TypeckError = err.kind {
+                    return;
+                }
+                err.struct_error(self.tcx, span, "constant expression")
             }
         };
         self.note_obligation_cause(&mut err, obligation);
