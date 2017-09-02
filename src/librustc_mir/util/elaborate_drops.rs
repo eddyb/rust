@@ -207,7 +207,7 @@ impl<'l, 'b, 'tcx, D> DropCtxt<'l, 'b, 'tcx, D>
             let field_ty =
                 self.tcx().normalize_associated_type_in_env(
                     &f.ty(self.tcx(), substs),
-                    self.elaborator.param_env()
+                    self.elaborator.param_env().reveal_all()
                 );
             (base_lv.clone().field(field, field_ty), subpath)
         }).collect()

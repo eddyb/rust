@@ -345,7 +345,7 @@ fn compare_predicate_entailment<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
             free_regions.relate_free_regions_from_predicates(&param_env.caller_bounds);
             infcx.resolve_regions_and_report_errors(impl_m.def_id, &region_maps, &free_regions);
         } else {
-            let fcx = FnCtxt::new(&inh, param_env, impl_m_node_id);
+            let fcx = FnCtxt::new(&inh, param_env, impl_m.def_id, impl_m_node_id);
             fcx.regionck_item(impl_m_node_id, impl_m_span, &[]);
         }
 
@@ -797,7 +797,7 @@ pub fn compare_const_impl<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
             return;
         }
 
-        let fcx = FnCtxt::new(&inh, param_env, impl_c_node_id);
+        let fcx = FnCtxt::new(&inh, param_env, impl_c.def_id, impl_c_node_id);
         fcx.regionck_item(impl_c_node_id, impl_c_span, &[]);
     });
 }

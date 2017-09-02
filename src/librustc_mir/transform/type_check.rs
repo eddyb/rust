@@ -805,6 +805,10 @@ impl MirPass for TypeckMir {
             return;
         }
         let param_env = tcx.param_env(def_id);
+        let body_id = tcx.hir.maybe_body_owned_by(item_id).map_or(item_id, |body| body.node_id);
+        let cause = traits::ObligationCause::misc(mir.span, body_id);
+        let param_env = traits::normalize_param_env_or_error(tcx, def_id, param_env, cause);
+
         tcx.infer_ctxt().enter(|infcx| {
             let mut checker = TypeChecker::new(&infcx, item_id, param_env);
             {

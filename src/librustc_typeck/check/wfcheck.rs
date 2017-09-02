@@ -38,7 +38,6 @@ struct CheckWfFcxBuilder<'a, 'gcx: 'a+'tcx, 'tcx: 'a> {
     code: ObligationCauseCode<'gcx>,
     id: ast::NodeId,
     span: Span,
-    param_env: ty::ParamEnv<'tcx>,
 }
 
 impl<'a, 'gcx, 'tcx> CheckWfFcxBuilder<'a, 'gcx, 'tcx> {
@@ -49,9 +48,10 @@ impl<'a, 'gcx, 'tcx> CheckWfFcxBuilder<'a, 'gcx, 'tcx> {
         let code = self.code.clone();
         let id = self.id;
         let span = self.span;
-        let param_env = self.param_env;
         self.inherited.enter(|inh| {
-            let fcx = FnCtxt::new(&inh, param_env, id);
+            let def_id = inh.tcx.hir.local_def_id(id);
+            let param_env = inh.tcx.param_env(def_id);
+            let fcx = FnCtxt::new(&inh, param_env, def_id, id);
             let wf_tys = f(&fcx, &mut CheckTypeWellFormedVisitor {
                 tcx: fcx.tcx.global_tcx(),
                 code,
@@ -213,7 +213,6 @@ impl<'a, 'gcx> CheckTypeWellFormedVisitor<'a, 'gcx> {
             code: self.code.clone(),
             id,
             span,
-            param_env: self.tcx.param_env(def_id),
         }
     }
 

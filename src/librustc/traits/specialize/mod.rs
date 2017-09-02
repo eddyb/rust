@@ -26,6 +26,7 @@ use infer::{InferCtxt, InferOk};
 use ty::subst::{Subst, Substs};
 use traits::{self, Reveal, ObligationCause};
 use ty::{self, TyCtxt, TypeFoldable};
+use syntax::ast::DUMMY_NODE_ID;
 use syntax_pos::DUMMY_SP;
 use std::rc::Rc;
 
@@ -182,6 +183,10 @@ pub(super) fn specializes<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
 
     // create a parameter environment corresponding to a (skolemized) instantiation of impl1
     let penv = tcx.param_env(impl1_def_id);
+    let body_id = tcx.hir.as_local_node_id(impl1_def_id).unwrap_or(DUMMY_NODE_ID);
+    let cause = ObligationCause::misc(tcx.def_span(impl1_def_id), body_id);
+    let penv = super::normalize_param_env_or_error(tcx, impl1_def_id, penv, cause);
+
     let impl1_trait_ref = tcx.impl_trait_ref(impl1_def_id).unwrap();
 
     // Create a infcx, taking the predicates of impl1 as assumptions:

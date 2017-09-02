@@ -496,7 +496,7 @@ pub struct FnCtxt<'a, 'gcx: 'a+'tcx, 'tcx: 'a> {
     /// not part of `Inherited` (as of the time of this writing,
     /// closures do not yet change the environment, but they will
     /// eventually).
-    param_env: ty::ParamEnv<'tcx>,
+    param_env: ty::ParamEnv<'gcx>,
 
     // Number of errors that had been reported when we started
     // checking this function. On exit, if we find that *more* errors
@@ -883,7 +883,7 @@ fn typeck_tables_of<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>,
 
             check_fn(&inh, param_env, fn_sig, decl, id, body, false).0
         } else {
-            let fcx = FnCtxt::new(&inh, param_env, body.value.id);
+            let fcx = FnCtxt::new(&inh, param_env, def_id, body.value.id);
             let expected_type = tcx.type_of(def_id);
             let expected_type = fcx.normalize_associated_types_in(body.value.span, &expected_type);
             fcx.require_type_is_sized(expected_type, body.value.span, traits::ConstSized);
@@ -999,7 +999,7 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for GatherLocalsVisitor<'a, 'gcx, 'tcx> {
 /// * ...
 /// * inherited: other fields inherited from the enclosing fn (if any)
 fn check_fn<'a, 'gcx, 'tcx>(inherited: &'a Inherited<'a, 'gcx, 'tcx>,
-                            param_env: ty::ParamEnv<'tcx>,
+                            param_env: ty::ParamEnv<'gcx>,
                             fn_sig: ty::FnSig<'tcx>,
                             decl: &'gcx hir::FnDecl,
                             fn_id: ast::NodeId,
@@ -1013,7 +1013,8 @@ fn check_fn<'a, 'gcx, 'tcx>(inherited: &'a Inherited<'a, 'gcx, 'tcx>,
 
     // Create the function context.  This is either derived from scratch or,
     // in the case of function expressions, based on the outer context.
-    let mut fcx = FnCtxt::new(inherited, param_env, body.value.id);
+    let def_id = inherited.tcx.hir.local_def_id(fn_id);
+    let mut fcx = FnCtxt::new(inherited, param_env, def_id, body.value.id);
     *fcx.ps.borrow_mut() = UnsafetyState::function(fn_sig.unsafety, fn_id);
 
     let ret_ty = fn_sig.output();
@@ -1734,9 +1735,13 @@ enum TupleArgumentsFlag {
 
 impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
     pub fn new(inh: &'a Inherited<'a, 'gcx, 'tcx>,
-               param_env: ty::ParamEnv<'tcx>,
+               param_env: ty::ParamEnv<'gcx>,
+               def_id: DefId,
                body_id: ast::NodeId)
                -> FnCtxt<'a, 'gcx, 'tcx> {
+        let tcx = inh.tcx.global_tcx();
+        let cause = traits::ObligationCause::misc(tcx.hir.span(body_id), body_id);
+        let param_env = traits::normalize_param_env_or_error(tcx, def_id, param_env, cause);
         FnCtxt {
             body_id,
             param_env,
