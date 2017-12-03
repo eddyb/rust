@@ -9,8 +9,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// revisions: ast cmp
-//[cmp]compile-flags: -Z borrowck=compare
+// revisions: ast mir
+//[mir]compile-flags: -Z borrowck=mir
 
 #![feature(slice_patterns)]
 
@@ -21,9 +21,9 @@ fn main() {
         _ => unreachable!()
     };
     println!("t[0]: {}", t[0]);
-    a[2] = 0; //[ast]~ ERROR cannot assign to `a[..]` because it is borrowed
-              //[cmp]~^ ERROR cannot assign to `a[..]` because it is borrowed (Ast)
-              //[cmp]~| ERROR cannot assign to `a[..]` because it is borrowed (Mir)
+    a[2] = 0;
+    //[ast]~^ ERROR cannot borrow `a` as mutable because `a[..]` is also borrowed as immutable
+    //[mir]~^^ ERROR cannot borrow `a` as mutable because it is also borrowed as immutable
     println!("t[0]: {}", t[0]);
     t[0];
 }

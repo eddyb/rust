@@ -338,7 +338,14 @@ fn make_mirror_unadjusted<'a, 'gcx, 'tcx>(cx: &mut Cx<'a, 'gcx, 'tcx>,
                 overloaded_place(cx, expr, expr_ty, None, vec![lhs.to_ref(), index.to_ref()])
             } else {
                 ExprKind::Index {
-                    lhs: lhs.to_ref(),
+                    lhs: Expr {
+                        ty: cx.tables().expr_ty_adjusted(lhs)
+                            .builtin_deref(true, ty::LvaluePreference::NoPreference)
+                            .unwrap().ty,
+                        temp_lifetime,
+                        span: expr.span,
+                        kind: ExprKind::Deref { arg: lhs.to_ref() },
+                    }.to_ref(),
                     index: index.to_ref(),
                 }
             }

@@ -468,9 +468,31 @@ impl<'a, 'gcx, 'tcx> ConfirmContext<'a, 'gcx, 'tcx> {
 
             match expr.node {
                 hir::ExprIndex(ref base_expr, ref index_expr) => {
-                    let index_expr_ty = self.node_ty(index_expr.hir_id);
-                    self.convert_lvalue_op_to_mutable(
-                        LvalueOp::Index, expr, base_expr, &[index_expr_ty]);
+                    if !self.tables.borrow().is_method_call(expr) {
+                        if let Some(adjustments) = self.tables
+                                                       .borrow_mut()
+                                                       .adjustments_mut()
+                                                       .get_mut(base_expr.hir_id) {
+                            // If we have an autoref at the end, fix its mutability.
+                            match adjustments[..] {
+                                [.., Adjustment {
+                                    kind: Adjust::Borrow(AutoBorrow::Ref(_, ref mut mutbl)),
+                                    ref mut target
+                                }] => {
+                                    *mutbl = hir::MutMutable;
+                                    if let ty::TyRef(r, mut mt) = target.sty {
+                                        mt.mutbl = hir::MutMutable;
+                                        *target = self.tcx.mk_ref(r, mt);
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    } else {
+                        let index_expr_ty = self.node_ty(index_expr.hir_id);
+                        self.convert_lvalue_op_to_mutable(
+                            LvalueOp::Index, expr, base_expr, &[index_expr_ty]);
+                    }
                 }
                 hir::ExprUnary(hir::UnDeref, ref base_expr) => {
                     self.convert_lvalue_op_to_mutable(
