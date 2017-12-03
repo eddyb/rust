@@ -2271,7 +2271,19 @@ impl<'a, 'gcx, 'tcx> FnCtxt<'a, 'gcx, 'tcx> {
         match (adjusted_ty.builtin_index(), &index_ty.sty) {
             (Some(ty), &ty::TyUint(ast::UintTy::Us)) | (Some(ty), &ty::TyInfer(ty::IntVar(_))) => {
                 debug!("try_index_step: success, using built-in indexing");
-                let adjustments = autoderef.adjust_steps(lvalue_pref);
+                let mut adjustments = autoderef.adjust_steps(lvalue_pref);
+                let mutbl = match lvalue_pref {
+                    PreferMutLvalue => hir::MutMutable,
+                    NoPreference => hir::MutImmutable
+                };
+                let region = self.next_region_var(infer::MiscVariable(expr.span));
+                adjustments.push(Adjustment {
+                    kind: Adjust::Borrow(AutoBorrow::Ref(region, mutbl)),
+                    target: self.tcx.mk_ref(region, ty::TypeAndMut {
+                        mutbl: mutbl,
+                        ty: adjusted_ty
+                    })
+                });
                 self.apply_adjustments(base_expr, adjustments);
                 return Some((self.tcx.types.usize, ty));
             }

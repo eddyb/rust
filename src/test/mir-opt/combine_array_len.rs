@@ -21,13 +21,13 @@ fn main() {
 // END RUST SOURCE
 
 // START rustc.norm2.InstCombine.before.mir
-//     _5 = Len(_1);
+//     _6 = Len((*_4));
 //     ...
-//     _10 = Len(_1);
+//     _12 = Len((*_10));
 // END rustc.norm2.InstCombine.before.mir
 
 // START rustc.norm2.InstCombine.after.mir
-//     _5 = const 2usize;
+//     _6 = const 2usize;
 //     ...
-//     _10 = const 2usize;
+//     _12 = const 2usize;
 // END rustc.norm2.InstCombine.after.mir

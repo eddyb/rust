@@ -17,11 +17,11 @@ fn a() {
     let mut vec = [box 1, box 2, box 3];
     match vec {
         [box ref _a, _, _] => {
-        //~^ borrow of `vec[..]` occurs here
-            vec[0] = box 4; //~ ERROR cannot assign
-            //~^ assignment to borrowed `vec[..]` occurs here
+        //~^ immutable borrow occurs here
+            vec[0] = box 4; //~ ERROR cannot borrow
+            //~^ mutable borrow occurs here
         }
-    }
+    } //~ immutable borrow ends here
 }
 
 fn b() {
@@ -29,11 +29,11 @@ fn b() {
     let vec: &mut [Box<isize>] = &mut vec;
     match vec {
         &mut [ref _b..] => {
-        //~^ borrow of `vec[..]` occurs here
-            vec[0] = box 4; //~ ERROR cannot assign
-            //~^ assignment to borrowed `vec[..]` occurs here
+        //~^ immutable borrow occurs here
+            vec[0] = box 4; //~ ERROR cannot borrow
+            //~^ mutable borrow occurs here
         }
-    }
+    } //~ immutable borrow ends here
 }
 
 fn c() {
@@ -54,7 +54,7 @@ fn c() {
         _ => {}
     }
     let a = vec[0]; //~ ERROR cannot move out
-    //~| cannot move out of here
+    //~| cannot move out of indexed content
 }
 
 fn d() {
@@ -67,7 +67,7 @@ fn d() {
         _ => {}
     }
     let a = vec[0]; //~ ERROR cannot move out
-    //~| cannot move out of here
+    //~| cannot move out of indexed content
 }
 
 fn e() {
@@ -82,7 +82,7 @@ fn e() {
         _ => {}
     }
     let a = vec[0]; //~ ERROR cannot move out
-    //~| cannot move out of here
+    //~| cannot move out of indexed content
 }
 
 fn main() {}

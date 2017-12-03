@@ -625,17 +625,17 @@ impl<'a, 'gcx, 'tcx> MemCategorizationContext<'a, 'gcx, 'tcx> {
           }
 
           hir::ExprIndex(ref base, _) => {
-            if self.tables.is_method_call(expr) {
+            //if self.tables.is_method_call(expr) {
                 // If this is an index implemented by a method call, then it
                 // will include an implicit deref of the result.
                 // The call to index() returns a `&T` value, which
                 // is an rvalue. That is what we will be
                 // dereferencing.
                 self.cat_overloaded_lvalue(expr, base, true)
-            } else {
+            /*} else {
                 let base_cmt = self.cat_expr(&base)?;
                 self.cat_index(expr, base_cmt, expr_ty, InteriorOffsetKind::Index)
-            }
+            }*/
           }
 
           hir::ExprPath(ref qpath) => {

@@ -254,9 +254,7 @@ fn main() {
         let mut v = &[F{x: 1, y: 2}, F{x: 3, y: 4}];
         let _v = &mut v;
         v[0].y;
-        //[ast]~^ ERROR cannot use `v[..].y` because it was mutably borrowed
-        //[mir]~^^ ERROR cannot use `v[..].y` because it was mutably borrowed
-        //[mir]~| ERROR cannot use `*v` because it was mutably borrowed
+        //[mir]~^ ERROR cannot borrow `*v` as immutable because it is also borrowed as mutable
     }
     // Field of constant index
     {

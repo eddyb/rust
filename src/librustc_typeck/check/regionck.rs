@@ -782,7 +782,9 @@ impl<'a, 'gcx, 'tcx> Visitor<'gcx> for RegionCtxt<'a, 'gcx, 'tcx> {
             hir::ExprIndex(ref vec_expr, _) => {
                 // For a[b], the lifetime of a must enclose the deref
                 let vec_type = self.resolve_expr_type_adjusted(&vec_expr);
-                self.constrain_index(expr, vec_type);
+                if let ty::TyRef(r_ptr, _) = vec_type.sty {
+                    self.mk_subregion_due_to_dereference(expr.span, expr_region, r_ptr);
+                }
 
                 intravisit::walk_expr(self, expr);
             }
@@ -1076,27 +1078,6 @@ impl<'a, 'gcx, 'tcx> RegionCtxt<'a, 'gcx, 'tcx> {
                 }
             }
             _ => {}
-        }
-    }
-
-    /// Invoked on any index expression that occurs. Checks that if this is a slice
-    /// being indexed, the lifetime of the pointer includes the deref expr.
-    fn constrain_index(&mut self,
-                       index_expr: &hir::Expr,
-                       indexed_ty: Ty<'tcx>)
-    {
-        debug!("constrain_index(index_expr=?, indexed_ty={}",
-               self.ty_to_string(indexed_ty));
-
-        let r_index_expr = ty::ReScope(region::Scope::Node(index_expr.hir_id.local_id));
-        if let ty::TyRef(r_ptr, mt) = indexed_ty.sty {
-            match mt.ty.sty {
-                ty::TySlice(_) | ty::TyStr => {
-                    self.sub_regions(infer::IndexSlice(index_expr.span),
-                                     self.tcx.mk_region(r_index_expr), r_ptr);
-                }
-                _ => {}
-            }
         }
     }
 

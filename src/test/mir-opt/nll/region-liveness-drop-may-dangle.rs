@@ -23,7 +23,7 @@ fn use_x(_: usize) -> bool { true }
 
 fn main() {
     let mut v = [1, 2, 3];
-    let p: Wrap<& /* R4 */ usize> = Wrap { value: &v[0] };
+    let p: Wrap<& /* R5 */ usize> = Wrap { value: &v[0] };
     if true {
         use_x(*p.value);
     } else {
@@ -31,7 +31,7 @@ fn main() {
     }
 
     // `p` will get dropped here. However, because of the
-    // `#[may_dangle]` attribute, we do not need to consider R4 live.
+    // `#[may_dangle]` attribute, we do not need to consider R5 live.
 }
 
 struct Wrap<T> {
@@ -44,5 +44,5 @@ unsafe impl<#[may_dangle] T> Drop for Wrap<T> {
 
 // END RUST SOURCE
 // START rustc.main.nll.0.mir
-// | '_#5r: {bb1[3], bb1[4], bb1[5], bb2[0], bb2[1]}
+// | '_#6r: {bb1[3], bb1[4], bb1[5], bb2[0], bb2[1]}
 // END rustc.main.nll.0.mir

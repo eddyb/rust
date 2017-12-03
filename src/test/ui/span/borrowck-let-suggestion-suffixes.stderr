@@ -1,11 +1,11 @@
-error[E0597]: `young[..]` does not live long enough
+error[E0597]: `young` does not live long enough
   --> $DIR/borrowck-let-suggestion-suffixes.rs:54:1
    |
 21 |     v2.push(&young[0]);      // statement 4
-   |              -------- borrow occurs here
+   |              ----- borrow occurs here
 ...
 54 | }
-   | ^ `young[..]` dropped here while still borrowed
+   | ^ `young` dropped here while still borrowed
    |
    = note: values in a scope are dropped in the opposite order they are created
 

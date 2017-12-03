@@ -52,8 +52,8 @@ fn f() {
 
     v1.push(&old[0]);
 }
-//~^ ERROR `young[..]` does not live long enough
-//~| NOTE `young[..]` dropped here while still borrowed
+//~^ ERROR `young` does not live long enough
+//~| NOTE `young` dropped here while still borrowed
 //~| NOTE values in a scope are dropped in the opposite order they are created
 //~| NOTE temporary value needs to live until here
 //~| NOTE temporary value needs to live until here
