@@ -1,5 +1,5 @@
 use super::BackendTypes;
-use crate::debuginfo::{FunctionDebugContext, MirDebugScope, VariableAccess, VariableKind};
+use crate::mir::debuginfo::{FunctionDebugContext, MirDebugScope, VariableAccess, VariableKind};
 use rustc::hir::def_id::CrateNum;
 use rustc::mir;
 use rustc::ty::{self, Ty, Instance};

@@ -5,7 +5,6 @@ use rustc::session::config::DebugInfo;
 use rustc_target::abi::call::{FnType, PassMode, IgnoreMode};
 use rustc_target::abi::{Variants, VariantIdx};
 use crate::base;
-use crate::debuginfo::{self, VariableAccess, VariableKind, FunctionDebugContext};
 use crate::traits::*;
 
 use syntax_pos::{DUMMY_SP, BytePos, Span};
@@ -17,6 +16,7 @@ use rustc_data_structures::bit_set::BitSet;
 use rustc_data_structures::indexed_vec::IndexVec;
 
 use self::analyze::CleanupKind;
+use self::debuginfo::{VariableAccess, VariableKind, FunctionDebugContext};
 use self::place::PlaceRef;
 use rustc::mir::traversal;
 
@@ -97,7 +97,6 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             value,
         )
     }
-
     pub fn set_debug_loc(
         &mut self,
         bx: &mut Bx,
@@ -723,6 +722,7 @@ fn arg_local_refs<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>>(
 mod analyze;
 mod block;
 pub mod constant;
+pub mod debuginfo;
 pub mod place;
 pub mod operand;
 mod rvalue;
